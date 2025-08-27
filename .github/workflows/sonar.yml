@@ -30,7 +30,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=Xellenet_JIN_VA-FRONTEND
-            -Dsonar.organization=Xelle-Net
+            -Dsonar.organization=xellenet
             -Dsonar.host.url=https://sonarcloud.io
             -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
             -Dsonar.pullrequest.branch=${{ github.head_ref }}

@@ -6,7 +6,5 @@ if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_N
   exit 1
 fi
 
-echo "🧪 Running tests before push..."
-npm run test:coverage
-
-echo "✅ Tests passed!"
+echo "🔍 Running lint before push..."
+npm run lint

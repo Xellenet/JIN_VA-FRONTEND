@@ -9,7 +9,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "prepare": "husky install"
+    "prepare": "husky",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "commit": "cz"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -46,18 +49,41 @@
     "@babel/core": "^7.25.2",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.0.10",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
     "husky": "^9.1.7",
+    "jest": "^30.1.0",
+    "jest-expo": "^53.0.9",
     "lint-staged": "^16.1.5",
     "typescript": "~5.8.3"
   },
   "private": true,
   "lint-staged": {
-  "*.{js,jsx,ts,tsx}": [
-    "eslint --fix",
-    "prettier --write"
-  ]
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "coverageThreshold": {
+      "global": {
+        "branches": 60,
+        "functions": 60,
+        "lines": 60,
+        "statements": 60
+      }
+    }
+  },
+  "config": {
+  "commitizen": {
+    "path": "./node_modules/cz-conventional-changelog"
+  }
 }
+
 }

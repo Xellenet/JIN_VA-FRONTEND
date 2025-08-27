@@ -1,0 +1,8 @@
+if ! grep -E "^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)(\(.+\))?: .+" "$1"; then
+  echo "❌ Invalid commit message format!"
+  echo "👉 Please use 'npm run commit' for guided commits."
+  exit 1
+fi
+
+npx --no -- commitlint --edit "$1"
+echo "✅ Commit message format is valid."

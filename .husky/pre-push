@@ -1,0 +1,10 @@
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+
+# Prevent pushing to protected branches
+if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "test" ]; then
+  echo "🚫 Direct pushes to '$BRANCH_NAME' are not allowed. Please create a feature branch and open a Pull Request."
+  exit 1
+fi
+
+echo "🔍 Running lint before push..."
+npm run lint

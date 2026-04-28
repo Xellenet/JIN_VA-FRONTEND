@@ -95,8 +95,8 @@ export function SignupForm() {
       return
     }
 
-    if (!formData.role || !["CUSTOMER", "STYLIST", "ADMIN"].includes(formData.role)) {
-      toast.error("Role must be either CUSTOMER, STYLIST, or ADMIN")
+    if (!formData.role || !["CUSTOMER", "STYLIST"].includes(formData.role)) {
+      toast.error("Role must be either CUSTOMER or STYLIST")
       return
     }
 
@@ -153,7 +153,7 @@ export function SignupForm() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 bg-white md:rounded-lg md:p-8 md:shadow-sm p-4 w-full md:w-auto">
+      <div className="space-y-8 bg-white md:rounded-lg md:p-8  p-4 w-full md:w-auto">
         <div className="space-y-2">
           <h1 className="text-4xl font-bold tracking-tight text-gray-900">Create Account</h1>
           <p className="text-gray-600">
@@ -285,7 +285,7 @@ export function SignupForm() {
                 <SelectContent>
                   <SelectItem value="CUSTOMER">Customer</SelectItem>
                   <SelectItem value="STYLIST">Stylist</SelectItem>
-                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  {/* <SelectItem value="ADMIN">Admin</SelectItem> */}
                 </SelectContent>
               </Select>
             </div>

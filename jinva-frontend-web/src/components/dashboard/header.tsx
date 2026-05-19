@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Bell, Mail, ChevronDown, User, Settings, LogOut, Menu } from "lucide-react"
+import { Bell, Mail, ChevronDown, UserCircle, Settings, LogOut, Menu } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { clearAuthTokens } from "@/lib/auth"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,15 +20,24 @@ interface DashboardHeaderProps {
   onMenuToggle?: () => void
 }
 
-export function DashboardHeader({ user, onMenuToggle }: DashboardHeaderProps) {
+export function DashboardHeader({ user, onMenuToggle }: Readonly<DashboardHeaderProps>) {
   const router = useRouter()
 
-  const roleBase =
-    user.role === "admin"
-      ? "/dashboard/admin"
-      : user.role === "plumber"
-        ? "/dashboard/plumber"
-        : "/dashboard/user"
+  const handleLogout = () => {
+    localStorage.removeItem("access_token")
+    localStorage.removeItem("refresh_token")
+    clearAuthTokens()
+    router.push("/login")
+    router.refresh()
+  }
+
+  let roleBase = "/dashboard/user"
+
+  if (user.role === "admin") {
+    roleBase = "/dashboard/admin"
+  } else if (user.role === "plumber") {
+    roleBase = "/dashboard/plumber"
+  }
 
   const profilePath = user.role === "plumber" ? `${roleBase}/profile` : `${roleBase}/settings`
 
@@ -67,7 +77,7 @@ export function DashboardHeader({ user, onMenuToggle }: DashboardHeaderProps) {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem asChild>
               <Link href={profilePath} className="flex items-center gap-2">
-                <User className="h-4 w-4" />
+                <UserCircle className="h-4 w-4" />
                 Profile
               </Link>
             </DropdownMenuItem>
@@ -80,7 +90,7 @@ export function DashboardHeader({ user, onMenuToggle }: DashboardHeaderProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="flex items-center gap-2 text-destructive focus:text-destructive"
-              onClick={() => router.push("/")}
+              onClick={handleLogout}
             >
               <LogOut className="h-4 w-4" />
               Logout

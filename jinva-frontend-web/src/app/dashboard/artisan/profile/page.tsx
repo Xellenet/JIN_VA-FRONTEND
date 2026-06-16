@@ -36,21 +36,20 @@ import {
   Award,
   Upload,
 } from "lucide-react"
-import { mockArtisans, mockPortfolio } from "@/lib/data/mock-data"
+import { mockPortfolio } from "@/lib/data/mock-data"
 import type { PortfolioItem } from "@/lib/types"
 import Image from "next/image"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function ArtisanProfile() {
-  const user = {
-    ...mockArtisans[0],
-    role: "artisan" as const,
-  }
-
+  const { user } = useAuth()
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>(mockPortfolio)
   const [activeFilter, setActiveFilter] = useState("all")
   const [previewItem, setPreviewItem] = useState<PortfolioItem | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
+
+  if (!user) return null
 
   const categories = ["all", ...Array.from(new Set(portfolio.map((p) => p.category)))]
   const filtered = activeFilter === "all" ? portfolio : portfolio.filter((p) => p.category === activeFilter)
@@ -61,7 +60,7 @@ export default function ArtisanProfile() {
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Profile Hero */}
         <Card className="overflow-hidden">
@@ -87,7 +86,7 @@ export default function ArtisanProfile() {
                     <h1 className="text-2xl font-bold text-foreground">{user.name}</h1>
                     <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
                       <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-                      {user.availability === "available" ? "Available" : "Busy"}
+                      Available
                     </Badge>
                   </div>
                   <p className="mt-1 text-muted-foreground">{user.specialization}</p>
@@ -119,14 +118,14 @@ export default function ArtisanProfile() {
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                  <span className="text-2xl font-bold text-foreground">{user.avgRating}</span>
+                  <span className="text-2xl font-bold text-foreground">{user.rating ?? 0}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Avg. Rating</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Briefcase className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-2xl font-bold text-foreground">{user.jobsCompleted}</span>
+                  <span className="text-2xl font-bold text-foreground">{user.jobsCompleted ?? 0}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Jobs Completed</p>
               </div>
@@ -326,12 +325,12 @@ export default function ArtisanProfile() {
                       <Label htmlFor="phone">Phone</Label>
                       <div className="relative">
                         <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input id="phone" className="pl-10" defaultValue={user.phone} />
+                        <Input id="phone" className="pl-10" defaultValue={user.phone ?? ""} />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="specialization">Specialization</Label>
-                      <Input id="specialization" defaultValue={user.specialization} />
+                      <Input id="specialization" defaultValue={user.specialization ?? ""} />
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="address">Address</Label>
@@ -393,8 +392,8 @@ export default function ArtisanProfile() {
                   <h3 className="font-semibold text-foreground">Client Reviews</h3>
                   <div className="flex items-center gap-2">
                     <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                    <span className="font-bold text-foreground">{user.avgRating}</span>
-                    <span className="text-sm text-muted-foreground">({user.reviews} reviews)</span>
+                    <span className="font-bold text-foreground">{user.rating ?? 0}</span>
+                    <span className="text-sm text-muted-foreground">({(user.reviews ?? 0)} reviews)</span>
                   </div>
                 </div>
               </div>

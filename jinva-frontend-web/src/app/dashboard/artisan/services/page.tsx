@@ -7,14 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search, ChevronDown, Wrench, DollarSign, CheckCircle2 } from "lucide-react"
-import { mockServices, mockArtisans } from "@/lib/data/mock-data"
+import { mockServices } from "@/lib/data/mock-data"
 
 export default function ArtisanServicesPage() {
-  const user = {
-    ...mockArtisans[0],
-    role: "artisan" as const,
-  }
-
   const [searchQuery, setSearchQuery] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
@@ -38,7 +33,7 @@ export default function ArtisanServicesPage() {
   const inactiveServices = filteredServices.filter((s) => s.status === "inactive")
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Services</h1>

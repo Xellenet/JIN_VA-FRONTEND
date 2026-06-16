@@ -1,11 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Bell, Mail, ChevronDown, UserCircle, Settings, LogOut, Menu } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { clearAuthTokens } from "@/lib/auth"
+import { useAuth } from "@/contexts/auth-context"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,31 +12,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { User } from "@/lib/types"
 
 interface DashboardHeaderProps {
-  user: User
   onMenuToggle?: () => void
 }
 
-export function DashboardHeader({ user, onMenuToggle }: Readonly<DashboardHeaderProps>) {
-  const router = useRouter()
+export function DashboardHeader({ onMenuToggle }: Readonly<DashboardHeaderProps>) {
+  const { user, logout } = useAuth()
 
-  const handleLogout = () => {
-    localStorage.removeItem("access_token")
-    localStorage.removeItem("refresh_token")
-    clearAuthTokens()
-    router.push("/login")
-    router.refresh()
-  }
+  if (!user) return null
 
   let roleBase = "/dashboard/user"
-
-  if (user.role === "admin") {
-    roleBase = "/dashboard/admin"
-  } else if (user.role === "artisan") {
-    roleBase = "/dashboard/artisan"
-  }
+  if (user.role === "admin") roleBase = "/dashboard/admin"
+  else if (user.role === "artisan") roleBase = "/dashboard/artisan"
 
   const profilePath = user.role === "artisan" ? `${roleBase}/profile` : `${roleBase}/settings`
 
@@ -90,7 +77,7 @@ export function DashboardHeader({ user, onMenuToggle }: Readonly<DashboardHeader
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="flex items-center gap-2 text-destructive focus:text-destructive"
-              onClick={handleLogout}
+              onClick={logout}
             >
               <LogOut className="h-4 w-4" />
               Logout

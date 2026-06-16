@@ -47,14 +47,6 @@ const availabilityOptions = [
 ]
 
 export default function SearchArtisansPage() {
-  const user = {
-    id: "u1",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    role: "user" as const,
-    avatar: "/placeholder.svg?height=40&width=40",
-  }
-
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSpecialization, setSelectedSpecialization] = useState("All Specializations")
   const [selectedRating, setSelectedRating] = useState(0)
@@ -94,7 +86,7 @@ export default function SearchArtisansPage() {
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Find Artisans</h1>

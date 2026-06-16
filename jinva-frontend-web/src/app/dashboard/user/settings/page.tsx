@@ -19,18 +19,14 @@ import {
   Trash2,
   AlertTriangle,
 } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function UserSettingsPage() {
-  const user = {
-    id: "u1",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    role: "user" as const,
-    avatar: "/placeholder.svg?height=40&width=40",
-  }
+  const { user } = useAuth()
+  if (!user) return null
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Account Settings</h1>

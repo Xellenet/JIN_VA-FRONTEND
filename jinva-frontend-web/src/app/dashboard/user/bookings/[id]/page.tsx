@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -21,9 +21,7 @@ import {
 import {
   ArrowLeft,
   Calendar,
-  Clock,
   MapPin,
-  CreditCard,
   User,
   Wrench,
   Phone,
@@ -31,48 +29,101 @@ import {
   MessageSquare,
   Star,
   FileText,
+  Loader2,
 } from "lucide-react"
-import { mockOrders, mockArtisans } from "@/lib/data/mock-data"
+import { apiFetch } from "@/lib/api"
+import { toast } from "sonner"
+
+interface BackendJob {
+  id: string
+  title: string
+  description?: string
+  location?: string
+  status: string
+  createdAt: string
+  customer?: { id: string; firstname: string; lastname: string; email?: string; phoneNumber?: string; profilePicture?: string }
+  acceptedArtisan?: { id: string; firstname: string; lastname: string; email?: string; phoneNumber?: string; profilePicture?: string }
+  service?: { id: string; name: string; price?: number }
+}
+
+const statusConfig: Record<string, { label: string; className: string }> = {
+  IN_PROGRESS: { label: "In Progress", className: "border-muted bg-muted text-muted-foreground" },
+  COMPLETED: { label: "Completed", className: "border-green-200 bg-green-50 text-green-700" },
+  CANCELLED: { label: "Cancelled", className: "border-red-200 bg-red-50 text-red-700" },
+  PENDING: { label: "Pending", className: "border-yellow-200 bg-yellow-50 text-yellow-700" },
+  OPEN: { label: "Open", className: "border-blue-200 bg-blue-50 text-blue-700" },
+  EXPIRED: { label: "Expired", className: "border-gray-200 bg-gray-50 text-gray-600" },
+}
 
 export default function BookingDetailsPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const [job, setJob] = useState<BackendJob | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
 
-  const user = {
-    id: "u1",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    role: "user" as const,
-    avatar: "/placeholder.svg?height=40&width=40",
+  useEffect(() => {
+    apiFetch<BackendJob>(`/jobs/${id}`)
+      .then(setJob)
+      .catch(() => toast.error("Failed to load booking details."))
+      .finally(() => setIsLoading(false))
+  }, [id])
+
+  const handleCancelBooking = async () => {
+    if (!job) return
+    setIsCancelling(true)
+    try {
+      await apiFetch(`/jobs/${job.id}/cancel`, { method: "PATCH" })
+      setJob((prev) => prev ? { ...prev, status: "CANCELLED" } : prev)
+      setShowCancelDialog(false)
+      toast.success("Booking cancelled.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to cancel.")
+    } finally {
+      setIsCancelling(false)
+    }
   }
 
-  const booking = mockOrders.find((o) => o.id === id) || mockOrders[0]
-  const artisan = mockArtisans.find((p) => p.name.includes(booking.artisanName.split(" ")[0])) || mockArtisans[0]
-
-  const statusConfig: Record<string, { label: string; className: string }> = {
-    "in-progress": { label: "In Progress", className: "border-muted bg-muted text-muted-foreground" },
-    completed: { label: "Completed", className: "border-green-200 bg-green-50 text-green-700" },
-    cancelled: { label: "Cancelled", className: "border-red-200 bg-red-50 text-red-700" },
-    pending: { label: "Pending", className: "border-yellow-200 bg-yellow-50 text-yellow-700" },
-    available: { label: "Available", className: "border-blue-200 bg-blue-50 text-blue-700" },
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </DashboardLayout>
+    )
   }
 
-  const paymentConfig: Record<string, { label: string; className: string }> = {
-    paid: { label: "Paid", className: "border-green-200 bg-green-50 text-green-700" },
-    pending: { label: "Payment Pending", className: "border-yellow-200 bg-yellow-50 text-yellow-700" },
-    refunded: { label: "Refunded", className: "border-red-200 bg-red-50 text-red-700" },
+  if (!job) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <p className="text-muted-foreground">Booking not found.</p>
+          <Button variant="outline" className="mt-4" asChild>
+            <Link href="/dashboard/user/bookings">Back to Bookings</Link>
+          </Button>
+        </div>
+      </DashboardLayout>
+    )
   }
 
-  const handleCancelBooking = () => {
-    setShowCancelDialog(false)
-    router.push("/dashboard/user/bookings")
-  }
+  const artisanName = job.acceptedArtisan
+    ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`.trim()
+    : "Awaiting artisan"
+
+  const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
+
+  const timelineSteps = [
+    { label: "Booking Created", done: true, time: new Date(job.createdAt).toLocaleDateString() },
+    { label: "Artisan Assigned", done: !!job.acceptedArtisan, time: job.acceptedArtisan ? "Assigned" : "" },
+    { label: "Work Started", done: job.status === "IN_PROGRESS" || job.status === "COMPLETED", time: "" },
+    { label: "Work Completed", done: job.status === "COMPLETED", time: "" },
+  ]
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
-        {/* Back button */}
         <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
           <Link href="/dashboard/user/bookings">
             <ArrowLeft className="h-4 w-4" />
@@ -80,27 +131,19 @@ export default function BookingDetailsPage() {
           </Link>
         </Button>
 
-        {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Booking Details</h1>
-            <p className="text-muted-foreground">Booking #{booking.id}</p>
+            <p className="text-muted-foreground">Booking #{job.id.substring(0, 8)}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className={statusConfig[booking.status]?.className || ""}>
-              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-              {statusConfig[booking.status]?.label || booking.status}
-            </Badge>
-            <Badge variant="outline" className={paymentConfig[booking.paymentStatus]?.className || ""}>
-              {paymentConfig[booking.paymentStatus]?.label || booking.paymentStatus}
-            </Badge>
-          </div>
+          <Badge variant="outline" className={cfg.className}>
+            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+            {cfg.label}
+          </Badge>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main Details */}
           <div className="space-y-6 lg:col-span-2">
-            {/* Service Info */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -111,54 +154,54 @@ export default function BookingDetailsPage() {
               <CardContent className="p-5">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Service Name</p>
-                    <p className="mt-1 font-medium text-foreground">{booking.serviceName}</p>
+                    <p className="text-xs text-muted-foreground">Job Title</p>
+                    <p className="mt-1 font-medium text-foreground">{job.title}</p>
                   </div>
+                  {job.service && (
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-xs text-muted-foreground">Service</p>
+                      <p className="mt-1 font-medium text-foreground">{job.service.name}</p>
+                    </div>
+                  )}
                   <div className="rounded-lg border border-border p-4">
                     <p className="text-xs text-muted-foreground">Booking ID</p>
-                    <p className="mt-1 font-medium text-foreground">#{booking.id}</p>
+                    <p className="mt-1 font-medium text-foreground">#{job.id.substring(0, 8)}</p>
                   </div>
                   <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Order Date</p>
+                    <p className="text-xs text-muted-foreground">Created</p>
                     <div className="mt-1 flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                      <p className="font-medium text-foreground">{booking.orderDate}</p>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Deadline</p>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                      <p className="font-medium text-foreground">{booking.deadline || "Not set"}</p>
+                      <p className="font-medium text-foreground">
+                        {new Date(job.createdAt).toLocaleDateString()}
+                      </p>
                     </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Location */}
-            <Card>
-              <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  Service Location
-                </h3>
-              </div>
-              <CardContent className="p-5">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <p className="font-medium text-foreground">123 Oak Street</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">Springfield, IL 62701</p>
+            {job.location && (
+              <Card>
+                <div className="border-b border-border p-5">
+                  <h3 className="flex items-center gap-2 font-semibold text-foreground">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    Service Location
+                  </h3>
                 </div>
-                <div className="mt-4 text-sm text-muted-foreground">
-                  <p className="font-medium text-foreground">Additional Notes:</p>
-                  <p className="mt-1 leading-relaxed">
-                    The leak is under the kitchen sink. Please use the side door entrance. The main water shutoff valve is in the basement.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+                <CardContent className="p-5">
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="font-medium text-foreground">{job.location}</p>
+                  </div>
+                  {job.description && (
+                    <div className="mt-4 text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground">Description:</p>
+                      <p className="mt-1 leading-relaxed">{job.description}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Timeline */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -168,20 +211,7 @@ export default function BookingDetailsPage() {
               </div>
               <CardContent className="p-5">
                 <div className="space-y-0">
-                  {[
-                    { label: "Booking Created", time: booking.orderDate, done: true },
-                    { label: "Artisan Assigned", time: booking.orderDate, done: true },
-                    {
-                      label: "Work Started",
-                      time: booking.status !== "pending" ? booking.orderDate : "",
-                      done: booking.status === "in-progress" || booking.status === "completed",
-                    },
-                    {
-                      label: "Work Completed",
-                      time: booking.status === "completed" ? booking.deadline || "" : "",
-                      done: booking.status === "completed",
-                    },
-                  ].map((step, idx, arr) => (
+                  {timelineSteps.map((step, idx) => (
                     <div key={idx} className="flex gap-4">
                       <div className="flex flex-col items-center">
                         <div
@@ -197,7 +227,7 @@ export default function BookingDetailsPage() {
                             <span className="text-xs text-muted-foreground">{idx + 1}</span>
                           )}
                         </div>
-                        {idx < arr.length - 1 && (
+                        {idx < timelineSteps.length - 1 && (
                           <div className={`h-8 w-0.5 ${step.done ? "bg-primary/50" : "bg-border"}`} />
                         )}
                       </div>
@@ -214,9 +244,7 @@ export default function BookingDetailsPage() {
             </Card>
           </div>
 
-          {/* Sidebar */}
           <div className="space-y-6">
-            {/* Assigned Artisan */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -225,99 +253,74 @@ export default function BookingDetailsPage() {
                 </h3>
               </div>
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-14 w-14">
-                    <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h4 className="font-semibold text-foreground">{artisan.name}</h4>
-                    <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
-                    <div className="mt-1 flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{artisan.avgRating}</span>
+                {job.acceptedArtisan ? (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-14 w-14">
+                        <AvatarImage src={job.acceptedArtisan.profilePicture || "/placeholder.svg"} />
+                        <AvatarFallback>{artisanName.substring(0, 2)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <h4 className="font-semibold text-foreground">{artisanName}</h4>
+                        <div className="mt-1 flex items-center gap-1">
+                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm font-medium">—</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Phone className="h-3.5 w-3.5" />
-                    {artisan.phone}
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Mail className="h-3.5 w-3.5" />
-                    {artisan.email}
-                  </div>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
-                    <Link href={`/dashboard/user/artisan/${artisan.id}`}>View Profile</Link>
-                  </Button>
-                  <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
-                    <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
-                      <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                      Chat
-                    </Link>
-                  </Button>
-                </div>
+                    <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
+                      {job.acceptedArtisan.phoneNumber && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Phone className="h-3.5 w-3.5" />
+                          {job.acceptedArtisan.phoneNumber}
+                        </div>
+                      )}
+                      {job.acceptedArtisan.email && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Mail className="h-3.5 w-3.5" />
+                          {job.acceptedArtisan.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
+                        <Link href={`/dashboard/user/messages?artisan=${job.acceptedArtisan.id}`}>
+                          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                          Chat
+                        </Link>
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No artisan assigned yet. Waiting for applications.</p>
+                )}
               </CardContent>
             </Card>
 
-            {/* Payment Summary */}
-            <Card>
-              <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <CreditCard className="h-4 w-4 text-primary" />
-                  Payment Summary
-                </h3>
-              </div>
-              <CardContent className="p-5">
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Service cost</span>
-                    <span className="font-medium text-foreground">$120.00</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Service fee</span>
-                    <span className="font-medium text-foreground">$10.00</span>
-                  </div>
-                  <div className="border-t border-border pt-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground">Total</span>
-                      <span className="text-lg font-bold text-primary">$130.00</span>
-                    </div>
-                  </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className={`mt-4 w-full justify-center ${paymentConfig[booking.paymentStatus]?.className || ""}`}
-                >
-                  {paymentConfig[booking.paymentStatus]?.label || booking.paymentStatus}
-                </Badge>
-              </CardContent>
-            </Card>
-
-            {/* Actions */}
             <Card>
               <CardContent className="space-y-2 p-5">
-                {booking.status === "completed" && (
+                {job.status === "COMPLETED" && (
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                    <Link href={`/dashboard/user/review/${booking.id}`}>
+                    <Link href={`/dashboard/user/review/${job.id}`}>
                       <Star className="mr-2 h-4 w-4" />
                       Leave a Review
                     </Link>
                   </Button>
                 )}
-                {booking.status === "pending" && (
-                  <Button variant="destructive" className="w-full" onClick={() => setShowCancelDialog(true)}>
+                {job.status === "OPEN" && (
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => setShowCancelDialog(true)}
+                  >
                     Cancel Booking
                   </Button>
                 )}
-                {booking.status === "in-progress" && (
+                {job.status === "IN_PROGRESS" && job.acceptedArtisan && (
                   <Button variant="outline" className="w-full bg-transparent" asChild>
-                    <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
+                    <Link href={`/dashboard/user/messages?artisan=${job.acceptedArtisan.id}`}>
                       <MessageSquare className="mr-2 h-4 w-4" />
-                      Contact Support
+                      Contact Artisan
                     </Link>
                   </Button>
                 )}
@@ -327,21 +330,22 @@ export default function BookingDetailsPage() {
         </div>
       </div>
 
-      {/* Cancel Confirmation Dialog */}
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel booking #{booking.id} ({booking.serviceName})? This action cannot be undone and any associated payment will be refunded.
+              Are you sure you want to cancel booking for "{job.title}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>No, Keep Booking</AlertDialogCancel>
+            <AlertDialogCancel disabled={isCancelling}>No, Keep Booking</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancelBooking}
               className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={isCancelling}
             >
+              {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Yes, Cancel Booking
             </AlertDialogAction>
           </AlertDialogFooter>

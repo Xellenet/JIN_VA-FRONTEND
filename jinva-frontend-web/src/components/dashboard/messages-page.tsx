@@ -17,15 +17,17 @@ import {
   CheckCheck,
 } from "lucide-react"
 import { mockConversations, mockMessages } from "@/lib/data/mock-data"
-import type { User, ChatConversation, ChatMessage } from "@/lib/types"
+import type { ChatConversation, ChatMessage } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
 
 interface MessagesPageProps {
-  user: User
   openConversationId?: string
 }
 
-export function MessagesPage({ user, openConversationId }: MessagesPageProps) {
+export function MessagesPage({ openConversationId }: MessagesPageProps) {
+  const { user } = useAuth()
+  if (!user) return null
   const [conversations] = useState<ChatConversation[]>(mockConversations)
   const [selectedConv, setSelectedConv] = useState<ChatConversation | null>(() => {
     if (openConversationId) {
@@ -71,7 +73,7 @@ export function MessagesPage({ user, openConversationId }: MessagesPageProps) {
   const totalUnread = conversations.reduce((sum, c) => sum + c.unreadCount, 0)
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="flex h-[calc(100vh-8rem)] flex-col gap-0 overflow-hidden md:h-[calc(100vh-7rem)]">
         <div className="mb-4 flex items-center justify-between">
           <div>

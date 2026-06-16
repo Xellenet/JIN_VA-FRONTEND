@@ -27,13 +27,12 @@ import {
   Clock,
   XCircle,
 } from "lucide-react"
-import { mockUsers, mockOrders } from "@/lib/data/mock-data"
+import { mockOrders } from "@/lib/data/mock-data"
 
 type SortField = "clientName" | "orderDate" | "serviceName" | "status" | "paymentStatus"
 type SortDir = "asc" | "desc"
 
 export default function OrdersPage() {
-  const user = mockUsers[0]
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [paymentFilter, setPaymentFilter] = useState<string>("all")
@@ -120,7 +119,7 @@ export default function OrdersPage() {
   )
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Summary cards */}
         <div className="grid gap-4 grid-cols-2 md:grid-cols-4">

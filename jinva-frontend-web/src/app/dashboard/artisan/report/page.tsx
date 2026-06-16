@@ -56,7 +56,6 @@ const ratingHistory = [
 
 export default function ArtisanReportPage() {
   const artisan = mockArtisans[0]
-  const user = { ...artisan, role: "artisan" as const }
 
   const myJobs = mockOrders.filter((o) => o.artisanId === artisan.id)
   const completedJobs = myJobs.filter((j) => j.status === "completed").length
@@ -72,7 +71,7 @@ export default function ArtisanReportPage() {
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>

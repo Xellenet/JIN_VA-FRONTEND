@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useMemo } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -26,13 +26,12 @@ import {
   PackageX,
   AlertTriangle,
 } from "lucide-react"
-import { mockUsers, mockProducts } from "@/lib/data/mock-data"
+import { mockProducts } from "@/lib/data/mock-data"
 
 type SortField = "name" | "category" | "price" | "stock" | "status"
 type SortDir = "asc" | "desc"
 
 export default function ProductsPage() {
-  const user = mockUsers[0]
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
@@ -125,7 +124,7 @@ export default function ProductsPage() {
   )
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Summary cards */}
         <div className="grid gap-4 md:grid-cols-4">

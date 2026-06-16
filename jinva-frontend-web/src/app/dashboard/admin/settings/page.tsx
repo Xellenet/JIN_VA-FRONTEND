@@ -28,10 +28,9 @@ import {
   Users,
   Wrench,
 } from "lucide-react"
-import { mockUsers, mockProducts } from "@/lib/data/mock-data"
+import { mockProducts } from "@/lib/data/mock-data"
 
 export default function AdminSettingsPage() {
-  const user = mockUsers[0]
   const [products, setProducts] = useState(mockProducts)
   const [productSearch, setProductSearch] = useState("")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
@@ -66,7 +65,7 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">System Settings</h1>

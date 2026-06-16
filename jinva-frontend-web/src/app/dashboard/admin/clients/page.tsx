@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useMemo } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -28,13 +28,12 @@ import {
   Mail,
   Phone,
 } from "lucide-react"
-import { mockUsers, mockClients } from "@/lib/data/mock-data"
+import { mockClients } from "@/lib/data/mock-data"
 
 type SortField = "name" | "email" | "totalOrders" | "totalSpent" | "joinedDate" | "status"
 type SortDir = "asc" | "desc"
 
 export default function ClientsPage() {
-  const user = mockUsers[0]
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [sortField, setSortField] = useState<SortField>("name")
@@ -98,7 +97,7 @@ export default function ClientsPage() {
   )
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Summary cards */}
         <div className="grid gap-4 md:grid-cols-3">

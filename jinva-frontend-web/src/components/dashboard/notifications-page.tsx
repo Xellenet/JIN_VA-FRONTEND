@@ -26,12 +26,9 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import { mockNotifications } from "@/lib/data/mock-data"
-import type { User, Notification } from "@/lib/types"
+import type { Notification } from "@/lib/types"
 import { cn } from "@/lib/utils"
-
-interface NotificationsPageProps {
-  user: User
-}
+import { useAuth } from "@/contexts/auth-context"
 
 const typeConfig: Record<
   Notification["type"],
@@ -87,8 +84,10 @@ const notificationDetails: Record<string, { description: string; action?: string
   },
 }
 
-export function NotificationsPage({ user }: NotificationsPageProps) {
+export function NotificationsPage() {
+  const { user } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications)
+  if (!user) return null
   const [filter, setFilter] = useState<"all" | "unread">("all")
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
 
@@ -116,7 +115,7 @@ export function NotificationsPage({ user }: NotificationsPageProps) {
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

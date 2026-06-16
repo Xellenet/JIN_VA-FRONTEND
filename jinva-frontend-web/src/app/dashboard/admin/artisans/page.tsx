@@ -5,13 +5,11 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search, ChevronDown, Plus, Star } from "lucide-react"
-import { mockUsers, mockArtisans } from "@/lib/data/mock-data"
+import { mockArtisans } from "@/lib/data/mock-data"
 
 export default function ArtisansPage() {
-  const user = mockUsers[0]
-
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <Card>
           <CardHeader>

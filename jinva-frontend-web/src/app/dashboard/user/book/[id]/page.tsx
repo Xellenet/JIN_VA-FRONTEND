@@ -1,7 +1,6 @@
 "use client"
 
-import React from "react"
-import { useState } from "react"
+import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -27,45 +26,75 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { ArrowLeft, Star, Calendar, Clock, MapPin, CreditCard, CheckCircle } from "lucide-react"
-import { mockArtisans, mockServices } from "@/lib/data/mock-data"
+import { ArrowLeft, Star, Calendar, Clock, MapPin, CreditCard, CheckCircle, Loader2 } from "lucide-react"
+import { apiFetch } from "@/lib/api"
+import { toast } from "sonner"
+import { mockArtisans } from "@/lib/data/mock-data"
+
+interface BackendService {
+  id: string
+  name: string
+  description?: string
+  price?: number
+}
 
 export default function BookArtisanPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
 
-  const user = {
-    id: "u1",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    role: "user" as const,
-    avatar: "/placeholder.svg?height=40&width=40",
-  }
-
   const artisan = mockArtisans.find((p) => p.id === id) || mockArtisans[0]
-  const activeServices = mockServices.filter((s) => s.status === "active")
 
+  const [services, setServices] = useState<BackendService[]>([])
   const [selectedService, setSelectedService] = useState("")
   const [date, setDate] = useState("")
   const [time, setTime] = useState("")
   const [address, setAddress] = useState("")
   const [description, setDescription] = useState("")
-  const [urgency, setUrgency] = useState("")
+  const [budgetMin, setBudgetMin] = useState("")
+  const [budgetMax, setBudgetMax] = useState("")
   const [showConfirmation, setShowConfirmation] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [createdJobId, setCreatedJobId] = useState<string | null>(null)
 
-  const selectedServiceData = activeServices.find((s) => s.id === selectedService)
+  useEffect(() => {
+    apiFetch<BackendService[]>("/services")
+      .then(setServices)
+      .catch(() => setServices([]))
+  }, [])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const selectedServiceData = services.find((s) => s.id === selectedService)
+  const isFormValid = selectedService && date && time && address && budgetMin && budgetMax
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setShowConfirmation(true)
+    if (!isFormValid) return
+
+    setIsSubmitting(true)
+    try {
+      const payload = {
+        title: selectedServiceData?.name ?? "Service Request",
+        description: `${description}\n\nPreferred date: ${date} at ${time}`,
+        location: address,
+        serviceId: selectedService,
+        budgetMin: Number(budgetMin),
+        budgetMax: Number(budgetMax),
+      }
+      const job = await apiFetch<{ id: string }>("/jobs", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      })
+      setCreatedJobId(job.id)
+      setShowConfirmation(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create booking.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const isFormValid = selectedService && date && time && address
-
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
-        {/* Back button */}
         <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
           <Link href="/dashboard/user/search">
             <ArrowLeft className="h-4 w-4" />
@@ -79,7 +108,6 @@ export default function BookArtisanPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Booking Form */}
           <div className="space-y-6 lg:col-span-2">
             <form onSubmit={handleSubmit}>
               <Card>
@@ -87,7 +115,6 @@ export default function BookArtisanPage() {
                   <h3 className="font-semibold text-foreground">Service Details</h3>
                 </div>
                 <CardContent className="space-y-5 p-5">
-                  {/* Service selection */}
                   <div className="space-y-2">
                     <Label htmlFor="service">Service Type <span className="text-destructive">*</span></Label>
                     <Select value={selectedService} onValueChange={setSelectedService}>
@@ -95,11 +122,13 @@ export default function BookArtisanPage() {
                         <SelectValue placeholder="Select a service" />
                       </SelectTrigger>
                       <SelectContent>
-                        {activeServices.map((service) => (
+                        {services.map((service) => (
                           <SelectItem key={service.id} value={service.id}>
                             <div className="flex items-center justify-between gap-4">
                               <span>{service.name}</span>
-                              <span className="text-xs text-muted-foreground">${service.price}</span>
+                              {service.price != null && (
+                                <span className="text-xs text-muted-foreground">${service.price}</span>
+                              )}
                             </div>
                           </SelectItem>
                         ))}
@@ -107,23 +136,31 @@ export default function BookArtisanPage() {
                     </Select>
                   </div>
 
-                  {/* Urgency */}
-                  <div className="space-y-2">
-                    <Label htmlFor="urgency">Urgency Level</Label>
-                    <Select value={urgency} onValueChange={setUrgency}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select urgency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low - Can wait a few days</SelectItem>
-                        <SelectItem value="medium">Medium - Within 24 hours</SelectItem>
-                        <SelectItem value="high">High - As soon as possible</SelectItem>
-                        <SelectItem value="emergency">Emergency - Right now</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="budgetMin">Min Budget ($) <span className="text-destructive">*</span></Label>
+                      <Input
+                        id="budgetMin"
+                        type="number"
+                        min="0"
+                        placeholder="50"
+                        value={budgetMin}
+                        onChange={(e) => setBudgetMin(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="budgetMax">Max Budget ($) <span className="text-destructive">*</span></Label>
+                      <Input
+                        id="budgetMax"
+                        type="number"
+                        min="0"
+                        placeholder="200"
+                        value={budgetMax}
+                        onChange={(e) => setBudgetMax(e.target.value)}
+                      />
+                    </div>
                   </div>
 
-                  {/* Date and Time */}
                   <div className="grid gap-5 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="date">Preferred Date <span className="text-destructive">*</span></Label>
@@ -153,7 +190,6 @@ export default function BookArtisanPage() {
                     </div>
                   </div>
 
-                  {/* Address */}
                   <div className="space-y-2">
                     <Label htmlFor="address">Service Address <span className="text-destructive">*</span></Label>
                     <div className="relative">
@@ -169,7 +205,6 @@ export default function BookArtisanPage() {
                     </div>
                   </div>
 
-                  {/* Problem description */}
                   <div className="space-y-2">
                     <Label htmlFor="description">Describe the Problem</Label>
                     <Textarea
@@ -190,17 +225,16 @@ export default function BookArtisanPage() {
                 <Button
                   type="submit"
                   className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 md:flex-none md:px-8"
-                  disabled={!isFormValid}
+                  disabled={!isFormValid || isSubmitting}
                 >
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Confirm Booking
                 </Button>
               </div>
             </form>
           </div>
 
-          {/* Sidebar - Artisan card & Price summary */}
           <div className="space-y-6">
-            {/* Artisan Card */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="font-semibold text-foreground">Selected Artisan</h3>
@@ -231,7 +265,6 @@ export default function BookArtisanPage() {
               </CardContent>
             </Card>
 
-            {/* Price Summary */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -244,20 +277,16 @@ export default function BookArtisanPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">{selectedServiceData.name}</span>
-                      <span className="font-medium text-foreground">${selectedServiceData.price}</span>
+                      {selectedServiceData.price != null && (
+                        <span className="font-medium text-foreground">${selectedServiceData.price}</span>
+                      )}
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Service fee</span>
-                      <span className="font-medium text-foreground">$10</span>
-                    </div>
-                    <div className="border-t border-border pt-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-foreground">Total</span>
-                        <span className="text-lg font-bold text-primary">
-                          ${selectedServiceData.price + 10}
-                        </span>
+                    {budgetMin && budgetMax && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Your budget</span>
+                        <span className="font-medium text-foreground">${budgetMin} – ${budgetMax}</span>
                       </div>
-                    </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-center text-sm text-muted-foreground">
@@ -269,16 +298,15 @@ export default function BookArtisanPage() {
           </div>
         </div>
 
-        {/* Success Dialog */}
         <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader className="items-center text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
                 <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
-              <DialogTitle>Booking Confirmed!</DialogTitle>
+              <DialogTitle>Booking Submitted!</DialogTitle>
               <DialogDescription>
-                Your booking with {artisan.name} has been submitted successfully. You will receive a confirmation shortly.
+                Your job has been posted. Artisans will apply and you can accept one to confirm the booking.
               </DialogDescription>
             </DialogHeader>
             <div className="rounded-lg border border-border bg-muted/50 p-4">
@@ -298,25 +326,22 @@ export default function BookArtisanPage() {
                   <span className="font-medium text-foreground">{time}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Artisan</span>
-                  <span className="font-medium text-foreground">{artisan.name}</span>
+                  <span className="text-muted-foreground">Location</span>
+                  <span className="font-medium text-foreground truncate max-w-[180px]">{address}</span>
                 </div>
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-col">
               <Button
                 className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={() => router.push("/dashboard/user/bookings")}
+                onClick={() => router.push(createdJobId ? `/dashboard/user/bookings/${createdJobId}` : "/dashboard/user/bookings")}
               >
                 View My Bookings
               </Button>
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
-                onClick={() => {
-                  setShowConfirmation(false)
-                  router.push("/dashboard/user")
-                }}
+                onClick={() => { setShowConfirmation(false); router.push("/dashboard/user") }}
               >
                 Back to Dashboard
               </Button>

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -34,7 +34,7 @@ import {
   XCircle,
   FileText,
 } from "lucide-react"
-import { mockUsers, mockOrders, mockArtisans, mockClients } from "@/lib/data/mock-data"
+import { mockOrders, mockArtisans, mockClients } from "@/lib/data/mock-data"
 
 const revenueData = [
   { month: "Jan", revenue: 12400, orders: 18 },
@@ -69,7 +69,6 @@ const weeklyOrders = [
 ]
 
 export default function AdminReportPage() {
-  const user = mockUsers[0]
   const [period, setPeriod] = useState("monthly")
 
   const completedOrders = mockOrders.filter((o) => o.status === "completed").length
@@ -79,7 +78,7 @@ export default function AdminReportPage() {
   const totalRevenue = revenueData.reduce((sum, m) => sum + m.revenue, 0)
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

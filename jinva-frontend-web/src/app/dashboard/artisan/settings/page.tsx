@@ -21,16 +21,14 @@ import {
   AlertTriangle,
   Clock,
 } from "lucide-react"
-import { mockArtisans } from "@/lib/data/mock-data"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function ArtisanSettingsPage() {
-  const user = {
-    ...mockArtisans[0],
-    role: "artisan" as const,
-  }
+  const { user } = useAuth()
+  if (!user) return null
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
@@ -123,12 +121,12 @@ export default function ArtisanSettingsPage() {
                     <Label htmlFor="phone">Phone Number</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input id="phone" className="pl-10" defaultValue={user.phone} />
+                      <Input id="phone" className="pl-10" defaultValue={user.phone ?? ""} />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="specialization">Specialization</Label>
-                    <Input id="specialization" defaultValue={user.specialization} />
+                    <Input id="specialization" defaultValue={user.specialization ?? ""} />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label htmlFor="address">Service Area Address</Label>

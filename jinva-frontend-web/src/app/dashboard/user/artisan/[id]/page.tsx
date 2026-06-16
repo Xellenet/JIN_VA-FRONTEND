@@ -22,15 +22,7 @@ import {
 import { mockArtisans } from "@/lib/data/mock-data"
 
 export default function ArtisanPublicProfile() {
-  const { id } = useParams<{ id: string }>() // Use the use hook to resolve the params promise
-
-  const user = {
-    id: "u1",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    role: "user" as const,
-    avatar: "/placeholder.svg?height=40&width=40",
-  }
+  const { id } = useParams<{ id: string }>()
 
   const artisan = mockArtisans.find((p) => p.id === id) || mockArtisans[0]
 
@@ -42,7 +34,7 @@ export default function ArtisanPublicProfile() {
   ]
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Back button */}
         <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">

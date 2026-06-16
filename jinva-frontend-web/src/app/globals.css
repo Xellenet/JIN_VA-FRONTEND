@@ -9,7 +9,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   /* Updated primary color to emerald green matching Solara design */
-  --primary: oklch(0.205 0 0);
+  --primary: oklab(32.107% -0.04748 0.01739);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -28,14 +28,14 @@
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: lab(21.7843% -16.469 6.49297);
+  --sidebar-foreground: lab(94.2% 0 0);
+  --sidebar-primary: lab(98.84% .0000298023 -.0000119209);
+  --sidebar-primary-foreground: lab(21.7843% -16.469 6.49297);
+  --sidebar-accent: lab(17.0125% -13.1356 5.18339);
+  --sidebar-accent-foreground: lab(94.2% 0 0);
+  --sidebar-border: lab(28.7468% -16.3789 6.46797);
+  --sidebar-ring: lab(42.67% -16.2704 6.43786);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
 }

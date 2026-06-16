@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ArrowLeft, Star, CheckCircle2 } from "lucide-react"
-import { mockOrders, mockPlumbers } from "@/lib/data/mock-data"
+import { mockOrders, mockArtisans } from "@/lib/data/mock-data"
 
 export default function ReviewPage() {
   const { id } = useParams<{ id: string }>()
@@ -25,9 +25,9 @@ export default function ReviewPage() {
   }
 
   const booking = mockOrders.find((o) => o.id === id) || mockOrders[0]
-  const plumber = mockPlumbers.find(
-    (p) => p.name.includes(booking.plumberName.split(" ")[0]) || p.id === booking.plumberId,
-  ) || mockPlumbers[0]
+  const artisan = mockArtisans.find(
+    (p) => p.name.includes(booking.artisanName.split(" ")[0]) || p.id === booking.artisanId,
+  ) || mockArtisans[0]
 
   const [rating, setRating] = useState(0)
   const [hoveredRating, setHoveredRating] = useState(0)
@@ -96,7 +96,7 @@ export default function ReviewPage() {
 
         <div>
           <h1 className="text-2xl font-bold text-foreground">Leave a Review</h1>
-          <p className="text-muted-foreground">Share your experience with {plumber.name}</p>
+          <p className="text-muted-foreground">Share your experience with {artisan.name}</p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -164,7 +164,7 @@ export default function ReviewPage() {
                   <Label htmlFor="review-comment">Your Review</Label>
                   <Textarea
                     id="review-comment"
-                    placeholder="Tell others about your experience with this plumber. What did they do well? How was the quality of work?"
+                    placeholder="Tell others about your experience with this artisan. What did they do well? How was the quality of work?"
                     rows={6}
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
@@ -191,25 +191,25 @@ export default function ReviewPage() {
             </div>
           </div>
 
-          {/* Sidebar - Booking & Plumber info */}
+          {/* Sidebar - Booking & Artisan info */}
           <div className="space-y-6">
             <Card>
               <div className="border-b border-border p-5">
-                <h3 className="font-semibold text-foreground">Plumber</h3>
+                <h3 className="font-semibold text-foreground">Artisan</h3>
               </div>
               <CardContent className="p-5">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-14 w-14">
-                    <AvatarImage src={plumber.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>{plumber.name.substring(0, 2)}</AvatarFallback>
+                    <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
+                    <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <h4 className="font-semibold text-foreground">{plumber.name}</h4>
-                    <p className="text-sm text-muted-foreground">{plumber.specialization}</p>
+                    <h4 className="font-semibold text-foreground">{artisan.name}</h4>
+                    <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
                     <div className="mt-1 flex items-center gap-1">
                       <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{plumber.avgRating}</span>
-                      <span className="text-xs text-muted-foreground">({plumber.reviews} reviews)</span>
+                      <span className="text-sm font-medium">{artisan.avgRating}</span>
+                      <span className="text-xs text-muted-foreground">({artisan.reviews} reviews)</span>
                     </div>
                   </div>
                 </div>

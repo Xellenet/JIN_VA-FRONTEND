@@ -2,18 +2,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Star, ChevronRight } from "lucide-react"
-import type { PlumberProfile } from "@/lib/types"
+import type { ArtisanProfile } from "@/lib/types"
 
-interface TopPlumbersProps {
-  plumbers: PlumberProfile[]
+interface TopArtisansProps {
+  artisans: ArtisanProfile[]
 }
 
-export function TopPlumbers({ plumbers }: TopPlumbersProps) {
+export function TopArtisans({ artisans }: TopArtisansProps) {
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">Top Performing Plumbers</CardTitle>
+          <CardTitle className="text-lg font-semibold">Top Performing Artisans</CardTitle>
           <Button variant="link" size="sm" className="h-8">
             See All
           </Button>
@@ -21,24 +21,24 @@ export function TopPlumbers({ plumbers }: TopPlumbersProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {plumbers.slice(0, 3).map((plumber) => (
-            <div key={plumber.id} className="flex items-center justify-between">
+          {artisans.slice(0, 3).map((artisan) => (
+            <div key={artisan.id} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10">
-                  <AvatarImage src={plumber.avatar || "/placeholder.svg"} />
-                  <AvatarFallback>{plumber.name.substring(0, 2)}</AvatarFallback>
+                  <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
+                  <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-medium text-sm">{plumber.name}</p>
-                  <p className="text-sm text-muted-foreground">{plumber.specialization}</p>
+                  <p className="font-medium text-sm">{artisan.name}</p>
+                  <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <p className="text-sm font-medium">{plumber.jobsCompleted} Jobs Completed</p>
+                  <p className="text-sm font-medium">{artisan.jobsCompleted} Jobs Completed</p>
                   <div className="flex items-center gap-1 text-sm">
                     <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                    <span>{plumber.avgRating}</span>
+                    <span>{artisan.avgRating}</span>
                   </div>
                 </div>
                 <Button variant="ghost" size="icon" className="h-8 w-8">

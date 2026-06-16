@@ -4,15 +4,15 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Star, Calendar, DollarSign, Briefcase } from "lucide-react"
-import { mockPlumbers, mockOrders } from "@/lib/data/mock-data"
+import { mockArtisans, mockOrders } from "@/lib/data/mock-data"
 
-export default function PlumberDashboard() {
+export default function ArtisanDashboard() {
   const user = {
-    ...mockPlumbers[0],
-    role: "plumber" as const,
+    ...mockArtisans[0],
+    role: "artisan" as const,
   }
 
-  const myJobs = mockOrders.filter((order) => order.plumberId === user.id)
+  const myJobs = mockOrders.filter((order) => order.artisanId === user.id)
 
   const statusConfig = {
     "in-progress": { label: "In Progress", className: "bg-muted text-muted-foreground border-muted" },
@@ -21,6 +21,12 @@ export default function PlumberDashboard() {
     pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
     available: { label: "Available", className: "bg-blue-100 text-blue-700 border-blue-200" },
   }
+
+  const paymentStatusConfig = {
+    paid: { label: "Paid", className: "border-green-200 bg-green-50 text-green-700" },
+    pending: { label: "Pending", className: "border-yellow-200 bg-yellow-50 text-yellow-700" },
+    refunded: { label: "Refunded", className: "border-red-200 bg-red-50 text-red-700" },
+  } as const
 
   return (
     <DashboardLayout user={user}>
@@ -150,22 +156,18 @@ export default function PlumberDashboard() {
                         </Badge>
                       </td>
                       <td className="py-4">
+                        {(() => {
+                          const paymentBadge = paymentStatusConfig[job.paymentStatus]
+
+                          return (
                         <Badge
                           variant="outline"
-                          className={
-                            job.paymentStatus === "paid"
-                              ? "border-green-200 bg-green-50 text-green-700"
-                              : job.paymentStatus === "pending"
-                                ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                                : "border-red-200 bg-red-50 text-red-700"
-                          }
+                          className={paymentBadge.className}
                         >
-                          {job.paymentStatus === "paid"
-                            ? "Paid"
-                            : job.paymentStatus === "pending"
-                              ? "Pending"
-                              : "Refunded"}
+                          {paymentBadge.label}
                         </Badge>
+                          )
+                        })()}
                       </td>
                     </tr>
                   ))}

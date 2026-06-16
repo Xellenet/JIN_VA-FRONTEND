@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
 
-export default function PlumberJobsLoading() {
+export default function ArtisanJobsLoading() {
   return (
     <div className="space-y-6 p-6">
       <div className="space-y-2">

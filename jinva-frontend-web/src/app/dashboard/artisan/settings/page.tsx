@@ -21,12 +21,12 @@ import {
   AlertTriangle,
   Clock,
 } from "lucide-react"
-import { mockPlumbers } from "@/lib/data/mock-data"
+import { mockArtisans } from "@/lib/data/mock-data"
 
-export default function PlumberSettingsPage() {
+export default function ArtisanSettingsPage() {
   const user = {
-    ...mockPlumbers[0],
-    role: "plumber" as const,
+    ...mockArtisans[0],
+    role: "artisan" as const,
   }
 
   return (

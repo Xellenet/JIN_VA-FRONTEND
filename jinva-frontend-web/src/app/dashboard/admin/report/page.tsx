@@ -34,7 +34,7 @@ import {
   XCircle,
   FileText,
 } from "lucide-react"
-import { mockUsers, mockOrders, mockPlumbers, mockClients } from "@/lib/data/mock-data"
+import { mockUsers, mockOrders, mockArtisans, mockClients } from "@/lib/data/mock-data"
 
 const revenueData = [
   { month: "Jan", revenue: 12400, orders: 18 },
@@ -360,11 +360,11 @@ export default function AdminReportPage() {
           </Card>
         </div>
 
-        {/* Top Plumbers Performance */}
+        {/* Top Artisans Performance */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Plumber Performance</CardTitle>
+              <CardTitle className="text-lg">Artisan Performance</CardTitle>
               <Button variant="outline" size="sm" className="gap-2 bg-transparent">
                 <FileText className="h-4 w-4" />
                 Download Report
@@ -376,7 +376,7 @@ export default function AdminReportPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b text-left text-sm text-muted-foreground">
-                    <th className="pb-3 font-medium">Plumber</th>
+                    <th className="pb-3 font-medium">Artisan</th>
                     <th className="pb-3 font-medium">Specialization</th>
                     <th className="pb-3 font-medium">Jobs Completed</th>
                     <th className="pb-3 font-medium">Avg. Rating</th>
@@ -386,43 +386,43 @@ export default function AdminReportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockPlumbers.map((plumber) => {
-                    const perf = plumber.avgRating >= 4.9 ? "Excellent" : plumber.avgRating >= 4.5 ? "Good" : "Average"
+                  {mockArtisans.map((artisan) => {
+                    const perf = artisan.avgRating >= 4.9 ? "Excellent" : artisan.avgRating >= 4.5 ? "Good" : "Average"
                     const perfColor = perf === "Excellent" ? "text-green-600 bg-green-50 border-green-200" : perf === "Good" ? "text-foreground bg-muted border-muted" : "text-yellow-600 bg-yellow-50 border-yellow-200"
                     return (
-                      <tr key={plumber.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <tr key={artisan.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="py-4">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-9 w-9">
-                              <AvatarImage src={plumber.avatar || "/placeholder.svg"} />
-                              <AvatarFallback>{plumber.name.substring(0, 2)}</AvatarFallback>
+                              <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
+                              <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="font-medium">{plumber.name}</p>
-                              <p className="text-xs text-muted-foreground">{plumber.email}</p>
+                              <p className="font-medium">{artisan.name}</p>
+                              <p className="text-xs text-muted-foreground">{artisan.email}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 text-sm">{plumber.specialization}</td>
-                        <td className="py-4 text-sm font-semibold">{plumber.jobsCompleted}</td>
+                        <td className="py-4 text-sm">{artisan.specialization}</td>
+                        <td className="py-4 text-sm font-semibold">{artisan.jobsCompleted}</td>
                         <td className="py-4">
                           <div className="flex items-center gap-1 text-sm">
-                            <span className="font-semibold text-foreground">{plumber.avgRating}</span>
+                            <span className="font-semibold text-foreground">{artisan.avgRating}</span>
                             <span className="text-muted-foreground">/ 5</span>
                           </div>
                         </td>
-                        <td className="py-4 text-sm">{plumber.reviews}</td>
+                        <td className="py-4 text-sm">{artisan.reviews}</td>
                         <td className="py-4">
                           <Badge
                             variant="outline"
                             className={
-                              plumber.availability === "available"
+                              artisan.availability === "available"
                                 ? "border-green-200 bg-green-50 text-green-700"
                                 : "border-red-200 bg-red-50 text-red-700"
                             }
                           >
                             <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
-                            {plumber.availability === "available" ? "Available" : "Busy"}
+                            {artisan.availability === "available" ? "Available" : "Busy"}
                           </Badge>
                         </td>
                         <td className="py-4">

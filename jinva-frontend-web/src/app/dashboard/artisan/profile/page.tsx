@@ -36,14 +36,14 @@ import {
   Award,
   Upload,
 } from "lucide-react"
-import { mockPlumbers, mockPortfolio } from "@/lib/data/mock-data"
+import { mockArtisans, mockPortfolio } from "@/lib/data/mock-data"
 import type { PortfolioItem } from "@/lib/types"
 import Image from "next/image"
 
-export default function PlumberProfile() {
+export default function ArtisanProfile() {
   const user = {
-    ...mockPlumbers[0],
-    role: "plumber" as const,
+    ...mockArtisans[0],
+    role: "artisan" as const,
   }
 
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>(mockPortfolio)
@@ -354,7 +354,7 @@ export default function PlumberProfile() {
                       <Label htmlFor="bio">Bio</Label>
                       <Textarea
                         id="bio"
-                        defaultValue="Experienced plumber with over 10 years in residential and commercial plumbing. Specializing in pipe installation, leak repairs, and bathroom renovations. Licensed and insured professional committed to quality workmanship."
+                        defaultValue="Experienced artisan with over 10 years in residential and commercial plumbing. Specializing in pipe installation, leak repairs, and bathroom renovations. Licensed and insured professional committed to quality workmanship."
                         rows={4}
                       />
                     </div>
@@ -372,7 +372,7 @@ export default function PlumberProfile() {
                       <Label htmlFor="certs">Certifications</Label>
                       <Textarea
                         id="certs"
-                        defaultValue="Master Plumber License, EPA Section 608 Certification, OSHA 10-Hour Safety Certification"
+                        defaultValue="Master Artisan License, EPA Section 608 Certification, OSHA 10-Hour Safety Certification"
                         rows={3}
                       />
                     </div>

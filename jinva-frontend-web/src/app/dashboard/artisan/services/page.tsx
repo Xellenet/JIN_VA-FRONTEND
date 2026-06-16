@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search, ChevronDown, Wrench, DollarSign, CheckCircle2 } from "lucide-react"
-import { mockServices, mockPlumbers } from "@/lib/data/mock-data"
+import { mockServices, mockArtisans } from "@/lib/data/mock-data"
 
-export default function PlumberServicesPage() {
+export default function ArtisanServicesPage() {
   const user = {
-    ...mockPlumbers[0],
-    role: "plumber" as const,
+    ...mockArtisans[0],
+    role: "artisan" as const,
   }
 
   const [searchQuery, setSearchQuery] = useState("")

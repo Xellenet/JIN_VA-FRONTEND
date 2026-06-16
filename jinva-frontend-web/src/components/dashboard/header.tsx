@@ -35,11 +35,11 @@ export function DashboardHeader({ user, onMenuToggle }: Readonly<DashboardHeader
 
   if (user.role === "admin") {
     roleBase = "/dashboard/admin"
-  } else if (user.role === "plumber") {
-    roleBase = "/dashboard/plumber"
+  } else if (user.role === "artisan") {
+    roleBase = "/dashboard/artisan"
   }
 
-  const profilePath = user.role === "plumber" ? `${roleBase}/profile` : `${roleBase}/settings`
+  const profilePath = user.role === "artisan" ? `${roleBase}/profile` : `${roleBase}/settings`
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4 md:h-16 md:px-6">

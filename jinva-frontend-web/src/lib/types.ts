@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "plumber" | "user"
+export type UserRole = "admin" | "artisan" | "user"
 
 export interface User {
   id: string
@@ -27,8 +27,8 @@ export interface Order {
   clientId: string
   clientName: string
   clientAvatar?: string
-  plumberId: string
-  plumberName: string
+  artisanId: string
+  artisanName: string
   serviceId: string
   serviceName: string
   orderDate: string
@@ -55,7 +55,7 @@ export interface Review {
   reviewCount: number
 }
 
-export interface PlumberProfile extends User {
+export interface ArtisanProfile extends User {
   avgRating: number
   jobsCompleted: number
   reviews: number

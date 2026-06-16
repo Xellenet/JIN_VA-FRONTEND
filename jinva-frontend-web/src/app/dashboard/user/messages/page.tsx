@@ -5,7 +5,7 @@ import { MessagesPage } from "@/components/dashboard/messages-page"
 
 export default function UserMessages() {
   const searchParams = useSearchParams()
-  const plumberId = searchParams.get("plumber") || undefined
+  const artisanId = searchParams.get("artisan") || undefined
 
   const user = {
     id: "c1",
@@ -15,5 +15,5 @@ export default function UserMessages() {
     avatar: "/placeholder.svg?height=40&width=40",
   }
 
-  return <MessagesPage user={user} openConversationId={plumberId} />
+  return <MessagesPage user={user} openConversationId={artisanId} />
 }

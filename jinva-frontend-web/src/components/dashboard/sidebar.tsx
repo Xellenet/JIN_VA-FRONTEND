@@ -20,45 +20,44 @@ import {
 import type { UserRole } from "@/lib/types"
 
 interface SidebarProps {
-  role: UserRole
-  open: boolean
-  onClose: () => void
+  readonly role: UserRole
+  readonly open: boolean
+  readonly onClose: () => void
 }
 
-export function Sidebar({ role, open, onClose }: SidebarProps) {
+export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
   const pathname = usePathname()
 
   const adminLinks = [
     { href: "/dashboard/admin", label: "Overview", icon: LayoutGrid },
     { href: "/dashboard/admin/services", label: "Services", icon: Wrench },
-    { href: "/dashboard/admin/plumbers", label: "Plumbers", icon: Users },
+    { href: "/dashboard/admin/artisans", label: "Artisans", icon: Users },
     { href: "/dashboard/admin/products", label: "Products", icon: Package },
     { href: "/dashboard/admin/clients", label: "Clients", icon: UserCircle },
     { href: "/dashboard/admin/orders", label: "Orders", icon: ClipboardList },
   ]
 
-  const plumberLinks = [
-    { href: "/dashboard/plumber", label: "Overview", icon: LayoutGrid },
-    { href: "/dashboard/plumber/jobs", label: "My Jobs", icon: ClipboardList },
-    { href: "/dashboard/plumber/profile", label: "Profile", icon: UserCircle },
-    { href: "/dashboard/plumber/services", label: "Services", icon: Wrench },
+  const artisanLinks = [
+    { href: "/dashboard/artisan", label: "Overview", icon: LayoutGrid },
+    { href: "/dashboard/artisan/jobs", label: "My Jobs", icon: ClipboardList },
+    { href: "/dashboard/artisan/profile", label: "Profile", icon: UserCircle },
+    { href: "/dashboard/artisan/services", label: "Services", icon: Wrench },
   ]
 
   const userLinks = [
     { href: "/dashboard/user", label: "Overview", icon: LayoutGrid },
-    { href: "/dashboard/user/search", label: "Find Plumbers", icon: Search },
+    { href: "/dashboard/user/search", label: "Find Artisans", icon: Search },
     { href: "/dashboard/user/bookings", label: "My Bookings", icon: ClipboardList },
     { href: "/dashboard/user/services", label: "Services", icon: Wrench },
   ]
 
-  const links = role === "admin" ? adminLinks : role === "plumber" ? plumberLinks : userLinks
+  const navigationByRole = {
+    admin: { links: adminLinks, roleBase: "/dashboard/admin" },
+    artisan: { links: artisanLinks, roleBase: "/dashboard/artisan" },
+    user: { links: userLinks, roleBase: "/dashboard/user" },
+  } as const
 
-  const roleBase =
-    role === "admin"
-      ? "/dashboard/admin"
-      : role === "plumber"
-        ? "/dashboard/plumber"
-        : "/dashboard/user"
+  const { links, roleBase } = navigationByRole[role]
 
   const bottomLinks = [
     { href: `${roleBase}/report`, label: "Report", icon: FileText },

@@ -18,7 +18,7 @@ import {
   XCircle,
   Timer,
 } from "lucide-react"
-import { mockOrders, mockPlumbers } from "@/lib/data/mock-data"
+import { mockOrders, mockArtisans } from "@/lib/data/mock-data"
 
 const statusConfig = {
   "in-progress": {
@@ -50,17 +50,17 @@ const statusConfig = {
 
 type StatusFilter = "all" | "in-progress" | "completed" | "cancelled" | "pending"
 
-export default function PlumberJobsPage() {
+export default function ArtisanJobsPage() {
   const user = {
-    ...mockPlumbers[0],
-    role: "plumber" as const,
+    ...mockArtisans[0],
+    role: "artisan" as const,
   }
 
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
 
-  const myJobs = mockOrders.filter((order) => order.plumberId === user.id)
+  const myJobs = mockOrders.filter((order) => order.artisanId === user.id)
 
   const filteredJobs = myJobs.filter((job) => {
     const matchesSearch =

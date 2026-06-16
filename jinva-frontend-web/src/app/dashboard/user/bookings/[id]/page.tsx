@@ -32,7 +32,7 @@ import {
   Star,
   FileText,
 } from "lucide-react"
-import { mockOrders, mockPlumbers } from "@/lib/data/mock-data"
+import { mockOrders, mockArtisans } from "@/lib/data/mock-data"
 
 export default function BookingDetailsPage() {
   const { id } = useParams<{ id: string }>()
@@ -48,7 +48,7 @@ export default function BookingDetailsPage() {
   }
 
   const booking = mockOrders.find((o) => o.id === id) || mockOrders[0]
-  const plumber = mockPlumbers.find((p) => p.name.includes(booking.plumberName.split(" ")[0])) || mockPlumbers[0]
+  const artisan = mockArtisans.find((p) => p.name.includes(booking.artisanName.split(" ")[0])) || mockArtisans[0]
 
   const statusConfig: Record<string, { label: string; className: string }> = {
     "in-progress": { label: "In Progress", className: "border-muted bg-muted text-muted-foreground" },
@@ -170,7 +170,7 @@ export default function BookingDetailsPage() {
                 <div className="space-y-0">
                   {[
                     { label: "Booking Created", time: booking.orderDate, done: true },
-                    { label: "Plumber Assigned", time: booking.orderDate, done: true },
+                    { label: "Artisan Assigned", time: booking.orderDate, done: true },
                     {
                       label: "Work Started",
                       time: booking.status !== "pending" ? booking.orderDate : "",
@@ -216,45 +216,45 @@ export default function BookingDetailsPage() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Assigned Plumber */}
+            {/* Assigned Artisan */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
                   <User className="h-4 w-4 text-primary" />
-                  Assigned Plumber
+                  Assigned Artisan
                 </h3>
               </div>
               <CardContent className="p-5">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-14 w-14">
-                    <AvatarImage src={plumber.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>{plumber.name.substring(0, 2)}</AvatarFallback>
+                    <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
+                    <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <h4 className="font-semibold text-foreground">{plumber.name}</h4>
-                    <p className="text-sm text-muted-foreground">{plumber.specialization}</p>
+                    <h4 className="font-semibold text-foreground">{artisan.name}</h4>
+                    <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
                     <div className="mt-1 flex items-center gap-1">
                       <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{plumber.avgRating}</span>
+                      <span className="text-sm font-medium">{artisan.avgRating}</span>
                     </div>
                   </div>
                 </div>
                 <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Phone className="h-3.5 w-3.5" />
-                    {plumber.phone}
+                    {artisan.phone}
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Mail className="h-3.5 w-3.5" />
-                    {plumber.email}
+                    {artisan.email}
                   </div>
                 </div>
                 <div className="mt-4 flex gap-2">
                   <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
-                    <Link href={`/dashboard/user/plumber/${plumber.id}`}>View Profile</Link>
+                    <Link href={`/dashboard/user/artisan/${artisan.id}`}>View Profile</Link>
                   </Button>
                   <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
-                    <Link href={`/dashboard/user/messages?plumber=${plumber.id}`}>
+                    <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
                       <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
                       Chat
                     </Link>
@@ -315,7 +315,7 @@ export default function BookingDetailsPage() {
                 )}
                 {booking.status === "in-progress" && (
                   <Button variant="outline" className="w-full bg-transparent" asChild>
-                    <Link href={`/dashboard/user/messages?plumber=${plumber.id}`}>
+                    <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
                       <MessageSquare className="mr-2 h-4 w-4" />
                       Contact Support
                     </Link>

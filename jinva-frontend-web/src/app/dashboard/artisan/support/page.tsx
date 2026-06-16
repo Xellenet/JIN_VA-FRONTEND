@@ -1,18 +1,18 @@
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { SupportPage } from "@/components/dashboard/support-page"
 
-const plumberUser = {
+const artisanUser = {
   id: "p1",
   name: "Robert Fox",
   email: "robert@plumbify.com",
-  role: "plumber" as const,
-  avatar: "/plumber-in-blue-uniform.jpg",
+  role: "artisan" as const,
+  avatar: "/artisan-in-blue-uniform.jpg",
 }
 
-export default function PlumberSupportPage() {
+export default function ArtisanSupportPage() {
   return (
-    <DashboardLayout user={plumberUser}>
-      <SupportPage role="plumber" />
+    <DashboardLayout user={artisanUser}>
+      <SupportPage role="artisan" />
     </DashboardLayout>
   )
 }

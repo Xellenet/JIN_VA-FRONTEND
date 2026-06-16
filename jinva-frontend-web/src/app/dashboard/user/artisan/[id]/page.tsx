@@ -16,13 +16,12 @@ import {
   Briefcase,
   Award,
   ImageIcon,
-  Calendar,
   ArrowLeft,
   MessageSquare,
 } from "lucide-react"
-import { mockPlumbers } from "@/lib/data/mock-data"
+import { mockArtisans } from "@/lib/data/mock-data"
 
-export default function PlumberPublicProfile() {
+export default function ArtisanPublicProfile() {
   const { id } = useParams<{ id: string }>() // Use the use hook to resolve the params promise
 
   const user = {
@@ -33,7 +32,7 @@ export default function PlumberPublicProfile() {
     avatar: "/placeholder.svg?height=40&width=40",
   }
 
-  const plumber = mockPlumbers.find((p) => p.id === id) || mockPlumbers[0]
+  const artisan = mockArtisans.find((p) => p.id === id) || mockArtisans[0]
 
   const reviews = [
     { name: "Devon Lane", date: "Aug 18, 2025", rating: 5, comment: "Amazing job on our bathroom renovation. Professional, punctual, and exceeded expectations." },
@@ -60,36 +59,36 @@ export default function PlumberPublicProfile() {
             <div className="flex flex-col items-start gap-6 md:flex-row md:items-end">
               <div className="relative -mt-16">
                 <Avatar className="h-28 w-28 border-4 border-background shadow-lg">
-                  <AvatarImage src={plumber.avatar || "/placeholder.svg"} />
-                  <AvatarFallback className="text-2xl">{plumber.name.substring(0, 2)}</AvatarFallback>
+                  <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
+                  <AvatarFallback className="text-2xl">{artisan.name.substring(0, 2)}</AvatarFallback>
                 </Avatar>
               </div>
 
               <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <div className="flex items-center gap-3">
-                    <h1 className="text-2xl font-bold text-foreground">{plumber.name}</h1>
+                    <h1 className="text-2xl font-bold text-foreground">{artisan.name}</h1>
                     <Badge
                       variant="outline"
                       className={
-                        plumber.availability === "available"
+                        artisan.availability === "available"
                           ? "border-green-200 bg-green-50 text-green-700"
                           : "border-muted bg-muted text-muted-foreground"
                       }
                     >
                       <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
-                      {plumber.availability === "available" ? "Available" : "Busy"}
+                      {artisan.availability === "available" ? "Available" : "Busy"}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-muted-foreground">{plumber.specialization}</p>
+                  <p className="mt-1 text-muted-foreground">{artisan.specialization}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1.5">
                       <Mail className="h-3.5 w-3.5" />
-                      {plumber.email}
+                      {artisan.email}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Phone className="h-3.5 w-3.5" />
-                      {plumber.phone}
+                      {artisan.phone}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <MapPin className="h-3.5 w-3.5" />
@@ -100,13 +99,13 @@ export default function PlumberPublicProfile() {
 
                 <div className="flex gap-2">
                   <Button variant="outline" asChild className="bg-transparent">
-                    <Link href={`/dashboard/user/messages?plumber=${plumber.id}`}>
+                    <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
                       <MessageSquare className="mr-2 h-4 w-4" />
                       Message
                     </Link>
                   </Button>
                   <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                    <Link href={`/dashboard/user/book/${plumber.id}`}>Book Now</Link>
+                    <Link href={`/dashboard/user/book/${artisan.id}`}>Book Now</Link>
                   </Button>
                 </div>
               </div>
@@ -117,21 +116,21 @@ export default function PlumberPublicProfile() {
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                  <span className="text-2xl font-bold text-foreground">{plumber.avgRating}</span>
+                  <span className="text-2xl font-bold text-foreground">{artisan.avgRating}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Avg. Rating</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Briefcase className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">{plumber.jobsCompleted}</span>
+                  <span className="text-2xl font-bold text-foreground">{artisan.jobsCompleted}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Jobs Completed</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Award className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">{plumber.reviews}</span>
+                  <span className="text-2xl font-bold text-foreground">{artisan.reviews}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Reviews</p>
               </div>
@@ -160,7 +159,7 @@ export default function PlumberPublicProfile() {
                 <ImageIcon className="mb-4 h-12 w-12 text-muted-foreground/50" />
                 <h3 className="text-lg font-semibold text-foreground">No portfolio items yet</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  This plumber hasn't added any portfolio items yet.
+                  This artisan hasn't added any portfolio items yet.
                 </p>
               </CardContent>
             </Card>
@@ -169,14 +168,14 @@ export default function PlumberPublicProfile() {
           <TabsContent value="about">
             <Card>
               <CardContent className="p-6">
-                <h3 className="mb-4 text-lg font-semibold text-foreground">About {plumber.name}</h3>
+                <h3 className="mb-4 text-lg font-semibold text-foreground">About {artisan.name}</h3>
                 <p className="leading-relaxed text-muted-foreground">
-                  Experienced plumber with over 10 years in residential and commercial plumbing. Specializing in {plumber.specialization?.toLowerCase()}, pipe installation, and bathroom renovations. Licensed and insured professional committed to quality workmanship and customer satisfaction.
+                  Experienced artisan with over 10 years in residential and commercial plumbing. Specializing in {artisan.specialization?.toLowerCase()}, pipe installation, and bathroom renovations. Licensed and insured professional committed to quality workmanship and customer satisfaction.
                 </p>
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-border p-4">
                     <p className="text-sm font-medium text-foreground">Specialization</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{plumber.specialization}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{artisan.specialization}</p>
                   </div>
                   <div className="rounded-lg border border-border p-4">
                     <p className="text-sm font-medium text-foreground">Experience</p>
@@ -188,7 +187,7 @@ export default function PlumberPublicProfile() {
                   </div>
                   <div className="rounded-lg border border-border p-4">
                     <p className="text-sm font-medium text-foreground">Certifications</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Master Plumber, EPA 608, OSHA 10</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Master Artisan, EPA 608, OSHA 10</p>
                   </div>
                 </div>
               </CardContent>
@@ -202,14 +201,14 @@ export default function PlumberPublicProfile() {
                   <h3 className="font-semibold text-foreground">Client Reviews</h3>
                   <div className="flex items-center gap-2">
                     <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                    <span className="font-bold text-foreground">{plumber.avgRating}</span>
-                    <span className="text-sm text-muted-foreground">({plumber.reviews} reviews)</span>
+                    <span className="font-bold text-foreground">{artisan.avgRating}</span>
+                    <span className="text-sm text-muted-foreground">({artisan.reviews} reviews)</span>
                   </div>
                 </div>
               </div>
               <CardContent className="divide-y divide-border p-0">
-                {reviews.map((review, idx) => (
-                  <div key={idx} className="p-5">
+                {reviews.map((review) => (
+                  <div key={`${review.name}-${review.date}`} className="p-5">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
@@ -223,7 +222,7 @@ export default function PlumberPublicProfile() {
                       <div className="flex items-center gap-0.5">
                         {Array.from({ length: 5 }).map((_, i) => (
                           <Star
-                            key={i}
+                            key={`${review.name}-star-${i + 1}`}
                             className={`h-4 w-4 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
                           />
                         ))}

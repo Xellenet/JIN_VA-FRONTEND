@@ -67,7 +67,7 @@ const notificationDetails: Record<string, { description: string; action?: string
     action: "View Message",
   },
   n6: {
-    description: "Your booking for Water Heater Maintenance has been confirmed and scheduled. The plumber has been notified and will arrive at the scheduled time.",
+    description: "Your booking for Water Heater Maintenance has been confirmed and scheduled. The artisan has been notified and will arrive at the scheduled time.",
     action: "View Booking",
   },
   n7: {

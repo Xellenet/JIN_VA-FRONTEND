@@ -57,7 +57,7 @@ export default function OrdersPage() {
       result = result.filter(
         (o) =>
           o.clientName.toLowerCase().includes(q) ||
-          o.plumberName.toLowerCase().includes(q) ||
+          o.artisanName.toLowerCase().includes(q) ||
           o.serviceName.toLowerCase().includes(q)
       )
     }
@@ -168,7 +168,7 @@ export default function OrdersPage() {
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by client, plumber, or service..."
+                  placeholder="Search by client, artisan, or service..."
                   className="pl-10"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -214,7 +214,7 @@ export default function OrdersPage() {
                     <th className="pb-3"><SortHeader label="Client" field="clientName" /></th>
                     <th className="pb-3"><SortHeader label="Service" field="serviceName" /></th>
                     <th className="pb-3"><SortHeader label="Order Date" field="orderDate" /></th>
-                    <th className="pb-3">Assigned Plumber</th>
+                    <th className="pb-3">Assigned Artisan</th>
                     <th className="pb-3"><SortHeader label="Status" field="status" /></th>
                     <th className="pb-3"><SortHeader label="Payment" field="paymentStatus" /></th>
                     <th className="pb-3 font-medium">Actions</th>
@@ -242,7 +242,7 @@ export default function OrdersPage() {
                         </td>
                         <td className="py-4 text-sm text-muted-foreground">{order.serviceName}</td>
                         <td className="py-4 text-sm text-muted-foreground">{order.orderDate}</td>
-                        <td className="py-4 text-sm text-muted-foreground">{order.plumberName}</td>
+                        <td className="py-4 text-sm text-muted-foreground">{order.artisanName}</td>
                         <td className="py-4">
                           <Badge variant="outline" className={statusBadge(order.status)}>
                             <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
@@ -269,7 +269,7 @@ export default function OrdersPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem>Assign Plumber</DropdownMenuItem>
+                                <DropdownMenuItem>Assign Artisan</DropdownMenuItem>
                                 <DropdownMenuItem>Update Status</DropdownMenuItem>
                                 <DropdownMenuItem className="text-destructive">
                                   <Trash2 className="mr-2 h-4 w-4" />

@@ -27,7 +27,7 @@ import {
   Calendar,
   FileText,
 } from "lucide-react"
-import { mockPlumbers, mockOrders } from "@/lib/data/mock-data"
+import { mockArtisans, mockOrders } from "@/lib/data/mock-data"
 
 const monthlyEarnings = [
   { month: "Jul", earnings: 1800 },
@@ -54,11 +54,11 @@ const ratingHistory = [
   { month: "Dec", rating: 4.9 },
 ]
 
-export default function PlumberReportPage() {
-  const plumber = mockPlumbers[0]
-  const user = { ...plumber, role: "plumber" as const }
+export default function ArtisanReportPage() {
+  const artisan = mockArtisans[0]
+  const user = { ...artisan, role: "artisan" as const }
 
-  const myJobs = mockOrders.filter((o) => o.plumberId === plumber.id)
+  const myJobs = mockOrders.filter((o) => o.artisanId === artisan.id)
   const completedJobs = myJobs.filter((j) => j.status === "completed").length
   const activeJobs = myJobs.filter((j) => j.status === "in-progress").length
   const totalEarnings = monthlyEarnings.reduce((sum, m) => sum + m.earnings, 0)
@@ -111,7 +111,7 @@ export default function PlumberReportPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Jobs Completed</p>
-                  <p className="text-2xl font-bold">{plumber.jobsCompleted}</p>
+                  <p className="text-2xl font-bold">{artisan.jobsCompleted}</p>
                   <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
                     <TrendingUp className="h-3.5 w-3.5" />
                     <span>+8 this month</span>
@@ -141,10 +141,10 @@ export default function PlumberReportPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Average Rating</p>
-                  <p className="text-2xl font-bold">{plumber.avgRating}</p>
+                  <p className="text-2xl font-bold">{artisan.avgRating}</p>
                   <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
                     <TrendingUp className="h-3.5 w-3.5" />
-                    <span>{plumber.reviews} reviews</span>
+                    <span>{artisan.reviews} reviews</span>
                   </div>
                 </div>
                 <div className="rounded-lg bg-yellow-50 p-3">

@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Calendar, Clock, Search, ChevronDown, MessageSquare } from "lucide-react"
-import { mockOrders, mockPlumbers } from "@/lib/data/mock-data"
+import { mockOrders, mockArtisans } from "@/lib/data/mock-data"
 import type { Order } from "@/lib/types"
 
 const statusOptions = [
@@ -66,7 +66,7 @@ export default function UserBookingsPage() {
       const matchesSearch =
         !searchQuery ||
         booking.serviceName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        booking.plumberName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        booking.artisanName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         booking.id.toLowerCase().includes(searchQuery.toLowerCase())
 
       const matchesStatus = statusFilter === "all" || booking.status === statusFilter
@@ -82,11 +82,11 @@ export default function UserBookingsPage() {
     }
   }
 
-  const getPlumberIdForBooking = (booking: Order) => {
-    const plumber = mockPlumbers.find(
-      (p) => p.name.includes(booking.plumberName.split(" ")[0]) || p.id === booking.plumberId,
+  const getArtisanIdForBooking = (booking: Order) => {
+    const artisan = mockArtisans.find(
+      (p) => p.name.includes(booking.artisanName.split(" ")[0]) || p.id === booking.artisanId,
     )
-    return plumber?.id || "p1"
+    return artisan?.id || "p1"
   }
 
   const statusConfig: Record<string, { label: string; className: string }> = {
@@ -195,7 +195,7 @@ export default function UserBookingsPage() {
                       <div className="flex items-start gap-4">
                         <Avatar className="h-14 w-14">
                           <AvatarImage src={booking.clientAvatar || "/placeholder.svg"} />
-                          <AvatarFallback>{booking.plumberName.substring(0, 2)}</AvatarFallback>
+                          <AvatarFallback>{booking.artisanName.substring(0, 2)}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <div>
@@ -207,9 +207,9 @@ export default function UserBookingsPage() {
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <Avatar className="h-6 w-6">
                                 <AvatarImage src="/placeholder.svg" />
-                                <AvatarFallback>{booking.plumberName.substring(0, 2)}</AvatarFallback>
+                                <AvatarFallback>{booking.artisanName.substring(0, 2)}</AvatarFallback>
                               </Avatar>
-                              <span>{booking.plumberName}</span>
+                              <span>{booking.artisanName}</span>
                             </div>
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <Calendar className="h-4 w-4" />
@@ -255,9 +255,9 @@ export default function UserBookingsPage() {
                         <Link href={`/dashboard/user/bookings/${booking.id}`}>View Details</Link>
                       </Button>
                       <Button variant="outline" size="sm" asChild className="bg-transparent">
-                        <Link href={`/dashboard/user/messages?plumber=${getPlumberIdForBooking(booking)}`}>
+                        <Link href={`/dashboard/user/messages?artisan=${getArtisanIdForBooking(booking)}`}>
                           <MessageSquare className="mr-2 h-4 w-4" />
-                          Contact Plumber
+                          Contact Artisan
                         </Link>
                       </Button>
                       {booking.status === "completed" && (

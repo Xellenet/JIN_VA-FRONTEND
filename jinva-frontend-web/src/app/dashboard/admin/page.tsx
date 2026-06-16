@@ -2,10 +2,10 @@ import { DashboardLayout } from "@/components/dashboard/layout"
 import { StatsCard } from "@/components/dashboard/admin/stats-card"
 import { RevenueChart } from "@/components/dashboard/admin/revenue-chart"
 import { RecentActivities } from "@/components/dashboard/admin/recent-activities"
-import { TopPlumbers } from "@/components/dashboard/admin/top-plumbers"
+import { TopArtisans } from "@/components/dashboard/admin/top-artisans"
 import { OngoingJobs } from "@/components/dashboard/admin/ongoing-jobs"
 import { Users, Clock, CheckCircle2, XCircle } from "lucide-react"
-import { mockUsers, mockActivities, mockPlumbers, mockOrders } from "@/lib/data/mock-data"
+import { mockUsers, mockActivities, mockArtisans, mockOrders } from "@/lib/data/mock-data"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export default function AdminDashboard() {
@@ -72,7 +72,7 @@ export default function AdminDashboard() {
 
         {/* Bottom Section */}
         <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
-          <TopPlumbers plumbers={mockPlumbers} />
+          <TopArtisans artisans={mockArtisans} />
           <OngoingJobs jobs={mockOrders} />
         </div>
       </div>

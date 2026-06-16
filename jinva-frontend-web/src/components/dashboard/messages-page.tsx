@@ -38,7 +38,7 @@ export function MessagesPage({ user, openConversationId }: MessagesPageProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const currentUserId = user.id === "1" ? "1" : user.role === "plumber" ? "p1" : "c1"
+  const currentUserId = user.id === "1" ? "1" : user.role === "artisan" ? "p1" : "c1"
 
   const filteredConversations = conversations.filter((c) =>
     c.participantName.toLowerCase().includes(searchQuery.toLowerCase()),

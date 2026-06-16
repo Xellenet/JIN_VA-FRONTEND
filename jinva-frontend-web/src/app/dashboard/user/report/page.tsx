@@ -176,7 +176,7 @@ export default function UserReportPage() {
                 <thead>
                   <tr className="border-b text-left text-sm text-muted-foreground">
                     <th className="pb-3 font-medium">Service</th>
-                    <th className="pb-3 font-medium">Plumber</th>
+                    <th className="pb-3 font-medium">Artisan</th>
                     <th className="pb-3 font-medium">Date</th>
                     <th className="pb-3 font-medium">Status</th>
                     <th className="pb-3 font-medium">Payment</th>
@@ -193,9 +193,9 @@ export default function UserReportPage() {
                         <div className="flex items-center gap-2">
                           <Avatar className="h-7 w-7">
                             <AvatarImage src="/placeholder.svg" />
-                            <AvatarFallback>{booking.plumberName.substring(0, 2)}</AvatarFallback>
+                            <AvatarFallback>{booking.artisanName.substring(0, 2)}</AvatarFallback>
                           </Avatar>
-                          <span className="text-sm">{booking.plumberName}</span>
+                          <span className="text-sm">{booking.artisanName}</span>
                         </div>
                       </td>
                       <td className="py-4">

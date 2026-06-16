@@ -147,16 +147,16 @@ export default function AdminSettingsPage() {
                       <div>
                         <p className="font-medium">Allow New Registrations</p>
                         <p className="text-sm text-muted-foreground">
-                          Enable or disable new user and plumber sign-ups
+                          Enable or disable new user and artisan sign-ups
                         </p>
                       </div>
                       <Switch defaultChecked />
                     </div>
                     <div className="flex items-center justify-between rounded-lg border p-4">
                       <div>
-                        <p className="font-medium">Auto-Assign Plumbers</p>
+                        <p className="font-medium">Auto-Assign Artisans</p>
                         <p className="text-sm text-muted-foreground">
-                          Automatically assign available plumbers to new orders
+                          Automatically assign available artisans to new orders
                         </p>
                       </div>
                       <Switch defaultChecked />
@@ -165,7 +165,7 @@ export default function AdminSettingsPage() {
                       <div>
                         <p className="font-medium">Enable Client Reviews</p>
                         <p className="text-sm text-muted-foreground">
-                          Allow clients to leave ratings and reviews for plumbers
+                          Allow clients to leave ratings and reviews for artisans
                         </p>
                       </div>
                       <Switch defaultChecked />
@@ -184,7 +184,7 @@ export default function AdminSettingsPage() {
                   <div>
                     <h3 className="font-semibold">User Management Defaults</h3>
                     <p className="text-sm text-muted-foreground">
-                      Set default policies for users and plumbers
+                      Set default policies for users and artisans
                     </p>
                   </div>
                 </div>
@@ -201,9 +201,9 @@ export default function AdminSettingsPage() {
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div>
-                    <p className="font-medium">Require Plumber License Verification</p>
+                    <p className="font-medium">Require Artisan License Verification</p>
                     <p className="text-sm text-muted-foreground">
-                      Plumber accounts need admin-approved license verification
+                      Artisan accounts need admin-approved license verification
                     </p>
                   </div>
                   <Switch defaultChecked />
@@ -249,7 +249,7 @@ export default function AdminSettingsPage() {
                     <Input id="maxBookings" type="number" defaultValue="5" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="maxJobs">Max Concurrent Jobs per Plumber</Label>
+                    <Label htmlFor="maxJobs">Max Concurrent Jobs per Artisan</Label>
                     <Input id="maxJobs" type="number" defaultValue="3" />
                   </div>
                 </div>
@@ -284,9 +284,9 @@ export default function AdminSettingsPage() {
                   { label: "New Order Alerts", desc: "Notify admins when a new order is placed", on: true },
                   { label: "Cancellation Alerts", desc: "Notify when an order is cancelled", on: true },
                   { label: "Payment Received", desc: "Notify when a payment is successfully processed", on: true },
-                  { label: "New User Registration", desc: "Notify when a new user or plumber registers", on: false },
+                  { label: "New User Registration", desc: "Notify when a new user or artisan registers", on: false },
                   { label: "Low Stock Warnings", desc: "Alert when product stock drops below threshold", on: true },
-                  { label: "Plumber Rating Alerts", desc: "Notify when a plumber receives a low rating", on: true },
+                  { label: "Artisan Rating Alerts", desc: "Notify when a artisan receives a low rating", on: true },
                   { label: "Daily Summary Email", desc: "Send a daily digest of platform activity", on: false },
                   { label: "Weekly Revenue Report", desc: "Send weekly revenue summaries via email", on: true },
                 ].map((item) => (
@@ -329,7 +329,7 @@ export default function AdminSettingsPage() {
                     <div>
                       <p className="font-medium">Two-Factor Authentication (System-wide)</p>
                       <p className="text-sm text-muted-foreground">
-                        Require 2FA for all admin and plumber accounts
+                        Require 2FA for all admin and artisan accounts
                       </p>
                     </div>
                     <Switch />
@@ -527,9 +527,9 @@ export default function AdminSettingsPage() {
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-red-100 p-4">
                   <div>
-                    <p className="font-medium">Deactivate All Inactive Plumbers</p>
+                    <p className="font-medium">Deactivate All Inactive Artisans</p>
                     <p className="text-sm text-muted-foreground">
-                      Mark all plumbers with no jobs in 60+ days as inactive
+                      Mark all artisans with no jobs in 60+ days as inactive
                     </p>
                   </div>
                   <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 bg-transparent">

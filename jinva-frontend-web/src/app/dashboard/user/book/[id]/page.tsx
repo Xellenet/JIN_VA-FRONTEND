@@ -28,9 +28,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { ArrowLeft, Star, Calendar, Clock, MapPin, CreditCard, CheckCircle } from "lucide-react"
-import { mockPlumbers, mockServices } from "@/lib/data/mock-data"
+import { mockArtisans, mockServices } from "@/lib/data/mock-data"
 
-export default function BookPlumberPage() {
+export default function BookArtisanPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
 
@@ -42,7 +42,7 @@ export default function BookPlumberPage() {
     avatar: "/placeholder.svg?height=40&width=40",
   }
 
-  const plumber = mockPlumbers.find((p) => p.id === id) || mockPlumbers[0]
+  const artisan = mockArtisans.find((p) => p.id === id) || mockArtisans[0]
   const activeServices = mockServices.filter((s) => s.status === "active")
 
   const [selectedService, setSelectedService] = useState("")
@@ -75,7 +75,7 @@ export default function BookPlumberPage() {
 
         <div>
           <h1 className="text-2xl font-bold text-foreground">Book a Service</h1>
-          <p className="text-muted-foreground">Fill in the details below to book {plumber.name}</p>
+          <p className="text-muted-foreground">Fill in the details below to book {artisan.name}</p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -174,7 +174,7 @@ export default function BookPlumberPage() {
                     <Label htmlFor="description">Describe the Problem</Label>
                     <Textarea
                       id="description"
-                      placeholder="Provide details about the issue so the plumber can prepare..."
+                      placeholder="Provide details about the issue so the artisan can prepare..."
                       rows={4}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
@@ -198,35 +198,35 @@ export default function BookPlumberPage() {
             </form>
           </div>
 
-          {/* Sidebar - Plumber card & Price summary */}
+          {/* Sidebar - Artisan card & Price summary */}
           <div className="space-y-6">
-            {/* Plumber Card */}
+            {/* Artisan Card */}
             <Card>
               <div className="border-b border-border p-5">
-                <h3 className="font-semibold text-foreground">Selected Plumber</h3>
+                <h3 className="font-semibold text-foreground">Selected Artisan</h3>
               </div>
               <CardContent className="p-5">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
-                    <AvatarImage src={plumber.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>{plumber.name.substring(0, 2)}</AvatarFallback>
+                    <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
+                    <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <h4 className="font-semibold text-foreground">{plumber.name}</h4>
-                    <p className="text-sm text-muted-foreground">{plumber.specialization}</p>
+                    <h4 className="font-semibold text-foreground">{artisan.name}</h4>
+                    <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
                     <div className="mt-1 flex items-center gap-1">
                       <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{plumber.avgRating}</span>
-                      <span className="text-xs text-muted-foreground">({plumber.reviews} reviews)</span>
+                      <span className="text-sm font-medium">{artisan.avgRating}</span>
+                      <span className="text-xs text-muted-foreground">({artisan.reviews} reviews)</span>
                     </div>
                   </div>
                 </div>
                 <Badge
                   variant="outline"
-                  className={`mt-4 w-full justify-center ${plumber.availability === "available" ? "border-green-200 bg-green-50 text-green-700" : "border-muted bg-muted text-muted-foreground"}`}
+                  className={`mt-4 w-full justify-center ${artisan.availability === "available" ? "border-green-200 bg-green-50 text-green-700" : "border-muted bg-muted text-muted-foreground"}`}
                 >
                   <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                  {plumber.availability === "available" ? "Available" : "Busy"}
+                  {artisan.availability === "available" ? "Available" : "Busy"}
                 </Badge>
               </CardContent>
             </Card>
@@ -278,7 +278,7 @@ export default function BookPlumberPage() {
               </div>
               <DialogTitle>Booking Confirmed!</DialogTitle>
               <DialogDescription>
-                Your booking with {plumber.name} has been submitted successfully. You will receive a confirmation shortly.
+                Your booking with {artisan.name} has been submitted successfully. You will receive a confirmation shortly.
               </DialogDescription>
             </DialogHeader>
             <div className="rounded-lg border border-border bg-muted/50 p-4">
@@ -298,8 +298,8 @@ export default function BookPlumberPage() {
                   <span className="font-medium text-foreground">{time}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Plumber</span>
-                  <span className="font-medium text-foreground">{plumber.name}</span>
+                  <span className="text-muted-foreground">Artisan</span>
+                  <span className="font-medium text-foreground">{artisan.name}</span>
                 </div>
               </div>
             </div>

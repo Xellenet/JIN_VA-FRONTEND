@@ -17,7 +17,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
 import { Search, ChevronDown, Star, Phone, Mail, MapPin, Briefcase } from "lucide-react"
-import { mockPlumbers } from "@/lib/data/mock-data"
+import { mockArtisans } from "@/lib/data/mock-data"
 
 const specializations = [
   "All Specializations",
@@ -46,7 +46,7 @@ const availabilityOptions = [
   { label: "Busy", value: "busy" },
 ]
 
-export default function SearchPlumbersPage() {
+export default function SearchArtisansPage() {
   const user = {
     id: "u1",
     name: "Sarah Williams",
@@ -60,21 +60,21 @@ export default function SearchPlumbersPage() {
   const [selectedRating, setSelectedRating] = useState(0)
   const [selectedAvailability, setSelectedAvailability] = useState("all")
 
-  const filteredPlumbers = useMemo(() => {
-    return mockPlumbers.filter((plumber) => {
+  const filteredArtisans = useMemo(() => {
+    return mockArtisans.filter((artisan) => {
       const matchesSearch =
         !searchQuery ||
-        plumber.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        plumber.specialization?.toLowerCase().includes(searchQuery.toLowerCase())
+        artisan.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        artisan.specialization?.toLowerCase().includes(searchQuery.toLowerCase())
 
       const matchesSpec =
         selectedSpecialization === "All Specializations" ||
-        plumber.specialization === selectedSpecialization
+        artisan.specialization === selectedSpecialization
 
-      const matchesRating = plumber.avgRating >= selectedRating
+      const matchesRating = artisan.avgRating >= selectedRating
 
       const matchesAvailability =
-        selectedAvailability === "all" || plumber.availability === selectedAvailability
+        selectedAvailability === "all" || artisan.availability === selectedAvailability
 
       return matchesSearch && matchesSpec && matchesRating && matchesAvailability
     })
@@ -97,8 +97,8 @@ export default function SearchPlumbersPage() {
     <DashboardLayout user={user}>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Find Plumbers</h1>
-          <p className="text-muted-foreground">Search and book trusted plumbers in your area</p>
+          <h1 className="text-2xl font-bold text-foreground">Find Artisans</h1>
+          <p className="text-muted-foreground">Search and book trusted artisans in your area</p>
         </div>
 
         {/* Search and Filters */}
@@ -218,15 +218,15 @@ export default function SearchPlumbersPage() {
 
         {/* Results count */}
         <p className="text-sm text-muted-foreground">
-          Showing {filteredPlumbers.length} plumber{filteredPlumbers.length !== 1 ? "s" : ""}
+          Showing {filteredArtisans.length} artisan{filteredArtisans.length !== 1 ? "s" : ""}
         </p>
 
-        {/* Plumbers Grid */}
-        {filteredPlumbers.length === 0 ? (
+        {/* Artisans Grid */}
+        {filteredArtisans.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
               <Search className="mb-4 h-12 w-12 text-muted-foreground/40" />
-              <h3 className="text-lg font-semibold text-foreground">No plumbers found</h3>
+              <h3 className="text-lg font-semibold text-foreground">No artisans found</h3>
               <p className="mt-1 text-sm text-muted-foreground">Try adjusting your filters or search query.</p>
               <Button variant="outline" className="mt-4 bg-transparent" onClick={clearFilters}>
                 Clear Filters
@@ -235,61 +235,61 @@ export default function SearchPlumbersPage() {
           </Card>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredPlumbers.map((plumber) => (
-              <Card key={plumber.id} className="overflow-hidden transition-shadow hover:shadow-md">
+            {filteredArtisans.map((artisan) => (
+              <Card key={artisan.id} className="overflow-hidden transition-shadow hover:shadow-md">
                 <CardContent className="p-0">
                   <div className="relative h-32 bg-gradient-to-br from-primary to-primary/80">
                     <Avatar className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 border-4 border-background shadow-lg">
-                      <AvatarImage src={plumber.avatar || "/placeholder.svg"} />
-                      <AvatarFallback>{plumber.name.substring(0, 2)}</AvatarFallback>
+                      <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
+                      <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
                     </Avatar>
                     <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-sm font-semibold shadow-sm">
                       <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      {plumber.avgRating}
+                      {artisan.avgRating}
                     </div>
                   </div>
 
                   <div className="mt-14 space-y-4 p-4">
                     <div className="text-center">
-                      <h3 className="font-semibold text-foreground">{plumber.name}</h3>
-                      <p className="text-sm text-muted-foreground">{plumber.specialization}</p>
+                      <h3 className="font-semibold text-foreground">{artisan.name}</h3>
+                      <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
                       <Badge
                         variant="outline"
                         className={
-                          plumber.availability === "available"
+                          artisan.availability === "available"
                             ? "mt-2 border-green-200 bg-green-50 text-green-700"
                             : "mt-2 border-muted bg-muted text-muted-foreground"
                         }
                       >
                         <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                        {plumber.availability === "available" ? "Available" : "Busy"}
+                        {artisan.availability === "available" ? "Available" : "Busy"}
                       </Badge>
                     </div>
 
                     <div className="space-y-2 border-t pt-4">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Phone className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">{plumber.phone}</span>
+                        <span className="truncate">{artisan.phone}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Mail className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">{plumber.email}</span>
+                        <span className="truncate">{artisan.email}</span>
                       </div>
                       <div className="flex items-center justify-between pt-2 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           <Briefcase className="h-3.5 w-3.5" />
-                          {plumber.jobsCompleted} jobs
+                          {artisan.jobsCompleted} jobs
                         </span>
-                        <span>{plumber.reviews} reviews</span>
+                        <span>{artisan.reviews} reviews</span>
                       </div>
                     </div>
 
                     <div className="flex gap-2">
                       <Button variant="outline" className="flex-1 bg-transparent" asChild>
-                        <Link href={`/dashboard/user/plumber/${plumber.id}`}>View Profile</Link>
+                        <Link href={`/dashboard/user/artisan/${artisan.id}`}>View Profile</Link>
                       </Button>
                       <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                        <Link href={`/dashboard/user/book/${plumber.id}`}>Book Now</Link>
+                        <Link href={`/dashboard/user/book/${artisan.id}`}>Book Now</Link>
                       </Button>
                     </div>
                   </div>

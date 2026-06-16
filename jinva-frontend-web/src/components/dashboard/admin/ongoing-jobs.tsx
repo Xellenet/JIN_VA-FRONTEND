@@ -35,7 +35,7 @@ export function OngoingJobs({ jobs }: OngoingJobsProps) {
               <tr className="border-b text-left text-sm text-muted-foreground">
                 <th className="pb-3 font-medium">Client</th>
                 <th className="pb-3 font-medium">Service</th>
-                <th className="pb-3 font-medium">Plumber</th>
+                <th className="pb-3 font-medium">Artisan</th>
                 <th className="pb-3 font-medium">Status</th>
                 <th className="pb-3 font-medium">Deadline</th>
               </tr>
@@ -53,7 +53,7 @@ export function OngoingJobs({ jobs }: OngoingJobsProps) {
                     </div>
                   </td>
                   <td className="py-4 text-sm">{job.serviceName}</td>
-                  <td className="py-4 text-sm">{job.plumberName}</td>
+                  <td className="py-4 text-sm">{job.artisanName}</td>
                   <td className="py-4">
                     <Badge variant="outline" className={statusConfig[job.status].className}>
                       <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current"></span>

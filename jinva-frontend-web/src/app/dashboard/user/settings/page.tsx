@@ -61,7 +61,7 @@ export default function UserSettingsPage() {
               <div className="border-b p-6">
                 <h3 className="font-semibold">Profile Photo</h3>
                 <p className="text-sm text-muted-foreground">
-                  Update your profile picture visible to plumbers
+                  Update your profile picture visible to artisans
                 </p>
               </div>
               <CardContent className="p-6">
@@ -149,7 +149,7 @@ export default function UserSettingsPage() {
                   <div>
                     <p className="font-medium">Auto-Confirm Bookings</p>
                     <p className="text-sm text-muted-foreground">
-                      Automatically confirm bookings when a plumber accepts
+                      Automatically confirm bookings when a artisan accepts
                     </p>
                   </div>
                   <Switch defaultChecked />
@@ -165,9 +165,9 @@ export default function UserSettingsPage() {
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div>
-                    <p className="font-medium">Share Location with Plumber</p>
+                    <p className="font-medium">Share Location with Artisan</p>
                     <p className="text-sm text-muted-foreground">
-                      Allow assigned plumber to see your location for navigation
+                      Allow assigned artisan to see your location for navigation
                     </p>
                   </div>
                   <Switch defaultChecked />
@@ -200,13 +200,13 @@ export default function UserSettingsPage() {
               </div>
               <CardContent className="p-6 space-y-4">
                 {[
-                  { label: "Booking Confirmations", desc: "Get notified when a plumber confirms your booking", on: true },
+                  { label: "Booking Confirmations", desc: "Get notified when a artisan confirms your booking", on: true },
                   { label: "Job Status Updates", desc: "Receive updates when your job status changes", on: true },
-                  { label: "Plumber En Route", desc: "Get alerted when a plumber is on their way", on: true },
+                  { label: "Artisan En Route", desc: "Get alerted when a artisan is on their way", on: true },
                   { label: "Payment Receipts", desc: "Receive email receipts for completed payments", on: true },
                   { label: "Promotional Offers", desc: "Get notified about discounts and special offers", on: false },
                   { label: "Service Reminders", desc: "Reminders for upcoming scheduled services", on: true },
-                  { label: "Review Requests", desc: "Get prompted to review plumbers after service completion", on: false },
+                  { label: "Review Requests", desc: "Get prompted to review artisans after service completion", on: false },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
                     <div>

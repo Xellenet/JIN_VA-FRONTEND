@@ -38,13 +38,13 @@ export default function UserDashboard() {
             </Avatar>
             <div>
               <h1 className="text-2xl font-bold text-foreground">Welcome back, {user.name}!</h1>
-              <p className="text-muted-foreground">Find trusted plumbers and manage your bookings</p>
+              <p className="text-muted-foreground">Find trusted artisans and manage your bookings</p>
             </div>
           </div>
           <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
             <Link href="/dashboard/user/search">
               <Search className="mr-2 h-4 w-4" />
-              Find Plumbers
+              Find Artisans
             </Link>
           </Button>
         </div>
@@ -117,11 +117,11 @@ export default function UserDashboard() {
                   <div className="flex items-start gap-4">
                     <Avatar className="h-12 w-12">
                       <AvatarImage src={booking.clientAvatar || "/placeholder.svg"} />
-                      <AvatarFallback>{booking.plumberName.substring(0, 2)}</AvatarFallback>
+                      <AvatarFallback>{booking.artisanName.substring(0, 2)}</AvatarFallback>
                     </Avatar>
                     <div>
                       <h3 className="font-semibold text-foreground">{booking.serviceName}</h3>
-                      <p className="text-sm text-muted-foreground">Plumber: {booking.plumberName}</p>
+                      <p className="text-sm text-muted-foreground">Artisan: {booking.artisanName}</p>
                       <div className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />

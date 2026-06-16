@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Search, ChevronDown, Wrench } from "lucide-react"
-import { mockServices, mockPlumbers } from "@/lib/data/mock-data"
+import { mockServices, mockArtisans } from "@/lib/data/mock-data"
 
 export default function UserServicesPage() {
   const user = {
@@ -16,7 +16,7 @@ export default function UserServicesPage() {
     avatar: "/placeholder.svg?height=40&width=40",
   }
 
-  const defaultPlumber = mockPlumbers[0]
+  const defaultArtisan = mockArtisans[0]
 
   return (
     <DashboardLayout user={user}>
@@ -70,10 +70,10 @@ export default function UserServicesPage() {
 
                         <div className="flex gap-2 pt-2">
                           <Button variant="outline" className="flex-1 bg-transparent" asChild>
-                            <Link href="/dashboard/user/search">Find Plumber</Link>
+                            <Link href="/dashboard/user/search">Find Artisan</Link>
                           </Button>
                           <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                            <Link href={`/dashboard/user/book/${defaultPlumber.id}`}>Book Now</Link>
+                            <Link href={`/dashboard/user/book/${defaultArtisan.id}`}>Book Now</Link>
                           </Button>
                         </div>
                       </div>

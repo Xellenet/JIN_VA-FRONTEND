@@ -35,7 +35,7 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
     email: data.email,
     phone: data.phoneNumber,
     role: mapBackendRole(data.role),
-    avatar: data.profilePicture ?? undefined,
+    avatar: data.profilePicture ?? `https://api.navii.dev/avatar/${encodeURIComponent(data.email)}?size=128&packs=command-center&style=neutral&mood=serious&tileBg=auto`,
     rating: artisanProfile?.averageRating,
     reviews: artisanProfile?.totalReviews,
   }
@@ -95,8 +95,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore errors during logout
     }
-    localStorage.removeItem("access_token")
-    localStorage.removeItem("refresh_token")
     clearAuthTokens()
     setUser(null)
     router.push("/login")

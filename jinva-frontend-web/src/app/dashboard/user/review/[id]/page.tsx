@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ArrowLeft, Star, CheckCircle2, Loader2 } from "lucide-react"
+import { ArrowLeft, Star, CheckCircle2, Loader2, UserRound } from "lucide-react"
 import { apiFetch } from "@/lib/api"
+import { naviiAvatar } from "@/lib/utils"
 import { toast } from "sonner"
 
 interface BackendJob {
@@ -226,8 +227,8 @@ export default function ReviewPage() {
                 <CardContent className="p-5">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-14 w-14">
-                      <AvatarImage src={job.acceptedArtisan.profilePicture || "/placeholder.svg"} />
-                      <AvatarFallback>{artisanName.substring(0, 2)}</AvatarFallback>
+                      <AvatarImage src={job.acceptedArtisan.profilePicture || naviiAvatar(artisanName)} />
+                      <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                     <div>
                       <h4 className="font-semibold text-foreground">{artisanName}</h4>

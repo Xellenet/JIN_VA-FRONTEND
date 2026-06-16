@@ -87,9 +87,9 @@ const notificationDetails: Record<string, { description: string; action?: string
 export function NotificationsPage() {
   const { user } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications)
-  if (!user) return null
   const [filter, setFilter] = useState<"all" | "unread">("all")
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
+  if (!user) return null
 
   const unreadCount = notifications.filter((n) => !n.isRead).length
   const displayed = filter === "unread" ? notifications.filter((n) => !n.isRead) : notifications

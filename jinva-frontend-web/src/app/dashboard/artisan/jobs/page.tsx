@@ -18,10 +18,12 @@ import {
   XCircle,
   Timer,
   Loader2,
+  UserRound,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
+import { naviiAvatar } from "@/lib/utils"
 
 interface BackendJob {
   id: string
@@ -214,8 +216,8 @@ export default function ArtisanJobsPage() {
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex items-start gap-4">
                           <Avatar className="h-14 w-14">
-                            <AvatarImage src={job.customer?.profilePicture || "/placeholder.svg"} alt={clientName} />
-                            <AvatarFallback>{clientName.substring(0, 2)}</AvatarFallback>
+                            <AvatarImage src={job.customer?.profilePicture || naviiAvatar(clientName)} alt={clientName} />
+                            <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
                             <h3 className="font-semibold text-foreground">{job.title}</h3>
@@ -223,7 +225,8 @@ export default function ArtisanJobsPage() {
                             <div className="mt-3 flex flex-wrap gap-4 text-sm">
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <Avatar className="h-6 w-6">
-                                  <AvatarFallback>{clientName.substring(0, 2)}</AvatarFallback>
+                                  <AvatarImage src={naviiAvatar(clientName, 32)} />
+                                  <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
                                 </Avatar>
                                 <span>Client: {clientName}</span>
                               </div>

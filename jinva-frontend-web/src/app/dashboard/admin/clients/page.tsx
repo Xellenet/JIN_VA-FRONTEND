@@ -27,8 +27,10 @@ import {
   UserX,
   Mail,
   Phone,
+  UserRound,
 } from "lucide-react"
 import { mockClients } from "@/lib/data/mock-data"
+import { naviiAvatar } from "@/lib/utils"
 
 type SortField = "name" | "email" | "totalOrders" | "totalSpent" | "joinedDate" | "status"
 type SortDir = "asc" | "desc"
@@ -200,8 +202,8 @@ export default function ClientsPage() {
                         <td className="py-4">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-9 w-9">
-                              <AvatarImage src={client.avatar || "/placeholder.svg"} />
-                              <AvatarFallback>{client.name.substring(0, 2)}</AvatarFallback>
+                              <AvatarImage src={client.avatar || naviiAvatar(client.name)} />
+                              <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>
                               <p className="font-medium">{client.name}</p>

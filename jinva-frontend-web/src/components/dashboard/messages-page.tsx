@@ -5,7 +5,6 @@ import { DashboardLayout } from "@/components/dashboard/layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import {
   Search,
   Send,
@@ -15,10 +14,11 @@ import {
   ChevronRight,
   Check,
   CheckCheck,
+  UserRound,
 } from "lucide-react"
 import { mockConversations, mockMessages } from "@/lib/data/mock-data"
 import type { ChatConversation, ChatMessage } from "@/lib/types"
-import { cn } from "@/lib/utils"
+import { cn, naviiAvatar } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 
 interface MessagesPageProps {
@@ -27,7 +27,6 @@ interface MessagesPageProps {
 
 export function MessagesPage({ openConversationId }: MessagesPageProps) {
   const { user } = useAuth()
-  if (!user) return null
   const [conversations] = useState<ChatConversation[]>(mockConversations)
   const [selectedConv, setSelectedConv] = useState<ChatConversation | null>(() => {
     if (openConversationId) {
@@ -40,12 +39,6 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const currentUserId = user.id === "1" ? "1" : user.role === "artisan" ? "p1" : "c1"
-
-  const filteredConversations = conversations.filter((c) =>
-    c.participantName.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
-
   const currentMessages = selectedConv
     ? messages.filter((m) => m.conversationId === selectedConv.id)
     : []
@@ -53,6 +46,14 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [currentMessages.length])
+
+  if (!user) return null
+
+  const currentUserId = user.id === "1" ? "1" : user.role === "artisan" ? "p1" : "c1"
+
+  const filteredConversations = conversations.filter((c) =>
+    c.participantName.toLowerCase().includes(searchQuery.toLowerCase()),
+  )
 
   const handleSend = () => {
     if (!newMessage.trim() || !selectedConv) return
@@ -127,8 +128,8 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                   >
                     <div className="relative flex-shrink-0">
                       <Avatar className="h-12 w-12">
-                        <AvatarImage src={conv.participantAvatar || "/placeholder.svg"} alt={conv.participantName} />
-                        <AvatarFallback>{conv.participantName.substring(0, 2)}</AvatarFallback>
+                        <AvatarImage src={conv.participantAvatar || naviiAvatar(conv.participantName)} alt={conv.participantName} />
+                        <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       {conv.isOnline && (
                         <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background bg-green-500" />
@@ -181,8 +182,8 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                   </Button>
                   <div className="relative">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={selectedConv.participantAvatar || "/placeholder.svg"} alt={selectedConv.participantName} />
-                      <AvatarFallback>{selectedConv.participantName.substring(0, 2)}</AvatarFallback>
+                      <AvatarImage src={selectedConv.participantAvatar || naviiAvatar(selectedConv.participantName)} alt={selectedConv.participantName} />
+                      <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                     {selectedConv.isOnline && (
                       <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
@@ -223,8 +224,8 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                             <div className="w-7 flex-shrink-0">
                               {showAvatar && (
                                 <Avatar className="h-7 w-7">
-                                  <AvatarImage src={msg.senderAvatar || "/placeholder.svg"} alt={msg.senderName} />
-                                  <AvatarFallback className="text-[10px]">{msg.senderName.substring(0, 2)}</AvatarFallback>
+                                  <AvatarImage src={msg.senderAvatar || naviiAvatar(msg.senderName)} alt={msg.senderName} />
+                                  <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
                                 </Avatar>
                               )}
                             </div>

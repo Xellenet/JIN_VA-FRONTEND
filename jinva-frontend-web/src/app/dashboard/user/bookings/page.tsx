@@ -26,7 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Calendar, Clock, Search, ChevronDown, MessageSquare, Loader2 } from "lucide-react"
+import { Calendar, Clock, Search, ChevronDown, MessageSquare, Loader2, UserRound } from "lucide-react"
+import { naviiAvatar } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
 
@@ -71,7 +72,7 @@ export default function UserBookingsPage() {
     apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs/mine")
       .then((data) => {
         const items = Array.isArray(data) ? data : (data.items ?? [])
-        setJobs(items)
+        setJobs(items.map((j) => ({ ...j, id: String(j.id) })))
       })
       .catch(() => setJobs([]))
       .finally(() => setIsLoading(false))
@@ -114,8 +115,8 @@ export default function UserBookingsPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My Bookings</h1>
-          <p className="text-muted-foreground">View and manage all your service bookings</p>
+          <h1 className="text-2xl font-bold text-foreground">My Jobs</h1>
+          <p className="text-muted-foreground">View and manage all your service jobs</p>
         </div>
 
         <Card>
@@ -124,7 +125,7 @@ export default function UserBookingsPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search bookings..."
+                  placeholder="Search jobs..."
                   className="pl-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -155,7 +156,7 @@ export default function UserBookingsPage() {
             </div>
 
             <p className="mb-4 text-sm text-muted-foreground">
-              Showing {filteredJobs.length} booking{filteredJobs.length !== 1 ? "s" : ""}
+              Showing {filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""}
             </p>
 
             {isLoading ? (
@@ -167,7 +168,7 @@ export default function UserBookingsPage() {
                 {filteredJobs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <Search className="mb-4 h-12 w-12 text-muted-foreground/40" />
-                    <h3 className="text-lg font-semibold text-foreground">No bookings found</h3>
+                    <h3 className="text-lg font-semibold text-foreground">No jobs found</h3>
                     <p className="mt-1 text-sm text-muted-foreground">Try adjusting your search or filters.</p>
                     <Button
                       variant="outline"
@@ -188,8 +189,8 @@ export default function UserBookingsPage() {
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                           <div className="flex items-start gap-4">
                             <Avatar className="h-14 w-14">
-                              <AvatarImage src={job.acceptedArtisan?.profilePicture || "/placeholder.svg"} />
-                              <AvatarFallback>{artisanName.substring(0, 2)}</AvatarFallback>
+                              <AvatarImage src={job.acceptedArtisan?.profilePicture || naviiAvatar(artisanName)} />
+                              <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
                               <h3 className="font-semibold text-foreground">{job.title}</h3>
@@ -256,9 +257,9 @@ export default function UserBookingsPage() {
       <AlertDialog open={!!cancelJobId} onOpenChange={(open) => !open && setCancelJobId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
+            <AlertDialogTitle>Cancel Job</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel this booking? This action cannot be undone and any associated payment will be refunded.
+              Are you sure you want to cancel this job? This action cannot be undone and any associated payment will be refunded.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

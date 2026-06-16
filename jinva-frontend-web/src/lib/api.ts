@@ -18,7 +18,7 @@ async function doTokenRefresh(): Promise<boolean> {
     const res = await fetch(`${API_BASE}/auth/refresh-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({ refreshToken }),
     })
     if (!res.ok) return false
     const data = await res.json()

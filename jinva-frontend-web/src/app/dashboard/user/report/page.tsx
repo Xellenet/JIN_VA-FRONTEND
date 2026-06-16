@@ -23,8 +23,10 @@ import {
   Calendar,
   FileText,
   Star,
+  UserRound,
 } from "lucide-react"
 import { mockOrders } from "@/lib/data/mock-data"
+import { naviiAvatar } from "@/lib/utils"
 
 const monthlySpending = [
   { month: "Jul", amount: 120 },
@@ -184,8 +186,8 @@ export default function UserReportPage() {
                       <td className="py-4">
                         <div className="flex items-center gap-2">
                           <Avatar className="h-7 w-7">
-                            <AvatarImage src="/placeholder.svg" />
-                            <AvatarFallback>{booking.artisanName.substring(0, 2)}</AvatarFallback>
+                            <AvatarImage src={naviiAvatar(booking.artisanName)} />
+                            <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <span className="text-sm">{booking.artisanName}</span>
                         </div>

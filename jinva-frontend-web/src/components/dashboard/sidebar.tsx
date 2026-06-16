@@ -47,7 +47,7 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
   const userLinks = [
     { href: "/dashboard/user", label: "Overview", icon: LayoutGrid },
     { href: "/dashboard/user/search", label: "Find Artisans", icon: Search },
-    { href: "/dashboard/user/bookings", label: "My Bookings", icon: ClipboardList },
+    { href: "/dashboard/user/bookings", label: "My Jobs", icon: ClipboardList },
     { href: "/dashboard/user/services", label: "Services", icon: Wrench },
   ]
 

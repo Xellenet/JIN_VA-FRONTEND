@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Bell, Mail, ChevronDown, UserCircle, Settings, LogOut, Menu } from "lucide-react"
+import { Bell, Mail, ChevronDown, UserCircle, Settings, LogOut, Menu, UserRound } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
@@ -55,8 +55,8 @@ export function DashboardHeader({ onMenuToggle }: Readonly<DashboardHeaderProps>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2 pl-2 pr-3">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
-                <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
               </Avatar>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </Button>

@@ -1,15 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Calendar, Clock, CheckCircle, Search, Loader2 } from "lucide-react"
+import { Calendar, Clock, CheckCircle, Search, Loader2, UserRound, XCircle, TrendingUp } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/contexts/auth-context"
+import { naviiAvatar, cn } from "@/lib/utils"
 
 interface BackendJob {
   id: string
@@ -21,24 +22,27 @@ interface BackendJob {
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
-  IN_PROGRESS: { label: "In Progress", className: "bg-muted text-muted-foreground border-muted" },
-  COMPLETED: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
-  CANCELLED: { label: "Cancelled", className: "bg-red-100 text-red-700 border-red-200" },
-  PENDING: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  OPEN: { label: "Open", className: "bg-blue-100 text-blue-700 border-blue-200" },
-  EXPIRED: { label: "Expired", className: "bg-gray-100 text-gray-600 border-gray-200" },
+  IN_PROGRESS: { label: "In Progress", className: "bg-primary/10 text-primary border-primary/20" },
+  COMPLETED:   { label: "Completed",   className: "bg-primary/20 text-primary border-primary/30" },
+  CANCELLED:   { label: "Cancelled",   className: "bg-destructive/10 text-destructive border-destructive/20" },
+  PENDING:     { label: "Pending",     className: "bg-muted text-muted-foreground border-border" },
+  OPEN:        { label: "Open",        className: "bg-primary/5 text-primary border-primary/15" },
+  EXPIRED:     { label: "Expired",     className: "bg-muted text-muted-foreground border-border" },
 }
+
+type FilterKey = "Open" | "In Progress" | "Completed" | "Cancelled"
 
 export default function UserDashboard() {
   const { user } = useAuth()
   const [jobs, setJobs] = useState<BackendJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [activeFilter, setActiveFilter] = useState<FilterKey | null>(null)
 
   useEffect(() => {
     apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs/mine")
       .then((data) => {
         const items = Array.isArray(data) ? data : (data.items ?? [])
-        setJobs(items.slice(0, 4))
+        setJobs(items.map((j: BackendJob) => ({ ...j, id: String(j.id) })))
       })
       .catch(() => setJobs([]))
       .finally(() => setIsLoading(false))
@@ -46,26 +50,46 @@ export default function UserDashboard() {
 
   if (!user) return null
 
-  const pending = jobs.filter((j) => j.status === "OPEN").length
-  const active = jobs.filter((j) => j.status === "IN_PROGRESS" || j.status === "PENDING").length
+  const open      = jobs.filter((j) => j.status === "OPEN").length
+  const inProgress = jobs.filter((j) => j.status === "IN_PROGRESS" || j.status === "PENDING").length
   const completed = jobs.filter((j) => j.status === "COMPLETED").length
+  const cancelled = jobs.filter((j) => j.status === "CANCELLED").length
+
+  const stats: { label: FilterKey; value: number; icon: React.ElementType; iconBg: string; iconColor: string }[] = [
+    { label: "Open",        value: open,       icon: Clock,        iconBg: "bg-primary/10",     iconColor: "text-primary"     },
+    { label: "In Progress", value: inProgress, icon: TrendingUp,   iconBg: "bg-muted",          iconColor: "text-foreground"  },
+    { label: "Completed",   value: completed,  icon: CheckCircle,  iconBg: "bg-primary/20",     iconColor: "text-primary"     },
+    { label: "Cancelled",   value: cancelled,  icon: XCircle,      iconBg: "bg-destructive/10", iconColor: "text-destructive" },
+  ]
+
+  const displayedJobs = useMemo(() => {
+    if (activeFilter === "Open")        return jobs.filter((j) => j.status === "OPEN")
+    if (activeFilter === "In Progress") return jobs.filter((j) => j.status === "IN_PROGRESS" || j.status === "PENDING")
+    if (activeFilter === "Completed")   return jobs.filter((j) => j.status === "COMPLETED")
+    if (activeFilter === "Cancelled")   return jobs.filter((j) => j.status === "CANCELLED")
+    return jobs.slice(0, 4)
+  }, [jobs, activeFilter])
+
+  const handleStatClick = (label: FilterKey) => {
+    setActiveFilter((prev) => (prev === label ? null : label))
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Welcome Header */}
-        <div className="flex items-center justify-between rounded-lg bg-card p-6">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={user.avatar || "/placeholder.svg"} />
-              <AvatarFallback>{user.name.substring(0, 2)}</AvatarFallback>
+        <div className="flex items-center justify-between rounded-xl border bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-14 w-14 ring-2 ring-primary/20 ring-offset-2">
+              <AvatarImage src={user.avatar} />
+              <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Welcome back, {user.name}!</h1>
-              <p className="text-muted-foreground">Find trusted artisans and manage your bookings</p>
+              <h1 className="text-xl font-bold text-foreground">Welcome back, {user.name}!</h1>
+              <p className="text-sm text-muted-foreground">Find trusted artisans and manage your job postings</p>
             </div>
           </div>
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+          <Button className="bg-primary text-primary-foreground hover:bg-primary/90 transition-colors" asChild>
             <Link href="/dashboard/user/search">
               <Search className="mr-2 h-4 w-4" />
               Find Artisans
@@ -73,79 +97,94 @@ export default function UserDashboard() {
           </Button>
         </div>
 
-        {/* Quick Stats */}
-        <div className="grid gap-6 md:grid-cols-3">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="rounded-full bg-muted p-3">
-                  <Clock className="h-5 w-5 text-foreground" />
+        {/* Quick Stats — clickable to filter */}
+        <div className="grid gap-3 md:grid-cols-4">
+          {stats.map(({ label, value, icon: Icon, iconBg, iconColor }) => {
+            const isActive = activeFilter === label
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => handleStatClick(label)}
+                className={cn(
+                  "group rounded-xl border bg-card p-3.5 text-left shadow-sm",
+                  "transition-all duration-200 ease-in-out",
+                  "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                  isActive
+                    ? "border-primary ring-1 ring-primary/50 shadow-md"
+                    : "border-border hover:border-primary/40",
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn("rounded-full p-2 transition-all duration-200", iconBg, isActive && "scale-110")}>
+                    <Icon className={cn("h-4 w-4", iconColor)} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                    <p className="text-xl font-bold leading-tight text-foreground">{value}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Open Bookings</p>
-                  <p className="text-2xl font-bold text-foreground">{pending}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="rounded-full bg-blue-100 p-3">
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Active Jobs</p>
-                  <p className="text-2xl font-bold text-foreground">{active}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="rounded-full bg-green-100 p-3">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold text-foreground">{completed}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </button>
+            )
+          })}
         </div>
 
-        {/* My Bookings */}
-        <Card>
-          <div className="border-b p-6">
+        {/* My Job Postings */}
+        <Card className="shadow-sm">
+          <div className="border-b p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-foreground">My Bookings</h2>
-                <p className="text-sm text-muted-foreground">Track your service requests and appointments</p>
+                <h2 className="text-lg font-semibold text-foreground">
+                  My Job Postings
+                  {activeFilter && (
+                    <span className="ml-2 text-sm font-normal text-primary">({activeFilter})</span>
+                  )}
+                </h2>
+                <p className="text-sm text-muted-foreground">Your recent service requests</p>
               </div>
-              <Button variant="outline" asChild>
-                <Link href="/dashboard/user/bookings">View All</Link>
-              </Button>
+              <div className="flex items-center gap-2">
+                {activeFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setActiveFilter(null)}
+                    className="h-8 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Clear
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/dashboard/user/bookings">View All</Link>
+                </Button>
+              </div>
             </div>
           </div>
-          <CardContent className="p-6">
+
+          <CardContent className="p-5">
             {isLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : jobs.length === 0 ? (
+            ) : displayedJobs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <p className="text-muted-foreground">No bookings yet.</p>
-                <Button className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                  <Link href="/dashboard/user/search">Book an Artisan</Link>
-                </Button>
+                <div className="mb-3 rounded-full bg-muted p-4">
+                  <Search className="h-7 w-7 text-muted-foreground" />
+                </div>
+                <p className="font-medium text-foreground">
+                  {activeFilter ? `No ${activeFilter.toLowerCase()} jobs` : "No job postings yet"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {activeFilter ? "Try a different filter or clear to see all" : "Post a job to find skilled artisans"}
+                </p>
+                {!activeFilter && (
+                  <Button className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                    <Link href="/dashboard/user/search">Book an Artisan</Link>
+                  </Button>
+                )}
               </div>
             ) : (
-              <div className="space-y-4">
-                {jobs.map((job) => {
+              <div key={activeFilter ?? "all"} className="space-y-2.5">
+                {displayedJobs.map((job) => {
                   const artisanName = job.acceptedArtisan
                     ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`.trim()
                     : "Awaiting artisan"
@@ -153,29 +192,38 @@ export default function UserDashboard() {
                   return (
                     <div
                       key={job.id}
-                      className="flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-center md:justify-between"
+                      className={cn(
+                        "flex flex-col gap-3 rounded-lg border bg-card p-4",
+                        "transition-all duration-200 hover:shadow-sm hover:border-border/80",
+                        "md:flex-row md:items-center md:justify-between",
+                      )}
                     >
-                      <div className="flex items-start gap-4">
-                        <Avatar className="h-12 w-12">
-                          <AvatarImage src={job.acceptedArtisan?.profilePicture || "/placeholder.svg"} />
-                          <AvatarFallback>{artisanName.substring(0, 2)}</AvatarFallback>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10 shrink-0">
+                          <AvatarImage src={job.acceptedArtisan?.profilePicture || naviiAvatar(artisanName)} />
+                          <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                         </Avatar>
-                        <div>
-                          <h3 className="font-semibold text-foreground">{job.title}</h3>
-                          <p className="text-sm text-muted-foreground">{job.service?.name}</p>
-                          <div className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
-                            <Calendar className="h-4 w-4" />
-                            {new Date(job.createdAt).toLocaleDateString()}
+                        <div className="min-w-0">
+                          <h3 className="truncate font-medium text-foreground">{job.title}</h3>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {job.service?.name && (
+                              <span className="truncate">{job.service.name}</span>
+                            )}
+                            {job.service?.name && <span className="shrink-0">·</span>}
+                            <span className="flex shrink-0 items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(job.createdAt).toLocaleDateString()}
+                            </span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className={cfg.className}>
+                      <div className="flex items-center gap-2 md:shrink-0">
+                        <Badge variant="outline" className={cn("text-xs", cfg.className)}>
                           <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
                           {cfg.label}
                         </Badge>
-                        <Button size="sm" variant="outline" asChild>
-                          <Link href={`/dashboard/user/bookings/${job.id}`}>View Details</Link>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+                          <Link href={`/dashboard/user/bookings/${job.id}`}>View</Link>
                         </Button>
                       </div>
                     </div>

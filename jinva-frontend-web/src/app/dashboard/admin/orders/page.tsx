@@ -26,8 +26,10 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
+  UserRound,
 } from "lucide-react"
 import { mockOrders } from "@/lib/data/mock-data"
+import { naviiAvatar } from "@/lib/utils"
 
 type SortField = "clientName" | "orderDate" | "serviceName" | "status" | "paymentStatus"
 type SortDir = "asc" | "desc"
@@ -233,8 +235,8 @@ export default function OrdersPage() {
                         <td className="py-4">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-8 w-8">
-                              <AvatarImage src={order.clientAvatar || "/placeholder.svg"} />
-                              <AvatarFallback>{order.clientName.substring(0, 2)}</AvatarFallback>
+                              <AvatarImage src={order.clientAvatar || naviiAvatar(order.clientName)} />
+                              <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <span className="font-medium">{order.clientName}</span>
                           </div>

@@ -393,8 +393,8 @@ export default function AdminReportPage() {
                         <td className="py-4">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-9 w-9">
-                              <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
-                              <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
+                              <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                              <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>
                               <p className="font-medium">{artisan.name}</p>

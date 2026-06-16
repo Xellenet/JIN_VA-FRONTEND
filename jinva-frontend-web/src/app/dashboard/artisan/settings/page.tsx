@@ -20,6 +20,7 @@ import {
   Trash2,
   AlertTriangle,
   Clock,
+  UserRound,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -70,8 +71,8 @@ export default function ArtisanSettingsPage() {
                 <div className="flex items-center gap-6">
                   <div className="relative">
                     <Avatar className="h-24 w-24">
-                      <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                      <AvatarFallback>{user.name.substring(0, 2)}</AvatarFallback>
+                      <AvatarImage src={user.avatar} />
+                      <AvatarFallback><UserRound className="h-6 w-6" /></AvatarFallback>
                     </Avatar>
                     <Button
                       size="icon"

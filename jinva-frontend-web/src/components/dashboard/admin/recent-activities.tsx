@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ChevronRight, Clock, ArrowUpRight } from "lucide-react"
+import { ChevronRight, Clock, ArrowUpRight, UserRound } from "lucide-react"
+import { naviiAvatar } from "@/lib/utils"
 import type { Activity } from "@/lib/types"
 
 interface RecentActivitiesProps {
@@ -91,10 +92,8 @@ export function RecentActivities({ activities }: RecentActivitiesProps) {
                 {/* Avatar with status indicator */}
                 <div className="relative flex-shrink-0">
                   <Avatar className="h-9 w-9 border-2 border-background shadow-sm">
-                    <AvatarImage src={activity.clientAvatar || "/placeholder.svg"} />
-                    <AvatarFallback className="text-xs bg-muted">
-                      {activity.clientName.substring(0, 2).toUpperCase()}
-                    </AvatarFallback>
+                    <AvatarImage src={activity.clientAvatar || naviiAvatar(activity.clientName)} />
+                    <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                   <span 
                     className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background ${statusConfig[activity.status].dotColor}`}

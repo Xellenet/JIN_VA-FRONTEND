@@ -35,11 +35,13 @@ import {
   Calendar,
   Award,
   Upload,
+  UserRound,
 } from "lucide-react"
 import { mockPortfolio } from "@/lib/data/mock-data"
 import type { PortfolioItem } from "@/lib/types"
 import Image from "next/image"
 import { useAuth } from "@/contexts/auth-context"
+import { naviiAvatar } from "@/lib/utils"
 
 export default function ArtisanProfile() {
   const { user } = useAuth()
@@ -69,8 +71,8 @@ export default function ArtisanProfile() {
             <div className="flex flex-col items-start gap-6 md:flex-row md:items-end">
               <div className="relative -mt-16">
                 <Avatar className="h-28 w-28 border-4 border-background shadow-lg">
-                  <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                  <AvatarFallback className="text-2xl">{user.name.substring(0, 2)}</AvatarFallback>
+                  <AvatarImage src={user.avatar} />
+                  <AvatarFallback><UserRound className="h-10 w-10" /></AvatarFallback>
                 </Avatar>
                 <Button
                   size="icon"
@@ -433,8 +435,8 @@ export default function ArtisanProfile() {
                   <div key={i} className="p-5">
                     <div className="flex items-start gap-4">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={`/placeholder.svg?height=40&width=40`} />
-                        <AvatarFallback>{review.name.substring(0, 2)}</AvatarFallback>
+                        <AvatarImage src={naviiAvatar(review.name)} />
+                        <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center justify-between">

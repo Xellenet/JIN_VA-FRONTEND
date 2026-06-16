@@ -18,8 +18,10 @@ import {
   ImageIcon,
   ArrowLeft,
   MessageSquare,
+  UserRound,
 } from "lucide-react"
 import { mockArtisans } from "@/lib/data/mock-data"
+import { naviiAvatar } from "@/lib/utils"
 
 export default function ArtisanPublicProfile() {
   const { id } = useParams<{ id: string }>()
@@ -51,8 +53,8 @@ export default function ArtisanPublicProfile() {
             <div className="flex flex-col items-start gap-6 md:flex-row md:items-end">
               <div className="relative -mt-16">
                 <Avatar className="h-28 w-28 border-4 border-background shadow-lg">
-                  <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
-                  <AvatarFallback className="text-2xl">{artisan.name.substring(0, 2)}</AvatarFallback>
+                  <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name, 128)} />
+                  <AvatarFallback><UserRound className="h-8 w-8" /></AvatarFallback>
                 </Avatar>
               </div>
 
@@ -204,7 +206,7 @@ export default function ArtisanPublicProfile() {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
-                          <AvatarFallback>{review.name.substring(0, 2)}</AvatarFallback>
+                          <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="text-sm font-medium text-foreground">{review.name}</p>

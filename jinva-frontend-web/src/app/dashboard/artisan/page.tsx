@@ -6,9 +6,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Star, Calendar, DollarSign, Briefcase, Loader2 } from "lucide-react"
+import { Star, Calendar, DollarSign, Briefcase, Loader2, UserRound } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/contexts/auth-context"
+import { naviiAvatar } from "@/lib/utils"
 
 interface BackendJob {
   id: string
@@ -56,8 +57,8 @@ export default function ArtisanDashboard() {
         <div className="flex items-center justify-between rounded-lg bg-card p-6">
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16">
-              <AvatarImage src={user.avatar || "/placeholder.svg"} />
-              <AvatarFallback>{user.name.substring(0, 2)}</AvatarFallback>
+              <AvatarImage src={user.avatar} />
+              <AvatarFallback><UserRound className="h-6 w-6" /></AvatarFallback>
             </Avatar>
             <div>
               <h1 className="text-2xl font-bold">Welcome back, {user.name}!</h1>
@@ -170,8 +171,8 @@ export default function ArtisanDashboard() {
                           <td className="py-4">
                             <div className="flex items-center gap-2">
                               <Avatar className="h-8 w-8">
-                                <AvatarImage src={job.customer?.profilePicture || "/placeholder.svg"} />
-                                <AvatarFallback>{clientName.substring(0, 2)}</AvatarFallback>
+                                <AvatarImage src={job.customer?.profilePicture || naviiAvatar(clientName)} />
+                                <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                               </Avatar>
                               <span className="text-sm font-medium">{clientName}</span>
                             </div>

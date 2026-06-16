@@ -26,7 +26,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { ArrowLeft, Star, Calendar, Clock, MapPin, CreditCard, CheckCircle, Loader2 } from "lucide-react"
+import { ArrowLeft, Star, Calendar, Clock, MapPin, CreditCard, CheckCircle, Loader2, UserRound } from "lucide-react"
+import { naviiAvatar } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { mockArtisans } from "@/lib/data/mock-data"
@@ -242,8 +243,8 @@ export default function BookArtisanPage() {
               <CardContent className="p-5">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
-                    <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
+                    <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                    <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                   <div>
                     <h4 className="font-semibold text-foreground">{artisan.name}</h4>

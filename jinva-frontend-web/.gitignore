@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.claude/
+JinVa-PRD.pdf
+Jinva-PRD.html
+
+JinVa-PRD.html
+JinVa-PRD.pdf

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -10,8 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Star,
-  Mail,
-  Phone,
   MapPin,
   Briefcase,
   Award,
@@ -19,26 +18,112 @@ import {
   ArrowLeft,
   MessageSquare,
   UserRound,
+  Loader2,
+  ShieldCheck,
 } from "lucide-react"
-import { mockArtisans } from "@/lib/data/mock-data"
 import { naviiAvatar } from "@/lib/utils"
+import { apiFetch } from "@/lib/api"
+
+interface BackendArtisan {
+  id: string
+  bio?: string
+  experienceYears?: number
+  hourlyRate?: number
+  businessName?: string
+  averageRating: number
+  totalReviews: number
+  availabilityStatus: string
+  isVerified: boolean
+  location?: string
+  services?: { id: string; name: string }[]
+  user: {
+    id: string
+    firstname: string
+    lastname: string
+    profilePicture?: string
+    email?: string
+    phoneNumber?: string
+  }
+  createdAt: string
+}
+
+interface BackendReview {
+  id: string
+  rating: number
+  comment?: string
+  customer: {
+    id: string
+    firstname: string
+    lastname: string
+    profilePicture?: string
+  }
+  createdAt: string
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+}
 
 export default function ArtisanPublicProfile() {
   const { id } = useParams<{ id: string }>()
 
-  const artisan = mockArtisans.find((p) => p.id === id) || mockArtisans[0]
+  const [artisan, setArtisan] = useState<BackendArtisan | null>(null)
+  const [reviews, setReviews] = useState<BackendReview[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
 
-  const reviews = [
-    { name: "Devon Lane", date: "Aug 18, 2025", rating: 5, comment: "Amazing job on our bathroom renovation. Professional, punctual, and exceeded expectations." },
-    { name: "Kristin Watson", date: "Jul 25, 2025", rating: 5, comment: "Quick response for our emergency leak. Fixed everything in under 2 hours. Very reasonable pricing." },
-    { name: "Jacob Jones", date: "Jun 30, 2025", rating: 4, comment: "Good work overall. Would hire again for future plumbing needs." },
-    { name: "Wade Warren", date: "Jun 10, 2025", rating: 5, comment: "Excellent work on our kitchen sink installation. Clean, efficient, and friendly." },
-  ]
+  useEffect(() => {
+    if (!id) return
+    setIsLoading(true)
+    Promise.all([
+      apiFetch<BackendArtisan>(`/artisans/${id}`),
+      apiFetch<BackendReview[] | { items: BackendReview[] }>(`/reviews/artisan-profile/${id}`).catch(() => [] as BackendReview[]),
+    ])
+      .then(([profile, reviewsResult]) => {
+        setArtisan(profile)
+        const reviewItems = Array.isArray(reviewsResult)
+          ? reviewsResult
+          : (reviewsResult as { items: BackendReview[] }).items ?? []
+        setReviews(reviewItems)
+      })
+      .catch(() => setError("Could not load artisan profile."))
+      .finally(() => setIsLoading(false))
+  }, [id])
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (error || !artisan) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-4">
+          <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
+            <Link href="/dashboard/user/search"><ArrowLeft className="h-4 w-4" />Back to Search</Link>
+          </Button>
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-muted-foreground">{error || "Artisan not found."}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  const name = `${artisan.user.firstname} ${artisan.user.lastname}`.trim()
+  const isAvailable = artisan.availabilityStatus === "AVAILABLE"
+  const specialization = artisan.businessName || artisan.services?.[0]?.name || "General Service"
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Back button */}
         <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
           <Link href="/dashboard/user/search">
             <ArrowLeft className="h-4 w-4" />
@@ -53,41 +138,44 @@ export default function ArtisanPublicProfile() {
             <div className="flex flex-col items-start gap-6 md:flex-row md:items-end">
               <div className="relative -mt-16">
                 <Avatar className="h-28 w-28 border-4 border-background shadow-lg">
-                  <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name, 128)} />
+                  <AvatarImage src={artisan.user.profilePicture || naviiAvatar(name, 128)} />
                   <AvatarFallback><UserRound className="h-8 w-8" /></AvatarFallback>
                 </Avatar>
+                {artisan.isVerified && (
+                  <span className="absolute -right-1 bottom-1 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <div className="flex items-center gap-3">
-                    <h1 className="text-2xl font-bold text-foreground">{artisan.name}</h1>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-2xl font-bold text-foreground">{name}</h1>
                     <Badge
                       variant="outline"
-                      className={
-                        artisan.availability === "available"
-                          ? "border-green-200 bg-green-50 text-green-700"
-                          : "border-muted bg-muted text-muted-foreground"
-                      }
+                      className={isAvailable
+                        ? "border-primary/20 bg-primary/5 text-primary"
+                        : "border-border bg-muted text-muted-foreground"}
                     >
                       <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
-                      {artisan.availability === "available" ? "Available" : "Busy"}
+                      {isAvailable ? "Available" : "Busy"}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-muted-foreground">{artisan.specialization}</p>
+                  <p className="mt-1 text-muted-foreground">{specialization}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <Mail className="h-3.5 w-3.5" />
-                      {artisan.email}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5" />
-                      {artisan.phone}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5" />
-                      Springfield, IL
-                    </span>
+                    {artisan.location && (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5" />
+                        {artisan.location}
+                      </span>
+                    )}
+                    {artisan.experienceYears && (
+                      <span>{artisan.experienceYears} years experience</span>
+                    )}
+                    {artisan.hourlyRate && (
+                      <span>${artisan.hourlyRate}/hr</span>
+                    )}
                   </div>
                 </div>
 
@@ -110,23 +198,23 @@ export default function ArtisanPublicProfile() {
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                  <span className="text-2xl font-bold text-foreground">{artisan.avgRating}</span>
+                  <span className="text-2xl font-bold text-foreground">{Number(artisan.averageRating).toFixed(1)}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Avg. Rating</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
-                  <Briefcase className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">{artisan.jobsCompleted}</span>
+                  <Award className="h-5 w-5 text-primary" />
+                  <span className="text-2xl font-bold text-foreground">{artisan.totalReviews}</span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Jobs Completed</p>
+                <p className="mt-1 text-xs text-muted-foreground">Reviews</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
-                  <Award className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">{artisan.reviews}</span>
+                  <Briefcase className="h-5 w-5 text-primary" />
+                  <span className="text-2xl font-bold text-foreground">{artisan.services?.length ?? 0}</span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Reviews</p>
+                <p className="mt-1 text-xs text-muted-foreground">Services</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
@@ -140,11 +228,11 @@ export default function ArtisanPublicProfile() {
         </Card>
 
         {/* Tabs */}
-        <Tabs defaultValue="portfolio" className="space-y-6">
+        <Tabs defaultValue="about" className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
             <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
-            <TabsTrigger value="reviews">Reviews</TabsTrigger>
+            <TabsTrigger value="reviews">Reviews ({reviews.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="portfolio">
@@ -153,7 +241,7 @@ export default function ArtisanPublicProfile() {
                 <ImageIcon className="mb-4 h-12 w-12 text-muted-foreground/50" />
                 <h3 className="text-lg font-semibold text-foreground">No portfolio items yet</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  This artisan hasn't added any portfolio items yet.
+                  This artisan hasn&apos;t added any portfolio items yet.
                 </p>
               </CardContent>
             </Card>
@@ -161,28 +249,46 @@ export default function ArtisanPublicProfile() {
 
           <TabsContent value="about">
             <Card>
-              <CardContent className="p-6">
-                <h3 className="mb-4 text-lg font-semibold text-foreground">About {artisan.name}</h3>
-                <p className="leading-relaxed text-muted-foreground">
-                  Experienced artisan with over 10 years in residential and commercial plumbing. Specializing in {artisan.specialization?.toLowerCase()}, pipe installation, and bathroom renovations. Licensed and insured professional committed to quality workmanship and customer satisfaction.
-                </p>
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <CardContent className="p-6 space-y-6">
+                <div>
+                  <h3 className="mb-3 text-lg font-semibold text-foreground">About {name}</h3>
+                  <p className="leading-relaxed text-muted-foreground">
+                    {artisan.bio || `Professional artisan specializing in ${specialization.toLowerCase()}. Committed to quality workmanship and customer satisfaction.`}
+                  </p>
+                </div>
+                {artisan.services && artisan.services.length > 0 && (
+                  <div>
+                    <h4 className="mb-3 text-sm font-semibold text-foreground">Services Offered</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {artisan.services.map((s) => (
+                        <Badge key={s.id} variant="secondary">{s.name}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-border p-4">
                     <p className="text-sm font-medium text-foreground">Specialization</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{artisan.specialization}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{specialization}</p>
                   </div>
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-sm font-medium text-foreground">Experience</p>
-                    <p className="mt-1 text-sm text-muted-foreground">10+ years</p>
-                  </div>
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-sm font-medium text-foreground">License</p>
-                    <p className="mt-1 text-sm text-muted-foreground">PLB-2015-0472</p>
-                  </div>
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-sm font-medium text-foreground">Certifications</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Master Artisan, EPA 608, OSHA 10</p>
-                  </div>
+                  {artisan.experienceYears && (
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm font-medium text-foreground">Experience</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{artisan.experienceYears} years</p>
+                    </div>
+                  )}
+                  {artisan.location && (
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm font-medium text-foreground">Location</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{artisan.location}</p>
+                    </div>
+                  )}
+                  {artisan.hourlyRate && (
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm font-medium text-foreground">Hourly Rate</p>
+                      <p className="mt-1 text-sm text-muted-foreground">${artisan.hourlyRate}/hr</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -195,36 +301,49 @@ export default function ArtisanPublicProfile() {
                   <h3 className="font-semibold text-foreground">Client Reviews</h3>
                   <div className="flex items-center gap-2">
                     <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                    <span className="font-bold text-foreground">{artisan.avgRating}</span>
-                    <span className="text-sm text-muted-foreground">({artisan.reviews} reviews)</span>
+                    <span className="font-bold text-foreground">{Number(artisan.averageRating).toFixed(1)}</span>
+                    <span className="text-sm text-muted-foreground">({artisan.totalReviews} reviews)</span>
                   </div>
                 </div>
               </div>
               <CardContent className="divide-y divide-border p-0">
-                {reviews.map((review) => (
-                  <div key={`${review.name}-${review.date}`} className="p-5">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{review.name}</p>
-                          <p className="text-xs text-muted-foreground">{review.date}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={`${review.name}-star-${i + 1}`}
-                            className={`h-4 w-4 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{review.comment}</p>
+                {reviews.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Star className="mb-3 h-8 w-8 text-muted-foreground/40" />
+                    <p className="text-sm text-muted-foreground">No reviews yet.</p>
                   </div>
-                ))}
+                ) : (
+                  reviews.map((review) => {
+                    const reviewerName = `${review.customer.firstname} ${review.customer.lastname}`.trim()
+                    return (
+                      <div key={review.id} className="p-5">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={review.customer.profilePicture || naviiAvatar(reviewerName)} />
+                              <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{reviewerName}</p>
+                              <p className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={`${review.id}-star-${i}`}
+                                className={`h-4 w-4 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        {review.comment && (
+                          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{review.comment}</p>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
               </CardContent>
             </Card>
           </TabsContent>

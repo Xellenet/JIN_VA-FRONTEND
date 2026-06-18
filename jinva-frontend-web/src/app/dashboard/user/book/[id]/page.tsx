@@ -96,12 +96,14 @@ export default function BookArtisanPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
-          <Link href="/dashboard/user/search">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Search
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
+            <Link href={`/dashboard/user/artisan/${id}`}>
+              <ArrowLeft className="h-4 w-4" />
+              Back to Profile
+            </Link>
+          </Button>
+        </div>
 
         <div>
           <h1 className="text-2xl font-bold text-foreground">Book a Service</h1>
@@ -258,7 +260,7 @@ export default function BookArtisanPage() {
                 </div>
                 <Badge
                   variant="outline"
-                  className={`mt-4 w-full justify-center ${artisan.availability === "available" ? "border-green-200 bg-green-50 text-green-700" : "border-muted bg-muted text-muted-foreground"}`}
+                  className={`mt-4 w-full justify-center ${artisan.availability === "available" ? "border-primary/20 bg-primary/5 text-primary" : "border-border bg-muted text-muted-foreground"}`}
                 >
                   <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
                   {artisan.availability === "available" ? "Available" : "Busy"}
@@ -302,8 +304,8 @@ export default function BookArtisanPage() {
         <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader className="items-center text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <CheckCircle className="h-8 w-8 text-green-600" />
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                <CheckCircle className="h-8 w-8 text-primary" />
               </div>
               <DialogTitle>Booking Submitted!</DialogTitle>
               <DialogDescription>

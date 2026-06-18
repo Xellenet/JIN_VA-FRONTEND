@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Calendar, Clock, CheckCircle, Search, Loader2, UserRound, XCircle, TrendingUp } from "lucide-react"
+import { Calendar, Clock, CheckCircle, Search, Loader2, UserRound, XCircle, TrendingUp, Plus } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/contexts/auth-context"
 import { naviiAvatar, cn } from "@/lib/utils"
@@ -77,24 +77,31 @@ export default function UserDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-5">
-        {/* Welcome Header */}
-        <div className="flex items-center justify-between rounded-xl border bg-card p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-14 w-14 ring-2 ring-primary/20 ring-offset-2">
-              <AvatarImage src={user.avatar} />
-              <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
-            </Avatar>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">Welcome back, {user.name}!</h1>
-              <p className="text-sm text-muted-foreground">Find trusted artisans and manage your job postings</p>
-            </div>
+        {/* Page header */}
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Account Dashboard
+            </p>
+            <h1 className="mt-0.5 text-2xl font-bold text-foreground">
+              Welcome back, {user.name.split(" ")[0]}!
+            </h1>
+            <p className="text-sm text-muted-foreground">Find trusted artisans and manage your job postings</p>
           </div>
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90 transition-colors" asChild>
-            <Link href="/dashboard/user/search">
-              <Search className="mr-2 h-4 w-4" />
-              Find Artisans
-            </Link>
-          </Button>
+          <div className="mt-2 flex items-center gap-2 sm:mt-0">
+            <Button variant="outline" className="hidden bg-transparent sm:flex" asChild>
+              <Link href="/dashboard/user/search">
+                <Search className="mr-2 h-4 w-4" />
+                Find Artisans
+              </Link>
+            </Button>
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 transition-colors" asChild>
+              <Link href="/dashboard/user/post-job">
+                <Plus className="mr-2 h-4 w-4" />
+                Post a Job
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Quick Stats — clickable to filter */}
@@ -107,7 +114,7 @@ export default function UserDashboard() {
                 type="button"
                 onClick={() => handleStatClick(label)}
                 className={cn(
-                  "group rounded-xl border bg-card p-3.5 text-left shadow-sm",
+                  "rounded-xl border bg-card p-5 text-left shadow-sm",
                   "transition-all duration-200 ease-in-out",
                   "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                   isActive
@@ -115,15 +122,15 @@ export default function UserDashboard() {
                     : "border-border hover:border-primary/40",
                 )}
               >
-                <div className="flex items-center gap-3">
-                  <div className={cn("rounded-full p-2 transition-all duration-200", iconBg, isActive && "scale-110")}>
+                {/* Top row: label + icon */}
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">{label}</p>
+                  <div className={cn("shrink-0 rounded-full p-2", iconBg)}>
                     <Icon className={cn("h-4 w-4", iconColor)} />
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="text-xl font-bold leading-tight text-foreground">{value}</p>
-                  </div>
                 </div>
+                {/* Number */}
+                <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">{value}</p>
               </button>
             )
           })}
@@ -174,12 +181,23 @@ export default function UserDashboard() {
                   {activeFilter ? `No ${activeFilter.toLowerCase()} jobs` : "No job postings yet"}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {activeFilter ? "Try a different filter or clear to see all" : "Post a job to find skilled artisans"}
+                  {activeFilter ? "Try a different filter or clear to see all" : "Post a job or browse artisans to get started"}
                 </p>
                 {!activeFilter && (
-                  <Button className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                    <Link href="/dashboard/user/search">Book an Artisan</Link>
-                  </Button>
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                      <Link href="/dashboard/user/post-job">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Post a Job
+                      </Link>
+                    </Button>
+                    <Button variant="outline" className="bg-transparent" asChild>
+                      <Link href="/dashboard/user/search">
+                        <Search className="mr-2 h-4 w-4" />
+                        Find Artisans
+                      </Link>
+                    </Button>
+                  </div>
                 )}
               </div>
             ) : (

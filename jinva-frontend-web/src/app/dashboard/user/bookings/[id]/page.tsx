@@ -31,9 +31,12 @@ import {
   FileText,
   Loader2,
   UserRound,
+  Users,
+  CheckCircle,
+  DollarSign,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { naviiAvatar } from "@/lib/utils"
+import { naviiAvatar, cn } from "@/lib/utils"
 import { toast } from "sonner"
 
 interface BackendJob {
@@ -48,26 +51,68 @@ interface BackendJob {
   service?: { id: string; name: string; price?: number }
 }
 
+interface BackendApplication {
+  id: number
+  status: "PENDING" | "ACCEPTED" | "REJECTED"
+  quotePrice?: number
+  message?: string
+  createdAt: string
+  artisan: {
+    id: number
+    firstname: string
+    lastname: string
+    profilePicture?: string
+    phoneNumber?: string
+    email?: string
+  }
+}
+
 const statusConfig: Record<string, { label: string; className: string }> = {
-  IN_PROGRESS: { label: "In Progress", className: "border-muted bg-muted text-muted-foreground" },
-  COMPLETED: { label: "Completed", className: "border-green-200 bg-green-50 text-green-700" },
-  CANCELLED: { label: "Cancelled", className: "border-red-200 bg-red-50 text-red-700" },
-  PENDING: { label: "Pending", className: "border-yellow-200 bg-yellow-50 text-yellow-700" },
-  OPEN: { label: "Open", className: "border-blue-200 bg-blue-50 text-blue-700" },
-  EXPIRED: { label: "Expired", className: "border-gray-200 bg-gray-50 text-gray-600" },
+  IN_PROGRESS: { label: "In Progress", className: "border-border bg-muted text-muted-foreground" },
+  COMPLETED:   { label: "Completed",   className: "border-primary/20 bg-primary/10 text-primary" },
+  CANCELLED:   { label: "Cancelled",   className: "border-destructive/20 bg-destructive/10 text-destructive" },
+  PENDING:     { label: "Pending",     className: "border-border bg-muted text-muted-foreground" },
+  OPEN:        { label: "Open",        className: "border-primary/15 bg-primary/5 text-primary" },
+  EXPIRED:     { label: "Expired",     className: "border-border bg-muted text-muted-foreground" },
+}
+
+// The post-job form appends "\n\nPreferred date: DATE[ at TIME]" to the description.
+// Split it back out so we can display it as a dedicated field.
+function parseDescription(raw: string): { text: string; preferredDate?: string } {
+  const marker = "\n\nPreferred date: "
+  const idx = raw.indexOf(marker)
+  if (idx === -1) return { text: raw }
+  return { text: raw.substring(0, idx).trim(), preferredDate: raw.substring(idx + marker.length).trim() }
+}
+
+const appStatusConfig: Record<string, { label: string; className: string }> = {
+  PENDING:  { label: "Applied",   className: "border-border bg-muted text-muted-foreground" },
+  ACCEPTED: { label: "Accepted",  className: "border-primary/20 bg-primary/10 text-primary" },
+  REJECTED: { label: "Rejected",  className: "border-destructive/20 bg-destructive/10 text-destructive" },
 }
 
 export default function BookingDetailsPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [job, setJob] = useState<BackendJob | null>(null)
+  const [applications, setApplications] = useState<BackendApplication[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingApps, setIsLoadingApps] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
+  const [acceptingId, setAcceptingId] = useState<number | null>(null)
 
   useEffect(() => {
     apiFetch<BackendJob>(`/jobs/${id}`)
-      .then(setJob)
+      .then((j) => {
+        setJob(j)
+        // Fetch applications alongside
+        setIsLoadingApps(true)
+        apiFetch<BackendApplication[]>(`/jobs/${id}/applications`)
+          .then((r) => setApplications(Array.isArray(r) ? r : []))
+          .catch(() => {})
+          .finally(() => setIsLoadingApps(false))
+      })
       .catch(() => toast.error("Failed to load booking details."))
       .finally(() => setIsLoading(false))
   }, [id])
@@ -84,6 +129,38 @@ export default function BookingDetailsPage() {
       toast.error(err instanceof Error ? err.message : "Failed to cancel.")
     } finally {
       setIsCancelling(false)
+    }
+  }
+
+  const handleAccept = async (app: BackendApplication) => {
+    if (!job) return
+    setAcceptingId(app.id)
+    try {
+      await apiFetch(`/jobs/${job.id}/applications/${app.id}/accept`, { method: "POST" })
+      // Reflect changes locally
+      setApplications((prev) =>
+        prev.map((a) => ({
+          ...a,
+          status: a.id === app.id ? "ACCEPTED" : "REJECTED",
+        }))
+      )
+      setJob((prev) => prev ? {
+        ...prev,
+        status: "PENDING",
+        acceptedArtisan: {
+          id: String(app.artisan.id),
+          firstname: app.artisan.firstname,
+          lastname: app.artisan.lastname,
+          profilePicture: app.artisan.profilePicture,
+          phoneNumber: app.artisan.phoneNumber,
+          email: app.artisan.email,
+        },
+      } : prev)
+      toast.success(`${app.artisan.firstname} has been accepted!`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to accept application.")
+    } finally {
+      setAcceptingId(null)
     }
   }
 
@@ -117,11 +194,16 @@ export default function BookingDetailsPage() {
   const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
 
   const timelineSteps = [
-    { label: "Booking Created", done: true, time: new Date(job.createdAt).toLocaleDateString() },
-    { label: "Artisan Assigned", done: !!job.acceptedArtisan, time: job.acceptedArtisan ? "Assigned" : "" },
-    { label: "Work Started", done: job.status === "IN_PROGRESS" || job.status === "COMPLETED", time: "" },
-    { label: "Work Completed", done: job.status === "COMPLETED", time: "" },
+    { label: "Booking Created",  done: true,                                                    time: new Date(job.createdAt).toLocaleDateString() },
+    { label: "Artisan Assigned", done: !!job.acceptedArtisan,                                   time: job.acceptedArtisan ? "Assigned" : "" },
+    { label: "Work Started",     done: job.status === "IN_PROGRESS" || job.status === "COMPLETED", time: "" },
+    { label: "Work Completed",   done: job.status === "COMPLETED",                              time: "" },
   ]
+
+  const { text: cleanDescription, preferredDate } = parseDescription(job.description ?? "")
+
+  const pendingApps    = applications.filter((a) => a.status === "PENDING")
+  const canAccept      = job.status === "OPEN" && pendingApps.length > 0
 
   return (
     <DashboardLayout>
@@ -135,8 +217,10 @@ export default function BookingDetailsPage() {
 
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Booking Details</h1>
-            <p className="text-muted-foreground">Booking #{job.id.substring(0, 8)}</p>
+            <h1 className="text-2xl font-bold text-foreground">{job.title}</h1>
+            <p className="text-muted-foreground">
+              {job.service?.name ?? "Booking"} · {new Date(job.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
           </div>
           <Badge variant="outline" className={cfg.className}>
             <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
@@ -145,7 +229,10 @@ export default function BookingDetailsPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
+          {/* ── Left column ─────────────────────────────────────────────── */}
           <div className="space-y-6 lg:col-span-2">
+
+            {/* Service Information */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -166,8 +253,8 @@ export default function BookingDetailsPage() {
                     </div>
                   )}
                   <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Booking ID</p>
-                    <p className="mt-1 font-medium text-foreground">#{job.id.substring(0, 8)}</p>
+                    <p className="text-xs text-muted-foreground">Reference</p>
+                    <p className="mt-1 font-medium text-foreground">JB-{String(job.id).toUpperCase().slice(-6)}</p>
                   </div>
                   <div className="rounded-lg border border-border p-4">
                     <p className="text-xs text-muted-foreground">Created</p>
@@ -178,10 +265,20 @@ export default function BookingDetailsPage() {
                       </p>
                     </div>
                   </div>
+                  {preferredDate && (
+                    <div className="rounded-lg border border-border bg-primary/5 p-4 md:col-span-2">
+                      <p className="text-xs text-muted-foreground">Preferred Date &amp; Time</p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-primary" />
+                        <p className="font-medium text-foreground">{preferredDate}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
+            {/* Location & description */}
             {job.location && (
               <Card>
                 <div className="border-b border-border p-5">
@@ -194,16 +291,118 @@ export default function BookingDetailsPage() {
                   <div className="rounded-lg border border-border bg-muted/30 p-4">
                     <p className="font-medium text-foreground">{job.location}</p>
                   </div>
-                  {job.description && (
+                  {cleanDescription && (
                     <div className="mt-4 text-sm text-muted-foreground">
                       <p className="font-medium text-foreground">Description:</p>
-                      <p className="mt-1 leading-relaxed">{job.description}</p>
+                      <p className="mt-1 leading-relaxed">{cleanDescription}</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
             )}
 
+            {/* ── Applicants ────────────────────────────────────────────── */}
+            <Card>
+              <div className="border-b border-border p-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 font-semibold text-foreground">
+                    <Users className="h-4 w-4 text-primary" />
+                    Applicants
+                  </h3>
+                  {!isLoadingApps && (
+                    <Badge variant="outline" className="text-xs">
+                      {applications.length} {applications.length === 1 ? "applicant" : "applicants"}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <CardContent className="p-0">
+                {isLoadingApps ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : applications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Users className="mb-3 h-8 w-8 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-foreground">No applicants yet</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Artisans will apply once your job is live
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {applications.map((app) => {
+                      const name = `${app.artisan.firstname} ${app.artisan.lastname}`.trim()
+                      const appCfg = appStatusConfig[app.status] ?? { label: app.status, className: "" }
+                      const isAccepting = acceptingId === app.id
+
+                      return (
+                        <div key={app.id} className="flex items-start gap-4 p-5">
+                          <Avatar className="h-11 w-11 shrink-0">
+                            <AvatarImage src={app.artisan.profilePicture || naviiAvatar(name)} />
+                            <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
+                          </Avatar>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-foreground">{name}</span>
+                              <Badge variant="outline" className={cn("text-[11px]", appCfg.className)}>
+                                {appCfg.label}
+                              </Badge>
+                              {app.quotePrice != null && (
+                                <span className="flex items-center gap-1 text-sm font-medium text-foreground">
+                                  <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                                  GH₵ {Number(app.quotePrice).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+
+                            {app.message && (
+                              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground line-clamp-3">
+                                {app.message}
+                              </p>
+                            )}
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Applied {new Date(app.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex shrink-0 flex-col gap-2">
+                            {canAccept && app.status === "PENDING" && (
+                              <Button
+                                size="sm"
+                                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                onClick={() => handleAccept(app)}
+                                disabled={isAccepting}
+                              >
+                                {isAccepting ? (
+                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                                )}
+                                Accept
+                              </Button>
+                            )}
+                            {app.status === "ACCEPTED" && (
+                              <Button size="sm" variant="outline" className="bg-transparent" asChild>
+                                <Link href={`/dashboard/user/messages?artisan=${app.artisan.id}`}>
+                                  <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                                  Chat
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Timeline */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -216,11 +415,10 @@ export default function BookingDetailsPage() {
                   {timelineSteps.map((step, idx) => (
                     <div key={idx} className="flex gap-4">
                       <div className="flex flex-col items-center">
-                        <div
-                          className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                            step.done ? "bg-primary text-primary-foreground" : "border-2 border-border bg-background"
-                          }`}
-                        >
+                        <div className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-full",
+                          step.done ? "bg-primary text-primary-foreground" : "border-2 border-border bg-background",
+                        )}>
                           {step.done ? (
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -246,6 +444,7 @@ export default function BookingDetailsPage() {
             </Card>
           </div>
 
+          {/* ── Right column ─────────────────────────────────────────────── */}
           <div className="space-y-6">
             <Card>
               <div className="border-b border-border p-5">

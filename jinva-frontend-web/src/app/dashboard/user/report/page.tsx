@@ -23,8 +23,10 @@ import {
   Calendar,
   FileText,
   Star,
+  UserRound,
 } from "lucide-react"
 import { mockOrders } from "@/lib/data/mock-data"
+import { naviiAvatar } from "@/lib/utils"
 
 const monthlySpending = [
   { month: "Jul", amount: 120 },
@@ -36,14 +38,6 @@ const monthlySpending = [
 ]
 
 export default function UserReportPage() {
-  const user = {
-    id: "u1",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    role: "user" as const,
-    avatar: "/placeholder.svg?height=40&width=40",
-  }
-
   const myBookings = mockOrders.slice(0, 6)
   const completed = myBookings.filter((b) => b.status === "completed").length
   const inProgress = myBookings.filter((b) => b.status === "in-progress").length
@@ -59,7 +53,7 @@ export default function UserReportPage() {
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -192,8 +186,8 @@ export default function UserReportPage() {
                       <td className="py-4">
                         <div className="flex items-center gap-2">
                           <Avatar className="h-7 w-7">
-                            <AvatarImage src="/placeholder.svg" />
-                            <AvatarFallback>{booking.artisanName.substring(0, 2)}</AvatarFallback>
+                            <AvatarImage src={naviiAvatar(booking.artisanName)} />
+                            <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <span className="text-sm">{booking.artisanName}</span>
                         </div>

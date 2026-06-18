@@ -22,6 +22,7 @@ import {
   CreditCard,
   Users,
   CalendarDays,
+  UserRound,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -51,6 +52,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { UserRole } from "@/lib/types"
+import { naviiAvatar } from "@/lib/utils"
 
 interface SupportPageProps {
   role: UserRole
@@ -467,8 +469,8 @@ export function SupportPage({ role }: SupportPageProps) {
                 <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-4">
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                      <AvatarFallback className="text-xs">You</AvatarFallback>
+                      <AvatarImage src={naviiAvatar("current-user", 32)} />
+                      <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
                     </Avatar>
                     <div>
                       <p className="text-xs font-medium text-foreground">You <span className="font-normal text-muted-foreground">&middot; {selectedTicket?.date}</span></p>
@@ -479,7 +481,8 @@ export function SupportPage({ role }: SupportPageProps) {
                   </div>
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarFallback className="bg-muted text-xs text-primary">SA</AvatarFallback>
+                      <AvatarImage src={naviiAvatar("support-agent", 32)} />
+                      <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
                     </Avatar>
                     <div>
                       <p className="text-xs font-medium text-foreground">Support Agent <span className="font-normal text-muted-foreground">&middot; {selectedTicket?.date}</span></p>

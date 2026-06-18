@@ -26,8 +26,10 @@ import {
   Briefcase,
   Calendar,
   FileText,
+  UserRound,
 } from "lucide-react"
 import { mockArtisans, mockOrders } from "@/lib/data/mock-data"
+import { naviiAvatar } from "@/lib/utils"
 
 const monthlyEarnings = [
   { month: "Jul", earnings: 1800 },
@@ -56,7 +58,6 @@ const ratingHistory = [
 
 export default function ArtisanReportPage() {
   const artisan = mockArtisans[0]
-  const user = { ...artisan, role: "artisan" as const }
 
   const myJobs = mockOrders.filter((o) => o.artisanId === artisan.id)
   const completedJobs = myJobs.filter((j) => j.status === "completed").length
@@ -72,7 +73,7 @@ export default function ArtisanReportPage() {
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -333,8 +334,8 @@ export default function ArtisanReportPage() {
                       <td className="py-4">
                         <div className="flex items-center gap-2">
                           <Avatar className="h-7 w-7">
-                            <AvatarImage src={job.clientAvatar || "/placeholder.svg"} />
-                            <AvatarFallback>{job.clientName.substring(0, 2)}</AvatarFallback>
+                            <AvatarImage src={job.clientAvatar || naviiAvatar(job.clientName)} />
+                            <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <span className="text-sm font-medium">{job.clientName}</span>
                         </div>

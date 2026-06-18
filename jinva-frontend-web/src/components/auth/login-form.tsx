@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Eye, EyeOff } from "lucide-react"
-import { DEFAULT_AUTH_REDIRECT, persistAuthTokens } from "@/lib/auth"
+import { persistAuthTokens, dashboardPathForRole } from "@/lib/auth"
 import { AuthSplitLayout } from "./auth-split-layout"
 
 export function LoginForm() {
@@ -42,20 +42,17 @@ export function LoginForm() {
         throw new Error(data.message || "Login failed")
       }
 
-      // Store tokens where both the client and route middleware can read them.
-      localStorage.setItem("access_token", data.access_token)
-      localStorage.setItem("refresh_token", data.refresh_token)
       persistAuthTokens(data.access_token, data.refresh_token, rememberMe)
 
-      console.log("user data:", data.user)
-      toast.success("You have been logged in successfully.");
+      toast.success("You have been logged in successfully.")
 
       const redirectTarget = searchParams.get("redirect")
-      const destination = redirectTarget?.startsWith("/") && !redirectTarget.startsWith("//")
-        ? redirectTarget
-        : DEFAULT_AUTH_REDIRECT
+      const roleDashboard = dashboardPathForRole(data.user?.role ?? "")
+      const destination =
+        redirectTarget?.startsWith("/") && !redirectTarget.startsWith("//")
+          ? redirectTarget
+          : roleDashboard
 
-      // Redirect to dashboard or home
       globalThis.location.href = destination
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Invalid credentials");

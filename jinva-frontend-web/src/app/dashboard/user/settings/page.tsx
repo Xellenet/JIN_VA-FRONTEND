@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,19 +20,175 @@ import {
   MapPin,
   Trash2,
   AlertTriangle,
+  UserRound,
+  Loader2,
+  Lock,
+  CreditCard,
 } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
+import { apiFetch } from "@/lib/api"
+import { toast } from "sonner"
 
 export default function UserSettingsPage() {
-  const user = {
-    id: "u1",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    role: "user" as const,
-    avatar: "/placeholder.svg?height=40&width=40",
+  const { user, refreshUser } = useAuth()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const activeTab = searchParams.get("tab") ?? "profile"
+
+  const [firstname, setFirstname] = useState("")
+  const [lastname, setLastname] = useState("")
+  const [email, setEmail] = useState("")
+  const [phone, setPhone] = useState("")
+  const [street, setStreet] = useState("")
+  const [city, setCity] = useState("")
+  const [country, setCountry] = useState("")
+  const [zipCode, setZipCode] = useState("")
+  const [nationalId, setNationalId] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+
+  const [currentPass, setCurrentPass] = useState("")
+  const [newPass, setNewPass] = useState("")
+  const [confirmPass, setConfirmPass] = useState("")
+  const [isUpdatingPass, setIsUpdatingPass] = useState(false)
+
+  // ── Avatar upload ────────────────────────────────────────────────────────
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5 MB")
+      e.target.value = ""
+      return
+    }
+    if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Only JPEG, PNG, and WebP images are supported")
+      e.target.value = ""
+      return
+    }
+
+    const formData = new FormData()
+    formData.append("avatar", file)
+
+    setIsUploadingAvatar(true)
+    try {
+      await apiFetch("/users/me/avatar", { method: "POST", body: formData })
+      await refreshUser()
+      toast.success("Profile photo updated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to upload photo")
+    } finally {
+      setIsUploadingAvatar(false)
+      e.target.value = ""
+    }
+  }
+
+  // ── Notification preferences ────────────────────────────────────────────
+  interface CustomerNotifPrefs {
+    bookingConfirmations: boolean; jobStatusUpdates: boolean; paymentReceipts: boolean
+    promotionalOffers: boolean; serviceReminders: boolean; reviewRequests: boolean
+    jobExpired: boolean; messageReceived: boolean
+    emailEnabled: boolean; smsEnabled: boolean; pushEnabled: boolean
+  }
+  const [notifPrefs, setNotifPrefs] = useState<Partial<CustomerNotifPrefs>>({})
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState(false)
+  const [isSavingNotifs, setIsSavingNotifs] = useState(false)
+
+  useEffect(() => {
+    setIsLoadingNotifs(true)
+    apiFetch<CustomerNotifPrefs>("/notifications/preferences")
+      .then(setNotifPrefs)
+      .catch(() => {})
+      .finally(() => setIsLoadingNotifs(false))
+  }, [])
+
+  const toggleNotif = (key: keyof CustomerNotifPrefs, val: boolean) =>
+    setNotifPrefs((p) => ({ ...p, [key]: val }))
+
+  const handleSaveNotifications = async () => {
+    setIsSavingNotifs(true)
+    try {
+      await apiFetch("/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(notifPrefs),
+      })
+      toast.success("Notification preferences saved.")
+    } catch {
+      toast.error("Failed to save notification preferences.")
+    } finally {
+      setIsSavingNotifs(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!user) return
+    const parts = user.name.split(" ")
+    setFirstname(parts[0] ?? "")
+    setLastname(parts.slice(1).join(" "))
+    setEmail(user.email ?? "")
+    setPhone(user.phone ?? "")
+    setStreet(user.address?.street ?? "")
+    setCity(user.address?.city ?? "")
+    setCountry(user.address?.country ?? "")
+    setZipCode(user.address?.zipCode ?? "")
+    setNationalId(user.nationalId ?? "")
+  }, [user])
+
+  if (!user) return null
+
+  const handleSaveProfile = async () => {
+    setIsSaving(true)
+    try {
+      await apiFetch("/users/me", {
+        method: "PATCH",
+        body: JSON.stringify({
+          firstname,
+          lastname,
+          phoneNumber: phone,
+          addresses: [{ street, city, country, zipCode }],
+          ...(nationalId && !user.nationalId ? { nationalId } : {}),
+        }),
+      })
+      await refreshUser()
+      toast.success("Profile updated successfully.")
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save changes.")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleUpdatePassword = async () => {
+    if (newPass !== confirmPass) {
+      toast.error("New passwords do not match.")
+      return
+    }
+    if (newPass.length < 8) {
+      toast.error("Password must be at least 8 characters.")
+      return
+    }
+    setIsUpdatingPass(true)
+    try {
+      await apiFetch("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
+      })
+      toast.success("Password updated.")
+      setCurrentPass("")
+      setNewPass("")
+      setConfirmPass("")
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update password.")
+    } finally {
+      setIsUpdatingPass(false)
+    }
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Account Settings</h1>
@@ -39,7 +197,11 @@ export default function UserSettingsPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="profile" className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(tab) => router.replace(`?tab=${tab}`, { scroll: false })}
+          className="space-y-6"
+        >
           <TabsList className="bg-muted">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
@@ -66,15 +228,24 @@ export default function UserSettingsPage() {
               </div>
               <CardContent className="p-6">
                 <div className="flex items-center gap-6">
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                  />
                   <div className="relative">
                     <Avatar className="h-24 w-24">
-                      <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                      <AvatarFallback>{user.name.substring(0, 2)}</AvatarFallback>
+                      <AvatarImage src={user.avatar} />
+                      <AvatarFallback><UserRound className="h-6 w-6" /></AvatarFallback>
                     </Avatar>
                     <Button
                       size="icon"
                       variant="secondary"
                       className="absolute bottom-0 right-0 h-8 w-8 rounded-full border-2 border-background"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={isUploadingAvatar}
                     >
                       <Camera className="h-3.5 w-3.5" />
                     </Button>
@@ -83,12 +254,17 @@ export default function UserSettingsPage() {
                     <p className="font-medium">{user.name}</p>
                     <p className="text-sm text-muted-foreground">{user.email}</p>
                     <div className="mt-2 flex gap-2">
-                      <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                        Upload New Photo
+                      <Button
+                        size="sm"
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={isUploadingAvatar}
+                      >
+                        {isUploadingAvatar ? (
+                          <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Uploading…</>
+                        ) : "Upload New Photo"}
                       </Button>
-                      <Button size="sm" variant="outline">
-                        Remove
-                      </Button>
+                      <Button size="sm" variant="outline">Remove</Button>
                     </div>
                   </div>
                 </div>
@@ -106,32 +282,110 @@ export default function UserSettingsPage() {
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" defaultValue="Sarah" />
+                    <Input
+                      id="firstName"
+                      value={firstname}
+                      onChange={(e) => setFirstname(e.target.value)}
+                      placeholder="First name"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" defaultValue="Williams" />
+                    <Input
+                      id="lastName"
+                      value={lastname}
+                      onChange={(e) => setLastname(e.target.value)}
+                      placeholder="Last name"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input id="email" className="pl-10" defaultValue={user.email} />
+                      <Lock className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                      <Input
+                        id="email"
+                        className="cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground"
+                        value={email}
+                        readOnly
+                      />
                     </div>
+                    <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone Number</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input id="phone" className="pl-10" defaultValue="+1 234 567 890" />
+                      <Input
+                        id="phone"
+                        className="pl-10"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="Phone number"
+                      />
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nationalId">National Identification</Label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      {user.nationalId && (
+                        <Lock className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                      )}
+                      <Input
+                        id="nationalId"
+                        className={user.nationalId ? "cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground" : "pl-10"}
+                        value={nationalId}
+                        onChange={user.nationalId ? undefined : (e) => setNationalId(e.target.value)}
+                        readOnly={!!user.nationalId}
+                        placeholder="Enter your national ID number"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {user.nationalId
+                        ? "National ID cannot be changed once set."
+                        : "This can only be set once and cannot be changed afterwards."}
+                    </p>
+                  </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="address">Address</Label>
+                    <Label htmlFor="street">Street</Label>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input id="address" className="pl-10" defaultValue="123 Main Street, Springfield" />
+                      <Input
+                        id="street"
+                        className="pl-10"
+                        value={street}
+                        onChange={(e) => setStreet(e.target.value)}
+                        placeholder="Street address"
+                      />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City</Label>
+                    <Input
+                      id="city"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="City"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="country">Country</Label>
+                    <Input
+                      id="country"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      placeholder="Country"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="zipCode">Zip Code</Label>
+                    <Input
+                      id="zipCode"
+                      value={zipCode}
+                      onChange={(e) => setZipCode(e.target.value)}
+                      placeholder="Zip / Postal code"
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -149,7 +403,7 @@ export default function UserSettingsPage() {
                   <div>
                     <p className="font-medium">Auto-Confirm Bookings</p>
                     <p className="text-sm text-muted-foreground">
-                      Automatically confirm bookings when a artisan accepts
+                      Automatically confirm bookings when an artisan accepts
                     </p>
                   </div>
                   <Switch defaultChecked />
@@ -176,7 +430,12 @@ export default function UserSettingsPage() {
             </Card>
 
             <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Button
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                onClick={handleSaveProfile}
+                disabled={isSaving}
+              >
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save Changes
               </Button>
             </div>
@@ -184,78 +443,86 @@ export default function UserSettingsPage() {
 
           {/* Notifications */}
           <TabsContent value="notifications" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Bell className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Notification Preferences</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Choose which notifications you want to receive
-                    </p>
-                  </div>
-                </div>
+            {isLoadingNotifs ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-              <CardContent className="p-6 space-y-4">
-                {[
-                  { label: "Booking Confirmations", desc: "Get notified when a artisan confirms your booking", on: true },
-                  { label: "Job Status Updates", desc: "Receive updates when your job status changes", on: true },
-                  { label: "Artisan En Route", desc: "Get alerted when a artisan is on their way", on: true },
-                  { label: "Payment Receipts", desc: "Receive email receipts for completed payments", on: true },
-                  { label: "Promotional Offers", desc: "Get notified about discounts and special offers", on: false },
-                  { label: "Service Reminders", desc: "Reminders for upcoming scheduled services", on: true },
-                  { label: "Review Requests", desc: "Get prompted to review artisans after service completion", on: false },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+            ) : (
+              <>
+                <Card>
+                  <div className="border-b p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg bg-muted p-2">
+                        <Bell className="h-5 w-5 text-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Notification Preferences</h3>
+                        <p className="text-sm text-muted-foreground">Choose which notifications you want to receive</p>
+                      </div>
                     </div>
-                    <Switch defaultChecked={item.on} />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                  <CardContent className="p-6 space-y-4">
+                    {([
+                      { key: "bookingConfirmations", label: "Booking Confirmations",  desc: "Get notified when an artisan applies to your job" },
+                      { key: "jobStatusUpdates",     label: "Job Status Updates",      desc: "Receive updates when your job status changes" },
+                      { key: "paymentReceipts",      label: "Payment Receipts",        desc: "Receive receipts for completed payments" },
+                      { key: "promotionalOffers",    label: "Promotional Offers",      desc: "Get notified about discounts and special offers" },
+                      { key: "serviceReminders",     label: "Service Reminders",       desc: "Reminders for upcoming scheduled services" },
+                      { key: "reviewRequests",       label: "Review Requests",         desc: "Get prompted to review artisans after service completion" },
+                      { key: "jobExpired",           label: "Job Expired",             desc: "Get notified when your job posting expires without being filled" },
+                      { key: "messageReceived",      label: "New Messages",            desc: "Get notified when you receive a direct message" },
+                    ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key] ?? true}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <div className="border-b p-6">
-                <h3 className="font-semibold">Notification Channels</h3>
-                <p className="text-sm text-muted-foreground">
-                  Choose how you receive notifications
-                </p>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Email Notifications</p>
-                    <p className="text-sm text-muted-foreground">Receive notifications via email</p>
+                <Card>
+                  <div className="border-b p-6">
+                    <h3 className="font-semibold">Notification Channels</h3>
+                    <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
                   </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">SMS Notifications</p>
-                    <p className="text-sm text-muted-foreground">Receive notifications via text message</p>
-                  </div>
-                  <Switch />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Push Notifications</p>
-                    <p className="text-sm text-muted-foreground">Receive browser push notifications</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
+                  <CardContent className="p-6 space-y-4">
+                    {([
+                      { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
+                      { key: "smsEnabled",   label: "SMS Notifications",   desc: "Receive notifications via text message" },
+                      { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
+                    ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key] ?? (key === "emailEnabled" || key === "pushEnabled")}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
 
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Notifications
-              </Button>
-            </div>
+                <div className="flex justify-end">
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={handleSaveNotifications}
+                    disabled={isSavingNotifs}
+                  >
+                    {isSavingNotifs && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Notifications
+                  </Button>
+                </div>
+              </>
+            )}
           </TabsContent>
 
           {/* Security */}
@@ -268,9 +535,7 @@ export default function UserSettingsPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold">Change Password</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Update your account password
-                    </p>
+                    <p className="text-sm text-muted-foreground">Update your account password</p>
                   </div>
                 </div>
               </div>
@@ -278,17 +543,40 @@ export default function UserSettingsPage() {
                 <div className="max-w-md space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="currentPass">Current Password</Label>
-                    <Input id="currentPass" type="password" placeholder="Enter current password" />
+                    <Input
+                      id="currentPass"
+                      type="password"
+                      placeholder="Enter current password"
+                      value={currentPass}
+                      onChange={(e) => setCurrentPass(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="newPass">New Password</Label>
-                    <Input id="newPass" type="password" placeholder="Enter new password" />
+                    <Input
+                      id="newPass"
+                      type="password"
+                      placeholder="Enter new password"
+                      value={newPass}
+                      onChange={(e) => setNewPass(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirmPass">Confirm New Password</Label>
-                    <Input id="confirmPass" type="password" placeholder="Confirm new password" />
+                    <Input
+                      id="confirmPass"
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={confirmPass}
+                      onChange={(e) => setConfirmPass(e.target.value)}
+                    />
                   </div>
-                  <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={handleUpdatePassword}
+                    disabled={isUpdatingPass || !currentPass || !newPass || !confirmPass}
+                  >
+                    {isUpdatingPass && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Update Password
                   </Button>
                 </div>
@@ -298,39 +586,33 @@ export default function UserSettingsPage() {
             <Card>
               <div className="border-b p-6">
                 <h3 className="font-semibold">Two-Factor Authentication</h3>
-                <p className="text-sm text-muted-foreground">
-                  Add an extra layer of security to your account
-                </p>
+                <p className="text-sm text-muted-foreground">Add an extra layer of security to your account</p>
               </div>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div>
                     <p className="font-medium">Enable 2FA</p>
-                    <p className="text-sm text-muted-foreground">
-                      Use an authenticator app for additional security
-                    </p>
+                    <p className="text-sm text-muted-foreground">Use an authenticator app for additional security</p>
                   </div>
                   <Switch />
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border-red-200">
-              <div className="border-b border-red-200 p-6">
+            <Card className="border-destructive/30">
+              <div className="border-b border-destructive/30 p-6">
                 <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-red-50 p-2">
-                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                  <div className="rounded-lg bg-destructive/10 p-2">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-red-700">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Irreversible account actions
-                    </p>
+                    <h3 className="font-semibold text-destructive">Danger Zone</h3>
+                    <p className="text-sm text-muted-foreground">Irreversible account actions</p>
                   </div>
                 </div>
               </div>
               <CardContent className="p-6">
-                <div className="flex items-center justify-between rounded-lg border border-red-100 p-4">
+                <div className="flex items-center justify-between rounded-lg border border-destructive/20 p-4">
                   <div>
                     <p className="font-medium">Delete Account</p>
                     <p className="text-sm text-muted-foreground">

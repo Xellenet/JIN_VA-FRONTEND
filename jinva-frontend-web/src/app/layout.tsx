@@ -1,19 +1,15 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { GeistSans } from "geist/font/sans"
+import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
-// <CHANGE> Added Toaster for toast notifications
 import { Toaster } from "sonner"
-
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+import { ThemeProvider } from "@/components/theme-provider"
 
 export const metadata: Metadata = {
-  // <CHANGE> Updated metadata for auth system
   title: "JinVa",
   description: "Application for managing hard skills and services",
-  // generator: "v0.app",
   icons: {
     icon: "/icon.svg",
     apple: "/apple-icon.png",
@@ -26,11 +22,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="light">
-      <body className={`font-sans antialiased`}>
-        {children}
-        <Toaster />
-        <Analytics />
+    <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className="font-sans antialiased">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          {children}
+          <Toaster />
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   )

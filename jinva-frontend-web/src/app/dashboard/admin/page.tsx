@@ -5,27 +5,21 @@ import { RecentActivities } from "@/components/dashboard/admin/recent-activities
 import { TopArtisans } from "@/components/dashboard/admin/top-artisans"
 import { OngoingJobs } from "@/components/dashboard/admin/ongoing-jobs"
 import { Users, Clock, CheckCircle2, XCircle } from "lucide-react"
-import { mockUsers, mockActivities, mockArtisans, mockOrders } from "@/lib/data/mock-data"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { mockActivities, mockArtisans, mockOrders } from "@/lib/data/mock-data"
 
 export default function AdminDashboard() {
-  const user = mockUsers[0]
-
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
-        {/* Welcome Header */}
-        <div className="flex flex-col items-start gap-3 rounded-lg bg-card p-4 sm:flex-row sm:items-center sm:p-6">
-          <Avatar className="h-12 w-12">
-            <AvatarImage src="/placeholder.svg" />
-            <AvatarFallback>AD</AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="text-xl font-bold sm:text-2xl text-balance">Welcome to PlumHub</h1>
-            <p className="text-sm text-muted-foreground sm:text-base">
-              Manage your clients, orders, services, and products all in one place.
-            </p>
-          </div>
+        {/* Page header */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Admin Dashboard
+          </p>
+          <h1 className="mt-0.5 text-2xl font-bold text-foreground">Platform Overview</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage clients, artisans, orders, and platform health in one place.
+          </p>
         </div>
 
         {/* Stats Grid */}

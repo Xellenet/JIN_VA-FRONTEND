@@ -5,13 +5,11 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Search, ChevronDown, Plus, MoreVertical, Pencil, Trash2, Eye } from "lucide-react"
-import { mockUsers, mockServices } from "@/lib/data/mock-data"
+import { mockServices } from "@/lib/data/mock-data"
 
 export default function ServicesPage() {
-  const user = mockUsers[0]
-
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
         <Card>
           <CardHeader>

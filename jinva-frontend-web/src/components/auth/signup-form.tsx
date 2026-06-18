@@ -95,8 +95,8 @@ export function SignupForm() {
       return
     }
 
-    if (!formData.role || !["CUSTOMER", "STYLIST"].includes(formData.role)) {
-      toast.error("Role must be either CUSTOMER or STYLIST")
+    if (!formData.role || !["CUSTOMER", "ARTISAN"].includes(formData.role)) {
+      toast.error("Role must be either CUSTOMER or ARTISAN")
       return
     }
 
@@ -284,7 +284,7 @@ export function SignupForm() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="CUSTOMER">Customer</SelectItem>
-                  <SelectItem value="STYLIST">Stylist</SelectItem>
+                  <SelectItem value="ARTISAN">Artisan</SelectItem>
                   {/* <SelectItem value="ADMIN">Admin</SelectItem> */}
                 </SelectContent>
               </Select>

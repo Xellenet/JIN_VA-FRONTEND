@@ -1,8 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Star, ChevronRight } from "lucide-react"
+import { Star, ChevronRight, UserRound } from "lucide-react"
 import type { ArtisanProfile } from "@/lib/types"
+import { naviiAvatar } from "@/lib/utils"
 
 interface TopArtisansProps {
   artisans: ArtisanProfile[]
@@ -25,8 +26,8 @@ export function TopArtisans({ artisans }: TopArtisansProps) {
             <div key={artisan.id} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10">
-                  <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
-                  <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
+                  <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                  <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                 </Avatar>
                 <div>
                   <p className="font-medium text-sm">{artisan.name}</p>

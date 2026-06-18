@@ -1,7 +1,6 @@
 "use client"
 
-import React from "react"
-import { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,106 +21,118 @@ import {
   Bell,
   Check,
   CheckCheck,
-  Trash2,
-  ArrowLeft,
+  Loader2,
 } from "lucide-react"
-import { mockNotifications } from "@/lib/data/mock-data"
-import type { User, Notification } from "@/lib/types"
+import type { Notification } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
+import { apiFetch } from "@/lib/api"
 
-interface NotificationsPageProps {
-  user: User
+interface BackendNotification {
+  id: string
+  type: string
+  title: string
+  body: string
+  isRead: boolean
+  payload?: unknown
+  createdAt: string
+}
+
+function mapNotificationType(type: string): Notification["type"] {
+  const t = type.toUpperCase()
+  if (t.includes("PAYMENT") || t.includes("REFUND")) return "payment"
+  if (t.includes("REVIEW")) return "review"
+  if (t.includes("MESSAGE")) return "message"
+  if (t.includes("BOOKING")) return "booking"
+  if (t.includes("JOB") || t.includes("ASSIGN")) return "assignment"
+  return "system"
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso)
+  const diff = Date.now() - d.getTime()
+  if (diff < 60_000) return "just now"
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
+
+function mapNotification(n: BackendNotification): Notification {
+  return {
+    id: n.id,
+    title: n.title,
+    message: n.body,
+    type: mapNotificationType(n.type),
+    isRead: n.isRead,
+    time: formatTime(n.createdAt),
+  }
 }
 
 const typeConfig: Record<
   Notification["type"],
   { icon: React.ElementType; color: string; bg: string; label: string }
 > = {
-  booking: { icon: Calendar, color: "text-foreground", bg: "bg-muted", label: "Booking" },
-  payment: { icon: CreditCard, color: "text-green-600", bg: "bg-green-100", label: "Payment" },
-  review: { icon: Star, color: "text-yellow-600", bg: "bg-yellow-100", label: "Review" },
-  assignment: { icon: Briefcase, color: "text-blue-600", bg: "bg-blue-100", label: "Assignment" },
-  message: { icon: MessageSquare, color: "text-violet-600", bg: "bg-violet-100", label: "Message" },
-  system: { icon: Settings, color: "text-muted-foreground", bg: "bg-muted", label: "System" },
+  booking:    { icon: Calendar,       color: "text-foreground",       bg: "bg-muted",       label: "Booking" },
+  payment:    { icon: CreditCard,     color: "text-primary",          bg: "bg-primary/10",  label: "Payment" },
+  review:     { icon: Star,           color: "text-yellow-600",       bg: "bg-yellow-100",  label: "Review" },
+  assignment: { icon: Briefcase,      color: "text-blue-600",         bg: "bg-blue-100",    label: "Assignment" },
+  message:    { icon: MessageSquare,  color: "text-violet-600",       bg: "bg-violet-100",  label: "Message" },
+  system:     { icon: Settings,       color: "text-muted-foreground", bg: "bg-muted",       label: "System" },
 }
 
-const notificationDetails: Record<string, { description: string; action?: string }> = {
-  n1: {
-    description: "Devon Lane has submitted a new booking request for Emergency Leak Repair service. The service is scheduled for the earliest available time slot. Please review the booking details and confirm availability.",
-    action: "View Booking",
-  },
-  n2: {
-    description: "A payment of $120.00 has been successfully received for order #o1 (Emergency Leak Repair). The funds have been processed and will be available in your account within 1-2 business days.",
-    action: "View Payment",
-  },
-  n3: {
-    description: "Kristin Watson has left a 5-star review on your profile after the completed Pipe Installation service. The review highlights your professionalism and quality of work.",
-    action: "View Review",
-  },
-  n4: {
-    description: "You have been assigned to a new Pipe Installation job for Jane Cooper at 456 Maple Ave, Shelbyville. The job is scheduled and all details have been added to your calendar.",
-    action: "View Assignment",
-  },
-  n5: {
-    description: "Jacob Jones sent you a message regarding a re-piping project for his basement. He is looking for a quote and availability for the next two weeks.",
-    action: "View Message",
-  },
-  n6: {
-    description: "Your booking for Water Heater Maintenance has been confirmed and scheduled. The artisan has been notified and will arrive at the scheduled time.",
-    action: "View Booking",
-  },
-  n7: {
-    description: "The Plumbify platform will undergo scheduled maintenance on February 15th from 2:00 AM to 4:00 AM EST. During this time, some features may be temporarily unavailable. We apologize for any inconvenience.",
-  },
-  n8: {
-    description: "A refund of $90.00 has been processed for order #o3 (Water Heater Maintenance) due to the cancelled booking. The refund will appear on your original payment method within 5-10 business days.",
-    action: "View Payment",
-  },
-  n9: {
-    description: "Robert Fox has marked the Emergency Leak Repair job as completed. The work included replacing corroded joints and re-sealing all connections. You can now leave a review for the service.",
-    action: "Leave Review",
-  },
-  n10: {
-    description: "Wade Warren has left a 4-star review on your profile after the completed Bathroom Fixture Installation service. Check your reviews section for the full feedback.",
-    action: "View Review",
-  },
-}
-
-export function NotificationsPage({ user }: NotificationsPageProps) {
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications)
+export function NotificationsPage() {
+  const { user } = useAuth()
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<"all" | "unread">("all")
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
+
+  useEffect(() => {
+    apiFetch<BackendNotification[] | { items: BackendNotification[] }>("/notifications?page=1&limit=50")
+      .then((r) => {
+        const items = Array.isArray(r) ? r : (r as { items: BackendNotification[] }).items ?? []
+        setNotifications(items.map(mapNotification))
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  if (!user) return null
 
   const unreadCount = notifications.filter((n) => !n.isRead).length
   const displayed = filter === "unread" ? notifications.filter((n) => !n.isRead) : notifications
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+  const markAllRead = async () => {
+    try {
+      await apiFetch("/notifications/read-all", { method: "PATCH" })
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+    } catch {
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+    }
   }
 
-  const markRead = (id: string) => {
+  const markRead = async (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
-  }
-
-  const deleteNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id))
-    if (selectedNotification?.id === id) {
-      setSelectedNotification(null)
+    try {
+      await apiFetch(`/notifications/${id}/read`, { method: "PATCH" })
+    } catch {
+      // optimistic update already applied
     }
   }
 
   const handleNotificationClick = (notification: Notification) => {
-    markRead(notification.id)
+    if (!notification.isRead) markRead(notification.id)
     setSelectedNotification(notification)
   }
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Notifications</p>
+            <h1 className="mt-0.5 text-2xl font-bold text-foreground">Activity Feed</h1>
             <p className="text-sm text-muted-foreground">
               {unreadCount > 0
                 ? `You have ${unreadCount} unread notification${unreadCount > 1 ? "s" : ""}`
@@ -154,10 +165,13 @@ export function NotificationsPage({ user }: NotificationsPageProps) {
           </div>
         </div>
 
-        {/* Notification List */}
         <Card>
           <CardContent className="p-0">
-            {displayed.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : displayed.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
                   <Bell className="h-6 w-6 text-muted-foreground/50" />
@@ -166,7 +180,9 @@ export function NotificationsPage({ user }: NotificationsPageProps) {
                   {filter === "unread" ? "No unread notifications" : "No notifications"}
                 </h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {filter === "unread" ? "All caught up. Switch to All to see past notifications." : "Notifications about your activity will appear here."}
+                  {filter === "unread"
+                    ? "All caught up. Switch to All to see past notifications."
+                    : "Notifications about your activity will appear here."}
                 </p>
               </div>
             ) : (
@@ -202,7 +218,7 @@ export function NotificationsPage({ user }: NotificationsPageProps) {
                         <div className="mt-2 flex items-center gap-3">
                           <span className="text-xs text-muted-foreground">{notification.time}</span>
                           <Badge variant="outline" className="text-[10px] capitalize">
-                            {notification.type}
+                            {config.label}
                           </Badge>
                         </div>
                       </div>
@@ -220,17 +236,6 @@ export function NotificationsPage({ user }: NotificationsPageProps) {
                             <Check className="h-4 w-4" />
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            deleteNotification(notification.id)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
                     </button>
                   )
@@ -241,13 +246,11 @@ export function NotificationsPage({ user }: NotificationsPageProps) {
         </Card>
       </div>
 
-      {/* Notification Detail Dialog */}
       <Dialog open={!!selectedNotification} onOpenChange={(open) => !open && setSelectedNotification(null)}>
         <DialogContent className="sm:max-w-md">
           {selectedNotification && (() => {
             const config = typeConfig[selectedNotification.type]
             const Icon = config.icon
-            const details = notificationDetails[selectedNotification.id]
             return (
               <>
                 <DialogHeader>
@@ -258,26 +261,16 @@ export function NotificationsPage({ user }: NotificationsPageProps) {
                     <div>
                       <DialogTitle className="text-left">{selectedNotification.title}</DialogTitle>
                       <div className="mt-1 flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px] capitalize">
-                          {config.label}
-                        </Badge>
+                        <Badge variant="outline" className="text-[10px] capitalize">{config.label}</Badge>
                         <span className="text-xs text-muted-foreground">{selectedNotification.time}</span>
                       </div>
                     </div>
                   </div>
                 </DialogHeader>
-                <div className="space-y-4 py-2">
-                  <div className="rounded-lg border border-border bg-muted/30 p-4">
-                    <p className="text-sm leading-relaxed text-foreground">
-                      {details?.description || selectedNotification.message}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs font-medium text-muted-foreground">Summary</p>
-                    <p className="mt-1 text-sm text-foreground">{selectedNotification.message}</p>
-                  </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <p className="text-sm leading-relaxed text-foreground">{selectedNotification.message}</p>
                 </div>
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end">
                   <Button variant="outline" className="bg-transparent" onClick={() => setSelectedNotification(null)}>
                     Close
                   </Button>

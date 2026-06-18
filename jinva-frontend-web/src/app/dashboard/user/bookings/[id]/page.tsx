@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -21,9 +21,7 @@ import {
 import {
   ArrowLeft,
   Calendar,
-  Clock,
   MapPin,
-  CreditCard,
   User,
   Wrench,
   Phone,
@@ -31,48 +29,185 @@ import {
   MessageSquare,
   Star,
   FileText,
+  Loader2,
+  UserRound,
+  Users,
+  CheckCircle,
+  DollarSign,
 } from "lucide-react"
-import { mockOrders, mockArtisans } from "@/lib/data/mock-data"
+import { apiFetch } from "@/lib/api"
+import { naviiAvatar, cn } from "@/lib/utils"
+import { toast } from "sonner"
+
+interface BackendJob {
+  id: string
+  title: string
+  description?: string
+  location?: string
+  status: string
+  createdAt: string
+  customer?: { id: string; firstname: string; lastname: string; email?: string; phoneNumber?: string; profilePicture?: string }
+  acceptedArtisan?: { id: string; firstname: string; lastname: string; email?: string; phoneNumber?: string; profilePicture?: string }
+  service?: { id: string; name: string; price?: number }
+}
+
+interface BackendApplication {
+  id: number
+  status: "PENDING" | "ACCEPTED" | "REJECTED"
+  quotePrice?: number
+  message?: string
+  createdAt: string
+  artisan: {
+    id: number
+    firstname: string
+    lastname: string
+    profilePicture?: string
+    phoneNumber?: string
+    email?: string
+  }
+}
+
+const statusConfig: Record<string, { label: string; className: string }> = {
+  IN_PROGRESS: { label: "In Progress", className: "border-border bg-muted text-muted-foreground" },
+  COMPLETED:   { label: "Completed",   className: "border-primary/20 bg-primary/10 text-primary" },
+  CANCELLED:   { label: "Cancelled",   className: "border-destructive/20 bg-destructive/10 text-destructive" },
+  PENDING:     { label: "Pending",     className: "border-border bg-muted text-muted-foreground" },
+  OPEN:        { label: "Open",        className: "border-primary/15 bg-primary/5 text-primary" },
+  EXPIRED:     { label: "Expired",     className: "border-border bg-muted text-muted-foreground" },
+}
+
+// The post-job form appends "\n\nPreferred date: DATE[ at TIME]" to the description.
+// Split it back out so we can display it as a dedicated field.
+function parseDescription(raw: string): { text: string; preferredDate?: string } {
+  const marker = "\n\nPreferred date: "
+  const idx = raw.indexOf(marker)
+  if (idx === -1) return { text: raw }
+  return { text: raw.substring(0, idx).trim(), preferredDate: raw.substring(idx + marker.length).trim() }
+}
+
+const appStatusConfig: Record<string, { label: string; className: string }> = {
+  PENDING:  { label: "Applied",   className: "border-border bg-muted text-muted-foreground" },
+  ACCEPTED: { label: "Accepted",  className: "border-primary/20 bg-primary/10 text-primary" },
+  REJECTED: { label: "Rejected",  className: "border-destructive/20 bg-destructive/10 text-destructive" },
+}
 
 export default function BookingDetailsPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const [job, setJob] = useState<BackendJob | null>(null)
+  const [applications, setApplications] = useState<BackendApplication[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingApps, setIsLoadingApps] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [acceptingId, setAcceptingId] = useState<number | null>(null)
 
-  const user = {
-    id: "u1",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    role: "user" as const,
-    avatar: "/placeholder.svg?height=40&width=40",
+  useEffect(() => {
+    apiFetch<BackendJob>(`/jobs/${id}`)
+      .then((j) => {
+        setJob(j)
+        // Fetch applications alongside
+        setIsLoadingApps(true)
+        apiFetch<BackendApplication[]>(`/jobs/${id}/applications`)
+          .then((r) => setApplications(Array.isArray(r) ? r : []))
+          .catch(() => {})
+          .finally(() => setIsLoadingApps(false))
+      })
+      .catch(() => toast.error("Failed to load booking details."))
+      .finally(() => setIsLoading(false))
+  }, [id])
+
+  const handleCancelBooking = async () => {
+    if (!job) return
+    setIsCancelling(true)
+    try {
+      await apiFetch(`/jobs/${job.id}/cancel`, { method: "PATCH" })
+      setJob((prev) => prev ? { ...prev, status: "CANCELLED" } : prev)
+      setShowCancelDialog(false)
+      toast.success("Booking cancelled.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to cancel.")
+    } finally {
+      setIsCancelling(false)
+    }
   }
 
-  const booking = mockOrders.find((o) => o.id === id) || mockOrders[0]
-  const artisan = mockArtisans.find((p) => p.name.includes(booking.artisanName.split(" ")[0])) || mockArtisans[0]
-
-  const statusConfig: Record<string, { label: string; className: string }> = {
-    "in-progress": { label: "In Progress", className: "border-muted bg-muted text-muted-foreground" },
-    completed: { label: "Completed", className: "border-green-200 bg-green-50 text-green-700" },
-    cancelled: { label: "Cancelled", className: "border-red-200 bg-red-50 text-red-700" },
-    pending: { label: "Pending", className: "border-yellow-200 bg-yellow-50 text-yellow-700" },
-    available: { label: "Available", className: "border-blue-200 bg-blue-50 text-blue-700" },
+  const handleAccept = async (app: BackendApplication) => {
+    if (!job) return
+    setAcceptingId(app.id)
+    try {
+      await apiFetch(`/jobs/${job.id}/applications/${app.id}/accept`, { method: "POST" })
+      // Reflect changes locally
+      setApplications((prev) =>
+        prev.map((a) => ({
+          ...a,
+          status: a.id === app.id ? "ACCEPTED" : "REJECTED",
+        }))
+      )
+      setJob((prev) => prev ? {
+        ...prev,
+        status: "PENDING",
+        acceptedArtisan: {
+          id: String(app.artisan.id),
+          firstname: app.artisan.firstname,
+          lastname: app.artisan.lastname,
+          profilePicture: app.artisan.profilePicture,
+          phoneNumber: app.artisan.phoneNumber,
+          email: app.artisan.email,
+        },
+      } : prev)
+      toast.success(`${app.artisan.firstname} has been accepted!`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to accept application.")
+    } finally {
+      setAcceptingId(null)
+    }
   }
 
-  const paymentConfig: Record<string, { label: string; className: string }> = {
-    paid: { label: "Paid", className: "border-green-200 bg-green-50 text-green-700" },
-    pending: { label: "Payment Pending", className: "border-yellow-200 bg-yellow-50 text-yellow-700" },
-    refunded: { label: "Refunded", className: "border-red-200 bg-red-50 text-red-700" },
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </DashboardLayout>
+    )
   }
 
-  const handleCancelBooking = () => {
-    setShowCancelDialog(false)
-    router.push("/dashboard/user/bookings")
+  if (!job) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <p className="text-muted-foreground">Booking not found.</p>
+          <Button variant="outline" className="mt-4" asChild>
+            <Link href="/dashboard/user/bookings">Back to Bookings</Link>
+          </Button>
+        </div>
+      </DashboardLayout>
+    )
   }
+
+  const artisanName = job.acceptedArtisan
+    ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`.trim()
+    : "Awaiting artisan"
+
+  const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
+
+  const timelineSteps = [
+    { label: "Booking Created",  done: true,                                                    time: new Date(job.createdAt).toLocaleDateString() },
+    { label: "Artisan Assigned", done: !!job.acceptedArtisan,                                   time: job.acceptedArtisan ? "Assigned" : "" },
+    { label: "Work Started",     done: job.status === "IN_PROGRESS" || job.status === "COMPLETED", time: "" },
+    { label: "Work Completed",   done: job.status === "COMPLETED",                              time: "" },
+  ]
+
+  const { text: cleanDescription, preferredDate } = parseDescription(job.description ?? "")
+
+  const pendingApps    = applications.filter((a) => a.status === "PENDING")
+  const canAccept      = job.status === "OPEN" && pendingApps.length > 0
 
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout>
       <div className="space-y-6">
-        {/* Back button */}
         <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
           <Link href="/dashboard/user/bookings">
             <ArrowLeft className="h-4 w-4" />
@@ -80,27 +215,24 @@ export default function BookingDetailsPage() {
           </Link>
         </Button>
 
-        {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Booking Details</h1>
-            <p className="text-muted-foreground">Booking #{booking.id}</p>
+            <h1 className="text-2xl font-bold text-foreground">{job.title}</h1>
+            <p className="text-muted-foreground">
+              {job.service?.name ?? "Booking"} · {new Date(job.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className={statusConfig[booking.status]?.className || ""}>
-              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-              {statusConfig[booking.status]?.label || booking.status}
-            </Badge>
-            <Badge variant="outline" className={paymentConfig[booking.paymentStatus]?.className || ""}>
-              {paymentConfig[booking.paymentStatus]?.label || booking.paymentStatus}
-            </Badge>
-          </div>
+          <Badge variant="outline" className={cfg.className}>
+            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+            {cfg.label}
+          </Badge>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main Details */}
+          {/* ── Left column ─────────────────────────────────────────────── */}
           <div className="space-y-6 lg:col-span-2">
-            {/* Service Info */}
+
+            {/* Service Information */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -111,50 +243,162 @@ export default function BookingDetailsPage() {
               <CardContent className="p-5">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Service Name</p>
-                    <p className="mt-1 font-medium text-foreground">{booking.serviceName}</p>
+                    <p className="text-xs text-muted-foreground">Job Title</p>
+                    <p className="mt-1 font-medium text-foreground">{job.title}</p>
+                  </div>
+                  {job.service && (
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-xs text-muted-foreground">Service</p>
+                      <p className="mt-1 font-medium text-foreground">{job.service.name}</p>
+                    </div>
+                  )}
+                  <div className="rounded-lg border border-border p-4">
+                    <p className="text-xs text-muted-foreground">Reference</p>
+                    <p className="mt-1 font-medium text-foreground">JB-{String(job.id).toUpperCase().slice(-6)}</p>
                   </div>
                   <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Booking ID</p>
-                    <p className="mt-1 font-medium text-foreground">#{booking.id}</p>
-                  </div>
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Order Date</p>
+                    <p className="text-xs text-muted-foreground">Created</p>
                     <div className="mt-1 flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                      <p className="font-medium text-foreground">{booking.orderDate}</p>
+                      <p className="font-medium text-foreground">
+                        {new Date(job.createdAt).toLocaleDateString()}
+                      </p>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Deadline</p>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                      <p className="font-medium text-foreground">{booking.deadline || "Not set"}</p>
+                  {preferredDate && (
+                    <div className="rounded-lg border border-border bg-primary/5 p-4 md:col-span-2">
+                      <p className="text-xs text-muted-foreground">Preferred Date &amp; Time</p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-primary" />
+                        <p className="font-medium text-foreground">{preferredDate}</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Location */}
+            {/* Location & description */}
+            {job.location && (
+              <Card>
+                <div className="border-b border-border p-5">
+                  <h3 className="flex items-center gap-2 font-semibold text-foreground">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    Service Location
+                  </h3>
+                </div>
+                <CardContent className="p-5">
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="font-medium text-foreground">{job.location}</p>
+                  </div>
+                  {cleanDescription && (
+                    <div className="mt-4 text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground">Description:</p>
+                      <p className="mt-1 leading-relaxed">{cleanDescription}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Applicants ────────────────────────────────────────────── */}
             <Card>
               <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  Service Location
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 font-semibold text-foreground">
+                    <Users className="h-4 w-4 text-primary" />
+                    Applicants
+                  </h3>
+                  {!isLoadingApps && (
+                    <Badge variant="outline" className="text-xs">
+                      {applications.length} {applications.length === 1 ? "applicant" : "applicants"}
+                    </Badge>
+                  )}
+                </div>
               </div>
-              <CardContent className="p-5">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <p className="font-medium text-foreground">123 Oak Street</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">Springfield, IL 62701</p>
-                </div>
-                <div className="mt-4 text-sm text-muted-foreground">
-                  <p className="font-medium text-foreground">Additional Notes:</p>
-                  <p className="mt-1 leading-relaxed">
-                    The leak is under the kitchen sink. Please use the side door entrance. The main water shutoff valve is in the basement.
-                  </p>
-                </div>
+              <CardContent className="p-0">
+                {isLoadingApps ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : applications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Users className="mb-3 h-8 w-8 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-foreground">No applicants yet</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Artisans will apply once your job is live
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {applications.map((app) => {
+                      const name = `${app.artisan.firstname} ${app.artisan.lastname}`.trim()
+                      const appCfg = appStatusConfig[app.status] ?? { label: app.status, className: "" }
+                      const isAccepting = acceptingId === app.id
+
+                      return (
+                        <div key={app.id} className="flex items-start gap-4 p-5">
+                          <Avatar className="h-11 w-11 shrink-0">
+                            <AvatarImage src={app.artisan.profilePicture || naviiAvatar(name)} />
+                            <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
+                          </Avatar>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-foreground">{name}</span>
+                              <Badge variant="outline" className={cn("text-[11px]", appCfg.className)}>
+                                {appCfg.label}
+                              </Badge>
+                              {app.quotePrice != null && (
+                                <span className="flex items-center gap-1 text-sm font-medium text-foreground">
+                                  <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                                  GH₵ {Number(app.quotePrice).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+
+                            {app.message && (
+                              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground line-clamp-3">
+                                {app.message}
+                              </p>
+                            )}
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Applied {new Date(app.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex shrink-0 flex-col gap-2">
+                            {canAccept && app.status === "PENDING" && (
+                              <Button
+                                size="sm"
+                                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                onClick={() => handleAccept(app)}
+                                disabled={isAccepting}
+                              >
+                                {isAccepting ? (
+                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                                )}
+                                Accept
+                              </Button>
+                            )}
+                            {app.status === "ACCEPTED" && (
+                              <Button size="sm" variant="outline" className="bg-transparent" asChild>
+                                <Link href={`/dashboard/user/messages?artisan=${app.artisan.id}`}>
+                                  <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                                  Chat
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -168,27 +412,13 @@ export default function BookingDetailsPage() {
               </div>
               <CardContent className="p-5">
                 <div className="space-y-0">
-                  {[
-                    { label: "Booking Created", time: booking.orderDate, done: true },
-                    { label: "Artisan Assigned", time: booking.orderDate, done: true },
-                    {
-                      label: "Work Started",
-                      time: booking.status !== "pending" ? booking.orderDate : "",
-                      done: booking.status === "in-progress" || booking.status === "completed",
-                    },
-                    {
-                      label: "Work Completed",
-                      time: booking.status === "completed" ? booking.deadline || "" : "",
-                      done: booking.status === "completed",
-                    },
-                  ].map((step, idx, arr) => (
+                  {timelineSteps.map((step, idx) => (
                     <div key={idx} className="flex gap-4">
                       <div className="flex flex-col items-center">
-                        <div
-                          className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                            step.done ? "bg-primary text-primary-foreground" : "border-2 border-border bg-background"
-                          }`}
-                        >
+                        <div className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-full",
+                          step.done ? "bg-primary text-primary-foreground" : "border-2 border-border bg-background",
+                        )}>
                           {step.done ? (
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -197,7 +427,7 @@ export default function BookingDetailsPage() {
                             <span className="text-xs text-muted-foreground">{idx + 1}</span>
                           )}
                         </div>
-                        {idx < arr.length - 1 && (
+                        {idx < timelineSteps.length - 1 && (
                           <div className={`h-8 w-0.5 ${step.done ? "bg-primary/50" : "bg-border"}`} />
                         )}
                       </div>
@@ -214,9 +444,8 @@ export default function BookingDetailsPage() {
             </Card>
           </div>
 
-          {/* Sidebar */}
+          {/* ── Right column ─────────────────────────────────────────────── */}
           <div className="space-y-6">
-            {/* Assigned Artisan */}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -225,99 +454,74 @@ export default function BookingDetailsPage() {
                 </h3>
               </div>
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-14 w-14">
-                    <AvatarImage src={artisan.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>{artisan.name.substring(0, 2)}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h4 className="font-semibold text-foreground">{artisan.name}</h4>
-                    <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
-                    <div className="mt-1 flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{artisan.avgRating}</span>
+                {job.acceptedArtisan ? (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-14 w-14">
+                        <AvatarImage src={job.acceptedArtisan.profilePicture || naviiAvatar(artisanName)} />
+                        <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <h4 className="font-semibold text-foreground">{artisanName}</h4>
+                        <div className="mt-1 flex items-center gap-1">
+                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm font-medium">—</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Phone className="h-3.5 w-3.5" />
-                    {artisan.phone}
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Mail className="h-3.5 w-3.5" />
-                    {artisan.email}
-                  </div>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
-                    <Link href={`/dashboard/user/artisan/${artisan.id}`}>View Profile</Link>
-                  </Button>
-                  <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
-                    <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
-                      <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                      Chat
-                    </Link>
-                  </Button>
-                </div>
+                    <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
+                      {job.acceptedArtisan.phoneNumber && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Phone className="h-3.5 w-3.5" />
+                          {job.acceptedArtisan.phoneNumber}
+                        </div>
+                      )}
+                      {job.acceptedArtisan.email && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Mail className="h-3.5 w-3.5" />
+                          {job.acceptedArtisan.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
+                        <Link href={`/dashboard/user/messages?artisan=${job.acceptedArtisan.id}`}>
+                          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                          Chat
+                        </Link>
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No artisan assigned yet. Waiting for applications.</p>
+                )}
               </CardContent>
             </Card>
 
-            {/* Payment Summary */}
-            <Card>
-              <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <CreditCard className="h-4 w-4 text-primary" />
-                  Payment Summary
-                </h3>
-              </div>
-              <CardContent className="p-5">
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Service cost</span>
-                    <span className="font-medium text-foreground">$120.00</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Service fee</span>
-                    <span className="font-medium text-foreground">$10.00</span>
-                  </div>
-                  <div className="border-t border-border pt-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground">Total</span>
-                      <span className="text-lg font-bold text-primary">$130.00</span>
-                    </div>
-                  </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className={`mt-4 w-full justify-center ${paymentConfig[booking.paymentStatus]?.className || ""}`}
-                >
-                  {paymentConfig[booking.paymentStatus]?.label || booking.paymentStatus}
-                </Badge>
-              </CardContent>
-            </Card>
-
-            {/* Actions */}
             <Card>
               <CardContent className="space-y-2 p-5">
-                {booking.status === "completed" && (
+                {job.status === "COMPLETED" && (
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                    <Link href={`/dashboard/user/review/${booking.id}`}>
+                    <Link href={`/dashboard/user/review/${job.id}`}>
                       <Star className="mr-2 h-4 w-4" />
                       Leave a Review
                     </Link>
                   </Button>
                 )}
-                {booking.status === "pending" && (
-                  <Button variant="destructive" className="w-full" onClick={() => setShowCancelDialog(true)}>
+                {job.status === "OPEN" && (
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => setShowCancelDialog(true)}
+                  >
                     Cancel Booking
                   </Button>
                 )}
-                {booking.status === "in-progress" && (
+                {job.status === "IN_PROGRESS" && job.acceptedArtisan && (
                   <Button variant="outline" className="w-full bg-transparent" asChild>
-                    <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
+                    <Link href={`/dashboard/user/messages?artisan=${job.acceptedArtisan.id}`}>
                       <MessageSquare className="mr-2 h-4 w-4" />
-                      Contact Support
+                      Contact Artisan
                     </Link>
                   </Button>
                 )}
@@ -327,21 +531,22 @@ export default function BookingDetailsPage() {
         </div>
       </div>
 
-      {/* Cancel Confirmation Dialog */}
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel booking #{booking.id} ({booking.serviceName})? This action cannot be undone and any associated payment will be refunded.
+              Are you sure you want to cancel booking for "{job.title}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>No, Keep Booking</AlertDialogCancel>
+            <AlertDialogCancel disabled={isCancelling}>No, Keep Booking</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancelBooking}
               className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={isCancelling}
             >
+              {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Yes, Cancel Booking
             </AlertDialogAction>
           </AlertDialogFooter>

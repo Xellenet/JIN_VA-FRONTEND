@@ -11,14 +11,15 @@ export default function AdminDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Welcome Header */}
-        <div className="flex flex-col items-start gap-3 rounded-lg bg-card p-4 sm:flex-row sm:items-center sm:p-6">
-          <div>
-            <h1 className="text-xl font-bold sm:text-2xl text-balance">Welcome to JinVa Admin</h1>
-            <p className="text-sm text-muted-foreground sm:text-base">
-              Manage your clients, orders, services, and products all in one place.
-            </p>
-          </div>
+        {/* Page header */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Admin Dashboard
+          </p>
+          <h1 className="mt-0.5 text-2xl font-bold text-foreground">Platform Overview</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage clients, artisans, orders, and platform health in one place.
+          </p>
         </div>
 
         {/* Stats Grid */}

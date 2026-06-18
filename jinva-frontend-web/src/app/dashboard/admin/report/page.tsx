@@ -33,8 +33,10 @@ import {
   Clock,
   XCircle,
   FileText,
+  UserRound,
 } from "lucide-react"
 import { mockOrders, mockArtisans, mockClients } from "@/lib/data/mock-data"
+import { naviiAvatar } from "@/lib/utils"
 
 const revenueData = [
   { month: "Jan", revenue: 12400, orders: 18 },

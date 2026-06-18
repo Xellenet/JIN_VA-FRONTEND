@@ -13,35 +13,40 @@ interface StatsCardProps {
 }
 
 export function StatsCard({ icon, title, value, subtitle, trend, trendLabel }: StatsCardProps) {
-  const isPositive = trend && trend > 0
-  const isNegative = trend && trend < 0
+  const isPositive = trend !== undefined && trend > 0
+  const isNegative = trend !== undefined && trend < 0
 
   return (
     <Card>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full bg-muted p-2">{icon}</div>
-            <div>
-              <p className="text-sm text-muted-foreground">{title}</p>
-            </div>
-          </div>
+      <CardContent className="p-5">
+        {/* Top row — label + icon */}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm text-muted-foreground leading-snug">{title}</p>
+          <div className="shrink-0 rounded-full bg-muted p-2">{icon}</div>
+        </div>
+
+        {/* Number */}
+        <div className="mt-3 text-3xl font-bold tracking-tight text-foreground">{value}</div>
+
+        {/* Subtitle + trend */}
+        <div className="mt-1 flex items-center gap-2">
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
           {trend !== undefined && (
-            <div
+            <span
               className={cn(
-                "flex items-center gap-1 text-sm font-medium",
-                isPositive && "text-green-600",
-                isNegative && "text-red-600",
+                "inline-flex items-center gap-0.5 text-xs font-medium",
+                isPositive && "text-primary",
+                isNegative && "text-destructive",
               )}
             >
-              {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-              {trendLabel || `${trend > 0 ? "+" : ""}${trend}`}
-            </div>
+              {isPositive ? (
+                <TrendingUp className="h-3 w-3" />
+              ) : (
+                <TrendingDown className="h-3 w-3" />
+              )}
+              {trendLabel ?? `${trend > 0 ? "+" : ""}${trend}`}
+            </span>
           )}
-        </div>
-        <div className="mt-4">
-          <div className="text-3xl font-bold">{value}</div>
-          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
       </CardContent>
     </Card>

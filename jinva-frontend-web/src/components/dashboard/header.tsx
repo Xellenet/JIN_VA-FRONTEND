@@ -85,7 +85,9 @@ export function DashboardHeader({ onMenuToggle }: Readonly<DashboardHeaderProps>
   if (user.role === "admin")   roleBase = "/dashboard/admin"
   else if (user.role === "artisan") roleBase = "/dashboard/artisan"
 
-  const profilePath = user.role === "artisan" ? `${roleBase}/profile` : `${roleBase}/settings`
+  // Artisans have a dedicated profile page; others deep-link into settings tabs
+  const profilePath  = user.role === "artisan" ? `${roleBase}/profile` : `${roleBase}/settings?tab=profile`
+  const settingsPath = `${roleBase}/settings?tab=notifications`
   const pageTitle = getPageTitle(pathname)
 
   return (
@@ -164,7 +166,7 @@ export function DashboardHeader({ onMenuToggle }: Readonly<DashboardHeaderProps>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href={`${roleBase}/settings`} className="flex items-center gap-2">
+              <Link href={settingsPath} className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
                 Settings
               </Link>

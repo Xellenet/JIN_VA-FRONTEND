@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -95,6 +95,41 @@ export default function ArtisanProfile() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
+  // Avatar upload
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5 MB")
+      e.target.value = ""
+      return
+    }
+    if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Only JPEG, PNG, and WebP images are supported")
+      e.target.value = ""
+      return
+    }
+
+    const formData = new FormData()
+    formData.append("avatar", file)
+
+    setIsUploadingAvatar(true)
+    try {
+      await apiFetch("/users/me/avatar", { method: "POST", body: formData })
+      await refreshUser()
+      toast.success("Profile photo updated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to upload photo")
+    } finally {
+      setIsUploadingAvatar(false)
+      e.target.value = ""
+    }
+  }
+
   // Portfolio (mock — no backend endpoint yet)
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>(mockPortfolio)
   const [activeFilter, setActiveFilter] = useState("all")
@@ -182,6 +217,13 @@ export default function ArtisanProfile() {
           <CardContent className="relative px-6 pb-6">
             <div className="flex flex-col items-start gap-6 md:flex-row md:items-end">
               <div className="relative -mt-16">
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                />
                 <Avatar className="h-28 w-28 border-4 border-background shadow-lg">
                   <AvatarImage src={user.avatar} />
                   <AvatarFallback><UserRound className="h-10 w-10" /></AvatarFallback>
@@ -189,8 +231,14 @@ export default function ArtisanProfile() {
                 <Button
                   size="icon"
                   className="absolute bottom-1 right-1 h-8 w-8 rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
                 >
-                  <Camera className="h-4 w-4" />
+                  {isUploadingAvatar ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
 

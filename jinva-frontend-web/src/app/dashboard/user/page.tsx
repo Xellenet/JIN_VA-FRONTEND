@@ -48,20 +48,7 @@ export default function UserDashboard() {
       .finally(() => setIsLoading(false))
   }, [])
 
-  if (!user) return null
-
-  const open      = jobs.filter((j) => j.status === "OPEN").length
-  const inProgress = jobs.filter((j) => j.status === "IN_PROGRESS" || j.status === "PENDING").length
-  const completed = jobs.filter((j) => j.status === "COMPLETED").length
-  const cancelled = jobs.filter((j) => j.status === "CANCELLED").length
-
-  const stats: { label: FilterKey; value: number; icon: React.ElementType; iconBg: string; iconColor: string }[] = [
-    { label: "Open",        value: open,       icon: Clock,        iconBg: "bg-primary/10",     iconColor: "text-primary"     },
-    { label: "In Progress", value: inProgress, icon: TrendingUp,   iconBg: "bg-muted",          iconColor: "text-foreground"  },
-    { label: "Completed",   value: completed,  icon: CheckCircle,  iconBg: "bg-primary/20",     iconColor: "text-primary"     },
-    { label: "Cancelled",   value: cancelled,  icon: XCircle,      iconBg: "bg-destructive/10", iconColor: "text-destructive" },
-  ]
-
+  // useMemo must be before any early return to keep hook order stable across renders
   const displayedJobs = useMemo(() => {
     if (activeFilter === "Open")        return jobs.filter((j) => j.status === "OPEN")
     if (activeFilter === "In Progress") return jobs.filter((j) => j.status === "IN_PROGRESS" || j.status === "PENDING")
@@ -69,6 +56,20 @@ export default function UserDashboard() {
     if (activeFilter === "Cancelled")   return jobs.filter((j) => j.status === "CANCELLED")
     return jobs.slice(0, 4)
   }, [jobs, activeFilter])
+
+  if (!user) return null
+
+  const open       = jobs.filter((j) => j.status === "OPEN").length
+  const inProgress = jobs.filter((j) => j.status === "IN_PROGRESS" || j.status === "PENDING").length
+  const completed  = jobs.filter((j) => j.status === "COMPLETED").length
+  const cancelled  = jobs.filter((j) => j.status === "CANCELLED").length
+
+  const stats: { label: FilterKey; value: number; icon: React.ElementType; iconBg: string; iconColor: string }[] = [
+    { label: "Open",        value: open,       icon: Clock,        iconBg: "bg-primary/10",     iconColor: "text-primary"     },
+    { label: "In Progress", value: inProgress, icon: TrendingUp,   iconBg: "bg-muted",          iconColor: "text-foreground"  },
+    { label: "Completed",   value: completed,  icon: CheckCircle,  iconBg: "bg-primary/20",     iconColor: "text-primary"     },
+    { label: "Cancelled",   value: cancelled,  icon: XCircle,      iconBg: "bg-destructive/10", iconColor: "text-destructive" },
+  ]
 
   const handleStatClick = (label: FilterKey) => {
     setActiveFilter((prev) => (prev === label ? null : label))

@@ -45,8 +45,9 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
   const { skipAuth, ...init } = options
   const token = skipAuth ? null : readCookie(ACCESS_TOKEN_COOKIE)
 
+  const isFormData = init.body instanceof FormData
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(init.headers as Record<string, string> | undefined),
   }
   if (token) headers["Authorization"] = `Bearer ${token}`

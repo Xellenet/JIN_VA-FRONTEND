@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,9 @@ import { toast } from "sonner"
 
 export default function UserSettingsPage() {
   const { user, refreshUser } = useAuth()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const activeTab = searchParams.get("tab") ?? "profile"
 
   const [firstname, setFirstname] = useState("")
   const [lastname, setLastname] = useState("")
@@ -46,6 +50,78 @@ export default function UserSettingsPage() {
   const [newPass, setNewPass] = useState("")
   const [confirmPass, setConfirmPass] = useState("")
   const [isUpdatingPass, setIsUpdatingPass] = useState(false)
+
+  // ── Avatar upload ────────────────────────────────────────────────────────
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5 MB")
+      e.target.value = ""
+      return
+    }
+    if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Only JPEG, PNG, and WebP images are supported")
+      e.target.value = ""
+      return
+    }
+
+    const formData = new FormData()
+    formData.append("avatar", file)
+
+    setIsUploadingAvatar(true)
+    try {
+      await apiFetch("/users/me/avatar", { method: "POST", body: formData })
+      await refreshUser()
+      toast.success("Profile photo updated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to upload photo")
+    } finally {
+      setIsUploadingAvatar(false)
+      e.target.value = ""
+    }
+  }
+
+  // ── Notification preferences ────────────────────────────────────────────
+  interface CustomerNotifPrefs {
+    bookingConfirmations: boolean; jobStatusUpdates: boolean; paymentReceipts: boolean
+    promotionalOffers: boolean; serviceReminders: boolean; reviewRequests: boolean
+    jobExpired: boolean; messageReceived: boolean
+    emailEnabled: boolean; smsEnabled: boolean; pushEnabled: boolean
+  }
+  const [notifPrefs, setNotifPrefs] = useState<Partial<CustomerNotifPrefs>>({})
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState(false)
+  const [isSavingNotifs, setIsSavingNotifs] = useState(false)
+
+  useEffect(() => {
+    setIsLoadingNotifs(true)
+    apiFetch<CustomerNotifPrefs>("/notifications/preferences")
+      .then(setNotifPrefs)
+      .catch(() => {})
+      .finally(() => setIsLoadingNotifs(false))
+  }, [])
+
+  const toggleNotif = (key: keyof CustomerNotifPrefs, val: boolean) =>
+    setNotifPrefs((p) => ({ ...p, [key]: val }))
+
+  const handleSaveNotifications = async () => {
+    setIsSavingNotifs(true)
+    try {
+      await apiFetch("/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(notifPrefs),
+      })
+      toast.success("Notification preferences saved.")
+    } catch {
+      toast.error("Failed to save notification preferences.")
+    } finally {
+      setIsSavingNotifs(false)
+    }
+  }
 
   useEffect(() => {
     if (!user) return
@@ -121,7 +197,11 @@ export default function UserSettingsPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="profile" className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(tab) => router.replace(`?tab=${tab}`, { scroll: false })}
+          className="space-y-6"
+        >
           <TabsList className="bg-muted">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
@@ -148,6 +228,13 @@ export default function UserSettingsPage() {
               </div>
               <CardContent className="p-6">
                 <div className="flex items-center gap-6">
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                  />
                   <div className="relative">
                     <Avatar className="h-24 w-24">
                       <AvatarImage src={user.avatar} />
@@ -157,6 +244,8 @@ export default function UserSettingsPage() {
                       size="icon"
                       variant="secondary"
                       className="absolute bottom-0 right-0 h-8 w-8 rounded-full border-2 border-background"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={isUploadingAvatar}
                     >
                       <Camera className="h-3.5 w-3.5" />
                     </Button>
@@ -165,8 +254,15 @@ export default function UserSettingsPage() {
                     <p className="font-medium">{user.name}</p>
                     <p className="text-sm text-muted-foreground">{user.email}</p>
                     <div className="mt-2 flex gap-2">
-                      <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                        Upload New Photo
+                      <Button
+                        size="sm"
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={isUploadingAvatar}
+                      >
+                        {isUploadingAvatar ? (
+                          <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Uploading…</>
+                        ) : "Upload New Photo"}
                       </Button>
                       <Button size="sm" variant="outline">Remove</Button>
                     </div>
@@ -347,68 +443,86 @@ export default function UserSettingsPage() {
 
           {/* Notifications */}
           <TabsContent value="notifications" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Bell className="h-5 w-5 text-foreground" />
+            {isLoadingNotifs ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                <Card>
+                  <div className="border-b p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg bg-muted p-2">
+                        <Bell className="h-5 w-5 text-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Notification Preferences</h3>
+                        <p className="text-sm text-muted-foreground">Choose which notifications you want to receive</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold">Notification Preferences</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Choose which notifications you want to receive
-                    </p>
+                  <CardContent className="p-6 space-y-4">
+                    {([
+                      { key: "bookingConfirmations", label: "Booking Confirmations",  desc: "Get notified when an artisan applies to your job" },
+                      { key: "jobStatusUpdates",     label: "Job Status Updates",      desc: "Receive updates when your job status changes" },
+                      { key: "paymentReceipts",      label: "Payment Receipts",        desc: "Receive receipts for completed payments" },
+                      { key: "promotionalOffers",    label: "Promotional Offers",      desc: "Get notified about discounts and special offers" },
+                      { key: "serviceReminders",     label: "Service Reminders",       desc: "Reminders for upcoming scheduled services" },
+                      { key: "reviewRequests",       label: "Review Requests",         desc: "Get prompted to review artisans after service completion" },
+                      { key: "jobExpired",           label: "Job Expired",             desc: "Get notified when your job posting expires without being filled" },
+                      { key: "messageReceived",      label: "New Messages",            desc: "Get notified when you receive a direct message" },
+                    ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key] ?? true}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <div className="border-b p-6">
+                    <h3 className="font-semibold">Notification Channels</h3>
+                    <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
                   </div>
+                  <CardContent className="p-6 space-y-4">
+                    {([
+                      { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
+                      { key: "smsEnabled",   label: "SMS Notifications",   desc: "Receive notifications via text message" },
+                      { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
+                    ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key] ?? (key === "emailEnabled" || key === "pushEnabled")}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end">
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={handleSaveNotifications}
+                    disabled={isSavingNotifs}
+                  >
+                    {isSavingNotifs && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Notifications
+                  </Button>
                 </div>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                {[
-                  { label: "Booking Confirmations", desc: "Get notified when an artisan confirms your booking", on: true },
-                  { label: "Job Status Updates", desc: "Receive updates when your job status changes", on: true },
-                  { label: "Artisan En Route", desc: "Get alerted when an artisan is on their way", on: true },
-                  { label: "Payment Receipts", desc: "Receive email receipts for completed payments", on: true },
-                  { label: "Promotional Offers", desc: "Get notified about discounts and special offers", on: false },
-                  { label: "Service Reminders", desc: "Reminders for upcoming scheduled services", on: true },
-                  { label: "Review Requests", desc: "Get prompted to review artisans after service completion", on: false },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
-                    </div>
-                    <Switch defaultChecked={item.on} />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <div className="border-b p-6">
-                <h3 className="font-semibold">Notification Channels</h3>
-                <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                {[
-                  { label: "Email Notifications", desc: "Receive notifications via email", on: true },
-                  { label: "SMS Notifications", desc: "Receive notifications via text message", on: false },
-                  { label: "Push Notifications", desc: "Receive browser push notifications", on: true },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
-                    </div>
-                    <Switch defaultChecked={item.on} />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Notifications
-              </Button>
-            </div>
+              </>
+            )}
           </TabsContent>
 
           {/* Security */}

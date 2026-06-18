@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,9 @@ import { toast } from "sonner"
 
 export default function ArtisanSettingsPage() {
   const { user, refreshUser } = useAuth()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const activeTab = searchParams.get("tab") ?? "account"
 
   const [firstname, setFirstname] = useState("")
   const [lastname, setLastname] = useState("")
@@ -45,6 +49,44 @@ export default function ArtisanSettingsPage() {
     setPhone(user.phone ?? "")
   }, [user])
   const [isSaving, setIsSaving] = useState(false)
+
+  // ── Notification preferences ────────────────────────────────────────────
+  interface ArtisanNotifPrefs {
+    newJobOpportunities: boolean; applicationUpdates: boolean; artisanJobUpdates: boolean
+    paymentReleased: boolean; reviewsAndRatings: boolean; artisanPromotions: boolean
+    applicationRejected: boolean; appliedJobExpired: boolean; profileVerified: boolean
+    messageReceived: boolean
+    emailEnabled: boolean; smsEnabled: boolean; pushEnabled: boolean
+  }
+  const [notifPrefs, setNotifPrefs] = useState<Partial<ArtisanNotifPrefs>>({})
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState(false)
+  const [isSavingNotifs, setIsSavingNotifs] = useState(false)
+
+  useEffect(() => {
+    setIsLoadingNotifs(true)
+    apiFetch<ArtisanNotifPrefs>("/notifications/preferences")
+      .then(setNotifPrefs)
+      .catch(() => {})
+      .finally(() => setIsLoadingNotifs(false))
+  }, [])
+
+  const toggleNotif = (key: keyof ArtisanNotifPrefs, val: boolean) =>
+    setNotifPrefs((p) => ({ ...p, [key]: val }))
+
+  const handleSaveNotifications = async () => {
+    setIsSavingNotifs(true)
+    try {
+      await apiFetch("/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(notifPrefs),
+      })
+      toast.success("Notification preferences saved.")
+    } catch {
+      toast.error("Failed to save notification preferences.")
+    } finally {
+      setIsSavingNotifs(false)
+    }
+  }
 
   const [currentPass, setCurrentPass] = useState("")
   const [newPass, setNewPass] = useState("")
@@ -106,7 +148,11 @@ export default function ArtisanSettingsPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="account" className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(tab) => router.replace(`?tab=${tab}`, { scroll: false })}
+          className="space-y-6"
+        >
           <TabsList className="bg-muted">
             <TabsTrigger value="account" className="gap-2">
               <User className="h-4 w-4" />
@@ -339,42 +385,88 @@ export default function ArtisanSettingsPage() {
 
           {/* Notifications */}
           <TabsContent value="notifications" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Bell className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Notification Preferences</h3>
-                    <p className="text-sm text-muted-foreground">Choose which alerts you want to receive</p>
-                  </div>
-                </div>
+            {isLoadingNotifs ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-              <CardContent className="p-6 space-y-4">
-                {[
-                  { label: "New Job Assignments", desc: "Get notified when a new job is assigned to you", on: true },
-                  { label: "Job Status Changes", desc: "Alerts when a job status is updated", on: true },
-                  { label: "Client Messages", desc: "Notifications for new messages from clients", on: true },
-                  { label: "Payment Received", desc: "Get notified when a payment is processed", on: true },
-                  { label: "New Reviews", desc: "Alerts when a client leaves a review", on: true },
-                  { label: "Schedule Reminders", desc: "Upcoming job reminders 1 hour before start", on: true },
-                  { label: "Low Rating Alerts", desc: "Get alerted if your rating drops below 4.0", on: false },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+            ) : (
+              <>
+                <Card>
+                  <div className="border-b p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg bg-muted p-2">
+                        <Bell className="h-5 w-5 text-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Notification Preferences</h3>
+                        <p className="text-sm text-muted-foreground">Choose which alerts you want to receive</p>
+                      </div>
                     </div>
-                    <Switch defaultChecked={item.on} />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                  <CardContent className="p-6 space-y-4">
+                    {([
+                      { key: "newJobOpportunities", label: "New Job Opportunities", desc: "Get notified about new job postings matching your services" },
+                      { key: "applicationUpdates",  label: "Application Updates",   desc: "Get notified when your application is accepted" },
+                      { key: "applicationRejected", label: "Application Rejected",  desc: "Get notified when your application is not selected" },
+                      { key: "artisanJobUpdates",   label: "Job Updates",           desc: "Get notified about job cancellations and status changes" },
+                      { key: "paymentReleased",     label: "Payment Released",      desc: "Get notified when payment is released after job completion" },
+                      { key: "reviewsAndRatings",   label: "Reviews & Ratings",     desc: "Get notified when you receive a new review or rating" },
+                      { key: "artisanPromotions",   label: "Platform Promotions",   desc: "Get notified about promotions targeted at artisans" },
+                      { key: "appliedJobExpired",   label: "Applied Job Expired",   desc: "Get notified when a job you applied to has expired" },
+                      { key: "profileVerified",     label: "Profile Verified",      desc: "Get notified when your profile is verified by admin" },
+                      { key: "messageReceived",     label: "New Messages",          desc: "Get notified when you receive a direct message" },
+                    ] as { key: keyof ArtisanNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key] ?? true}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
 
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">Save Notifications</Button>
-            </div>
+                <Card>
+                  <div className="border-b p-6">
+                    <h3 className="font-semibold">Notification Channels</h3>
+                    <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
+                  </div>
+                  <CardContent className="p-6 space-y-4">
+                    {([
+                      { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
+                      { key: "smsEnabled",   label: "SMS Notifications",   desc: "Receive notifications via text message" },
+                      { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
+                    ] as { key: keyof ArtisanNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key] ?? (key === "emailEnabled" || key === "pushEnabled")}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end">
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={handleSaveNotifications}
+                    disabled={isSavingNotifs}
+                  >
+                    {isSavingNotifs && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Notifications
+                  </Button>
+                </div>
+              </>
+            )}
           </TabsContent>
 
           {/* Security */}

@@ -30,7 +30,6 @@ import { ArrowLeft, Star, Calendar, Clock, MapPin, CreditCard, CheckCircle, Load
 import { naviiAvatar } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
-import { mockArtisans } from "@/lib/data/mock-data"
 
 interface BackendService {
   id: string
@@ -39,12 +38,23 @@ interface BackendService {
   price?: number
 }
 
+interface BackendArtisan {
+  id: string
+  businessName?: string
+  averageRating: number
+  totalReviews: number
+  availabilityStatus: string
+  services?: { id: string; name: string }[]
+  user: { id: string; firstname: string; lastname: string; profilePicture?: string }
+}
+
 export default function BookArtisanPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
 
-  const artisan = mockArtisans.find((p) => p.id === id) || mockArtisans[0]
-
+  const [artisan, setArtisan] = useState<{
+    name: string; specialization: string; avatar?: string; avgRating: number; reviews: number; availability: string
+  } | null>(null)
   const [services, setServices] = useState<BackendService[]>([])
   const [selectedService, setSelectedService] = useState("")
   const [date, setDate] = useState("")
@@ -58,10 +68,27 @@ export default function BookArtisanPage() {
   const [createdJobId, setCreatedJobId] = useState<string | null>(null)
 
   useEffect(() => {
-    apiFetch<BackendService[]>("/services")
-      .then(setServices)
-      .catch(() => setServices([]))
-  }, [])
+    Promise.all([
+      apiFetch<BackendService[] | { items: BackendService[] }>("/services").then((r) =>
+        Array.isArray(r) ? r : (r as { items: BackendService[] }).items ?? []
+      ),
+      apiFetch<BackendArtisan>(`/artisans/${id}`),
+    ])
+      .then(([svcList, profile]) => {
+        setServices(svcList)
+        setArtisan({
+          name: `${profile.user.firstname} ${profile.user.lastname}`.trim(),
+          specialization: profile.businessName || profile.services?.[0]?.name || "General Service",
+          avatar: profile.user.profilePicture,
+          avgRating: Number(profile.averageRating ?? 0),
+          reviews: Number(profile.totalReviews ?? 0),
+          availability: profile.availabilityStatus === "AVAILABLE" ? "available" : "busy",
+        })
+      })
+      .catch(() => {
+        setServices([])
+      })
+  }, [id])
 
   const selectedServiceData = services.find((s) => s.id === selectedService)
   const isFormValid = selectedService && date && time && address && budgetMin && budgetMax
@@ -107,7 +134,7 @@ export default function BookArtisanPage() {
 
         <div>
           <h1 className="text-2xl font-bold text-foreground">Book a Service</h1>
-          <p className="text-muted-foreground">Fill in the details below to book {artisan.name}</p>
+          <p className="text-muted-foreground">Fill in the details below to book {artisan?.name ?? "this artisan"}</p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -243,28 +270,36 @@ export default function BookArtisanPage() {
                 <h3 className="font-semibold text-foreground">Selected Artisan</h3>
               </div>
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-16 w-16">
-                    <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
-                    <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h4 className="font-semibold text-foreground">{artisan.name}</h4>
-                    <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
-                    <div className="mt-1 flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{artisan.avgRating}</span>
-                      <span className="text-xs text-muted-foreground">({artisan.reviews} reviews)</span>
+                {artisan ? (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-16 w-16">
+                        <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                        <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <h4 className="font-semibold text-foreground">{artisan.name}</h4>
+                        <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
+                        <div className="mt-1 flex items-center gap-1">
+                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm font-medium">{artisan.avgRating.toFixed(1)}</span>
+                          <span className="text-xs text-muted-foreground">({artisan.reviews} reviews)</span>
+                        </div>
+                      </div>
                     </div>
+                    <Badge
+                      variant="outline"
+                      className={`mt-4 w-full justify-center ${artisan.availability === "available" ? "border-primary/20 bg-primary/5 text-primary" : "border-border bg-muted text-muted-foreground"}`}
+                    >
+                      <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+                      {artisan.availability === "available" ? "Available" : "Busy"}
+                    </Badge>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className={`mt-4 w-full justify-center ${artisan.availability === "available" ? "border-primary/20 bg-primary/5 text-primary" : "border-border bg-muted text-muted-foreground"}`}
-                >
-                  <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                  {artisan.availability === "available" ? "Available" : "Busy"}
-                </Badge>
+                )}
               </CardContent>
             </Card>
 

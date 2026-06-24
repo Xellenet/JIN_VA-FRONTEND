@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { StatsCard } from "@/components/dashboard/admin/stats-card"
 import { Card, CardContent } from "@/components/ui/card"
@@ -34,6 +35,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 
 export default function ArtisanDashboard() {
   const { user } = useAuth()
+  const router = useRouter()
   const [jobs, setJobs] = useState<BackendJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -84,7 +86,7 @@ export default function ArtisanDashboard() {
           <StatsCard
             icon={<Star className="h-4 w-4 text-muted-foreground" />}
             title="Average Rating"
-            value={user.rating?.toFixed(1) ?? "—"}
+            value={user.rating != null ? Number(user.rating).toFixed(1) : "—"}
             subtitle="Based on client feedback"
           />
           <StatsCard
@@ -140,7 +142,11 @@ export default function ArtisanDashboard() {
                         : "Unknown"
                       const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
                       return (
-                        <tr key={job.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                        <tr
+                          key={job.id}
+                          className="border-b last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/dashboard/artisan/jobs/${job.id}`)}
+                        >
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-2.5">
                               <Avatar className="h-8 w-8">

@@ -41,7 +41,7 @@ export default function ArtisansPage() {
   const [search, setSearch] = useState("")
 
   useEffect(() => {
-    apiFetch<BackendArtisan[] | { items: BackendArtisan[] }>("/artisans?page=1&limit=50")
+    apiFetch<BackendArtisan[] | { items: BackendArtisan[] }>("/admin/artisans?page=1&limit=50")
       .then((r) => {
         const items = Array.isArray(r) ? r : (r as { items: BackendArtisan[] }).items ?? []
         setArtisans(items.map(mapArtisan))

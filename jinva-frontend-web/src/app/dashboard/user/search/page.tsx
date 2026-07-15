@@ -16,9 +16,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
-import { Search, ChevronDown, Star, Briefcase, UserRound, Loader2, ShieldCheck } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { Search, ChevronDown, Star, Briefcase, UserRound, Loader2, ShieldCheck, Heart } from "lucide-react"
+import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { useFavouriteIds } from "@/hooks/use-favourites"
 
 interface BackendArtisan {
   id: string
@@ -78,6 +79,7 @@ export default function SearchArtisansPage() {
   const [artisans, setArtisans] = useState<MappedArtisan[]>([])
   const [services, setServices] = useState<BackendService[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -293,6 +295,18 @@ export default function SearchArtisansPage() {
                             Verified
                           </div>
                         )}
+                        <button
+                          type="button"
+                          disabled={pendingId === artisan.id}
+                          onClick={() => toggleFavourite(artisan.id)}
+                          className="absolute bottom-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-background/80 shadow-sm transition-opacity hover:bg-background disabled:opacity-50"
+                          title={favouriteIds.has(artisan.id) ? "Remove from favourites" : "Save to favourites"}
+                        >
+                          {pendingId === artisan.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                            : <Heart className={`h-3.5 w-3.5 ${favouriteIds.has(artisan.id) ? "fill-destructive text-destructive" : "text-muted-foreground"}`} />
+                          }
+                        </button>
                       </div>
 
                       <div className="mt-14 space-y-4 p-4">
@@ -322,7 +336,7 @@ export default function SearchArtisansPage() {
                               <span>{artisan.experienceYears}yr exp</span>
                             )}
                             {artisan.hourlyRate && (
-                              <span>${artisan.hourlyRate}/hr</span>
+                              <span>{formatCurrency(artisan.hourlyRate)}/hr</span>
                             )}
                           </div>
                           {artisan.services.length > 0 && (

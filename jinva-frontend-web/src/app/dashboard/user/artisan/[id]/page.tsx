@@ -20,9 +20,11 @@ import {
   UserRound,
   Loader2,
   ShieldCheck,
+  Heart,
 } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { useFavouriteIds } from "@/hooks/use-favourites"
 
 interface BackendArtisan {
   id: string
@@ -50,8 +52,9 @@ interface BackendArtisan {
 interface BackendReview {
   id: string
   rating: number
-  comment?: string
-  customer: {
+  review?: string
+  reviewerName?: string
+  reviewerUser?: {
     id: string
     firstname: string
     lastname: string
@@ -71,6 +74,7 @@ export default function ArtisanPublicProfile() {
   const [reviews, setReviews] = useState<BackendReview[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
 
   useEffect(() => {
     if (!id) return
@@ -174,12 +178,24 @@ export default function ArtisanPublicProfile() {
                       <span>{artisan.experienceYears} years experience</span>
                     )}
                     {artisan.hourlyRate && (
-                      <span>${artisan.hourlyRate}/hr</span>
+                      <span>{formatCurrency(artisan.hourlyRate)}/hr</span>
                     )}
                   </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="bg-transparent"
+                    disabled={pendingId === artisan.id}
+                    onClick={() => toggleFavourite(artisan.id)}
+                  >
+                    {pendingId === artisan.id
+                      ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      : <Heart className={`mr-2 h-4 w-4 ${favouriteIds.has(artisan.id) ? "fill-destructive text-destructive" : ""}`} />
+                    }
+                    {favouriteIds.has(artisan.id) ? "Saved" : "Save"}
+                  </Button>
                   <Button variant="outline" asChild className="bg-transparent">
                     <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
                       <MessageSquare className="mr-2 h-4 w-4" />
@@ -286,7 +302,7 @@ export default function ArtisanPublicProfile() {
                   {artisan.hourlyRate && (
                     <div className="rounded-lg border border-border p-4">
                       <p className="text-sm font-medium text-foreground">Hourly Rate</p>
-                      <p className="mt-1 text-sm text-muted-foreground">${artisan.hourlyRate}/hr</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{formatCurrency(artisan.hourlyRate)}/hr</p>
                     </div>
                   )}
                 </div>
@@ -314,13 +330,16 @@ export default function ArtisanPublicProfile() {
                   </div>
                 ) : (
                   reviews.map((review) => {
-                    const reviewerName = `${review.customer.firstname} ${review.customer.lastname}`.trim()
+                    const reviewerName = review.reviewerUser
+                      ? `${review.reviewerUser.firstname} ${review.reviewerUser.lastname}`.trim()
+                      : (review.reviewerName ?? "Anonymous")
+                    const avatar = review.reviewerUser?.profilePicture
                     return (
                       <div key={review.id} className="p-5">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10">
-                              <AvatarImage src={review.customer.profilePicture || naviiAvatar(reviewerName)} />
+                              <AvatarImage src={avatar || naviiAvatar(reviewerName)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>
@@ -332,13 +351,13 @@ export default function ArtisanPublicProfile() {
                             {Array.from({ length: 5 }).map((_, i) => (
                               <Star
                                 key={`${review.id}-star-${i}`}
-                                className={`h-4 w-4 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                                className={`h-4 w-4 ${i < Number(review.rating) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
                               />
                             ))}
                           </div>
                         </div>
-                        {review.comment && (
-                          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{review.comment}</p>
+                        {review.review && (
+                          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{review.review}</p>
                         )}
                       </div>
                     )

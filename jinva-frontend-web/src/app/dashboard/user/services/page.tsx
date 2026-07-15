@@ -88,7 +88,7 @@ export default function UserServicesPage() {
                           </div>
                           {service.price != null && (
                             <Badge variant="secondary" className="bg-white text-primary">
-                              ${service.price}
+                              GH₵ {service.price}
                             </Badge>
                           )}
                         </div>

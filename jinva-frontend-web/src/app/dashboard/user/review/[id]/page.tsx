@@ -56,18 +56,19 @@ export default function ReviewPage() {
   }, [id])
 
   const handleSubmit = async () => {
-    if (rating === 0 || !comment.trim() || !job?.acceptedArtisan) return
+    if (rating === 0 || !job) return
+    if (comment.trim().length > 0 && comment.trim().length < 20) {
+      toast.error("Review text must be at least 20 characters (or leave it blank).")
+      return
+    }
     setIsSubmitting(true)
     try {
       await apiFetch("/reviews", {
         method: "POST",
         body: JSON.stringify({
+          jobId: Number(id),
           rating,
-          review: comment,
-          reviewedUserId: job.acceptedArtisan.id,
-          ...(job.acceptedArtisan.artisanProfile?.id
-            ? { artisanProfileId: job.acceptedArtisan.artisanProfile.id }
-            : {}),
+          ...(comment.trim().length >= 20 ? { review: comment.trim() } : {}),
         }),
       })
       setSubmitted(true)
@@ -207,7 +208,7 @@ export default function ReviewPage() {
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleSubmit}
-                disabled={rating === 0 || !comment.trim() || isSubmitting}
+                disabled={rating === 0 || isSubmitting}
               >
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Submit Review

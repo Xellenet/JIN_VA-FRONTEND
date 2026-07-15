@@ -64,8 +64,9 @@ interface BackendArtisanProfile {
 interface BackendReview {
   id: string
   rating: number
-  comment?: string
-  customer: { id: string; firstname: string; lastname: string; profilePicture?: string }
+  review?: string
+  reviewerName?: string
+  reviewerUser?: { id: string; firstname: string; lastname: string; profilePicture?: string }
   createdAt: string
 }
 
@@ -564,7 +565,7 @@ export default function ArtisanProfile() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="hourlyRate">Hourly Rate ($)</Label>
+                            <Label htmlFor="hourlyRate">Hourly Rate (GH₵)</Label>
                             <div className="relative">
                               <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                               <Input
@@ -635,12 +636,15 @@ export default function ArtisanProfile() {
                   </div>
                 ) : (
                   reviews.map((review) => {
-                    const reviewerName = `${review.customer.firstname} ${review.customer.lastname}`.trim()
+                    const reviewerName = review.reviewerUser
+                      ? `${review.reviewerUser.firstname} ${review.reviewerUser.lastname}`.trim()
+                      : (review.reviewerName ?? "Anonymous")
+                    const avatar = review.reviewerUser?.profilePicture
                     return (
                       <div key={review.id} className="p-5">
                         <div className="flex items-start gap-4">
                           <Avatar className="h-10 w-10">
-                            <AvatarImage src={review.customer.profilePicture || naviiAvatar(reviewerName)} />
+                            <AvatarImage src={avatar || naviiAvatar(reviewerName)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
@@ -652,12 +656,12 @@ export default function ArtisanProfile() {
                               {Array.from({ length: 5 }).map((_, si) => (
                                 <Star
                                   key={`${review.id}-star-${si}`}
-                                  className={`h-3.5 w-3.5 ${si < review.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                                  className={`h-3.5 w-3.5 ${si < Number(review.rating) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
                                 />
                               ))}
                             </div>
-                            {review.comment && (
-                              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{review.comment}</p>
+                            {review.review && (
+                              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{review.review}</p>
                             )}
                           </div>
                         </div>

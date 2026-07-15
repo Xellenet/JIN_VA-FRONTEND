@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -29,7 +29,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 
-export default function ArtisanSettingsPage() {
+function ArtisanSettingsContent() {
   const { user, refreshUser } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -556,5 +556,13 @@ export default function ArtisanSettingsPage() {
         </Tabs>
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function ArtisanSettingsPage() {
+  return (
+    <Suspense>
+      <ArtisanSettingsContent />
+    </Suspense>
   )
 }

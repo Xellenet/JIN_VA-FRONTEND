@@ -46,6 +46,7 @@ interface BackendJob {
   location?: string
   status: string
   createdAt: string
+  completionRequestedAt?: string
   customer?: { id: string; firstname: string; lastname: string; email?: string; phoneNumber?: string; profilePicture?: string }
   acceptedArtisan?: { id: string; firstname: string; lastname: string; email?: string; phoneNumber?: string; profilePicture?: string }
   service?: { id: string; name: string; price?: number }
@@ -101,6 +102,7 @@ export default function BookingDetailsPage() {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [acceptingId, setAcceptingId] = useState<number | null>(null)
+  const [isConfirming, setIsConfirming] = useState(false)
 
   useEffect(() => {
     apiFetch<BackendJob>(`/jobs/${id}`)
@@ -116,6 +118,20 @@ export default function BookingDetailsPage() {
       .catch(() => toast.error("Failed to load booking details."))
       .finally(() => setIsLoading(false))
   }, [id])
+
+  const handleConfirmCompletion = async () => {
+    if (!job) return
+    setIsConfirming(true)
+    try {
+      await apiFetch(`/jobs/${job.id}/confirm`, { method: "POST" })
+      setJob((prev) => prev ? { ...prev, status: "COMPLETED" } : prev)
+      toast.success("Job marked as completed!")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to confirm completion.")
+    } finally {
+      setIsConfirming(false)
+    }
+  }
 
   const handleCancelBooking = async () => {
     if (!job) return
@@ -500,6 +516,17 @@ export default function BookingDetailsPage() {
 
             <Card>
               <CardContent className="space-y-2 p-5">
+                {job.status === "IN_PROGRESS" && job.completionRequestedAt && (
+                  <Button
+                    className="w-full bg-green-600 text-white hover:bg-green-700"
+                    onClick={handleConfirmCompletion}
+                    disabled={isConfirming}
+                  >
+                    {isConfirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Confirm Completion
+                  </Button>
+                )}
                 {job.status === "COMPLETED" && (
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
                     <Link href={`/dashboard/user/review/${job.id}`}>
@@ -536,7 +563,7 @@ export default function BookingDetailsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel booking for "{job.title}"? This action cannot be undone.
+              Are you sure you want to cancel booking for &ldquo;{job.title}&rdquo;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

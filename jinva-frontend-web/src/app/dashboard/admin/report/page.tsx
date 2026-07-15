@@ -122,7 +122,7 @@ export default function AdminReportPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Total Revenue</p>
                   <p className="text-2xl font-bold">
-                    ${(totalRevenue / 1000).toFixed(1)}k
+                    GH₵ {(totalRevenue / 1000).toFixed(1)}k
                   </p>
                   <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
                     <TrendingUp className="h-3.5 w-3.5" />
@@ -227,7 +227,7 @@ export default function AdminReportPage() {
                       fontSize: "13px",
                     }}
                     formatter={(value: number, name: string) => [
-                      name === "revenue" ? `$${value.toLocaleString()}` : value,
+                      name === "revenue" ? `GH₵ ${value.toLocaleString()}` : value,
                       name === "revenue" ? "Revenue" : "Orders",
                     ]}
                   />

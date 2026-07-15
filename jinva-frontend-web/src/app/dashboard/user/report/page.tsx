@@ -75,7 +75,7 @@ export default function UserReportPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Spent</p>
-                  <p className="text-2xl font-bold">${totalSpent}</p>
+                  <p className="text-2xl font-bold">GH₵ {totalSpent}</p>
                 </div>
                 <div className="rounded-lg bg-green-50 p-3">
                   <DollarSign className="h-5 w-5 text-green-600" />
@@ -137,7 +137,7 @@ export default function UserReportPage() {
               <BarChart data={monthlySpending}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                 <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
-                <YAxis axisLine={false} tickLine={false} className="text-xs" tickFormatter={(v) => `$${v}`} />
+                <YAxis axisLine={false} tickLine={false} className="text-xs" tickFormatter={(v) => `GH₵ ${v}`} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "white",
@@ -145,7 +145,7 @@ export default function UserReportPage() {
                     borderRadius: "8px",
                     fontSize: "13px",
                   }}
-                  formatter={(value: number) => [`$${value}`, "Spent"]}
+                  formatter={(value: number) => [`GH₵ ${value}`, "Spent"]}
                 />
                 <Bar dataKey="amount" fill="#1e4035" radius={[4, 4, 0, 0]} />
               </BarChart>

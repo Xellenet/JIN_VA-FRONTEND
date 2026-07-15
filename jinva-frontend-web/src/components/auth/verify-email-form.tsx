@@ -172,10 +172,10 @@ export function VerifyEmailForm() {
         <div className="space-y-3">
           <h1 className="text-4xl font-bold tracking-tight text-gray-900">Verify Your Email</h1>
           <p className="text-gray-600 leading-relaxed">
-            We've sent a verification email to your inbox. Please click the link in the email to verify your account.
+            We&apos;ve sent a verification email to your inbox. Please click the link in the email to verify your account.
           </p>
           <p className="text-sm text-gray-500">
-            If you don't see the email, check your spam folder or request a new one.
+            If you don&apos;t see the email, check your spam folder or request a new one.
           </p>
         </div>
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -29,7 +29,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 
-export default function UserSettingsPage() {
+function UserSettingsContent() {
   const { user, refreshUser } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -630,5 +630,13 @@ export default function UserSettingsPage() {
         </Tabs>
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function UserSettingsPage() {
+  return (
+    <Suspense>
+      <UserSettingsContent />
+    </Suspense>
   )
 }

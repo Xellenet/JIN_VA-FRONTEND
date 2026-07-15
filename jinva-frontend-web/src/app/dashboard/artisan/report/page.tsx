@@ -95,7 +95,7 @@ export default function ArtisanReportPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Earnings</p>
-                  <p className="text-2xl font-bold">${totalEarnings.toLocaleString()}</p>
+                  <p className="text-2xl font-bold">GH₵ {totalEarnings.toLocaleString()}</p>
                   <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
                     <TrendingUp className="h-3.5 w-3.5" />
                     <span>+14% vs last period</span>
@@ -170,7 +170,7 @@ export default function ArtisanReportPage() {
                 <BarChart data={monthlyEarnings}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
-                  <YAxis axisLine={false} tickLine={false} className="text-xs" tickFormatter={(v) => `$${v}`} />
+                  <YAxis axisLine={false} tickLine={false} className="text-xs" tickFormatter={(v) => `GH₵ ${v}`} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "white",
@@ -178,7 +178,7 @@ export default function ArtisanReportPage() {
                       borderRadius: "8px",
                       fontSize: "13px",
                     }}
-                    formatter={(value: number) => [`$${value.toLocaleString()}`, "Earnings"]}
+                    formatter={(value: number) => [`GH₵ ${value.toLocaleString()}`, "Earnings"]}
                   />
                   <Bar dataKey="earnings" fill="#1e4035" radius={[4, 4, 0, 0]} />
                 </BarChart>

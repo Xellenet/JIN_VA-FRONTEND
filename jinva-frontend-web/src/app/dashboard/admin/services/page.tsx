@@ -66,7 +66,7 @@ export default function ServicesPage() {
                       <td className="py-4 font-medium">{service.name}</td>
                       <td className="py-4 text-sm text-muted-foreground">{service.category}</td>
                       <td className="py-4 text-sm text-muted-foreground">{service.description}</td>
-                      <td className="py-4 font-semibold text-foreground">${service.price}</td>
+                      <td className="py-4 font-semibold text-foreground">GH₵ {service.price}</td>
                       <td className="py-4">
                         <Badge
                           variant="outline"

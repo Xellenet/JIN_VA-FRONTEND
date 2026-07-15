@@ -122,7 +122,7 @@ export default function AdminSettingsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="currency">Default Currency</Label>
-                    <Input id="currency" defaultValue="USD ($)" />
+                    <Input id="currency" defaultValue="GHS (GH₵)" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="timezone">Timezone</Label>
@@ -440,7 +440,7 @@ export default function AdminSettingsPage() {
                               <span>{product.category}</span>
                               <span>{'|'}</span>
                               <span className="font-semibold text-foreground">
-                                ${product.price.toFixed(2)}
+                                GH₵ {product.price.toFixed(2)}
                               </span>
                             </div>
                           </div>

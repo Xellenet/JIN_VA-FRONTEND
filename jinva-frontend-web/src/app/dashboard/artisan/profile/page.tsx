@@ -565,7 +565,7 @@ export default function ArtisanProfile() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="hourlyRate">Hourly Rate ($)</Label>
+                            <Label htmlFor="hourlyRate">Hourly Rate (GH₵)</Label>
                             <div className="relative">
                               <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                               <Input

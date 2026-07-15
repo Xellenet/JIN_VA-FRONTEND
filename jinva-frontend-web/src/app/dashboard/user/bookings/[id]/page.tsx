@@ -563,7 +563,7 @@ export default function BookingDetailsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel booking for "{job.title}"? This action cannot be undone.
+              Are you sure you want to cancel booking for &ldquo;{job.title}&rdquo;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

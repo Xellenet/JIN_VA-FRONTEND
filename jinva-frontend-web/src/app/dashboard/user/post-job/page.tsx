@@ -552,7 +552,7 @@ export default function PostJobPage() {
             </div>
             <DialogTitle>Job Posted!</DialogTitle>
             <DialogDescription>
-              Your job is now live. Artisans will review it and send you applications. You'll be notified when someone applies.
+              Your job is now live. Artisans will review it and send you applications. You&apos;ll be notified when someone applies.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border bg-muted/40 p-4">

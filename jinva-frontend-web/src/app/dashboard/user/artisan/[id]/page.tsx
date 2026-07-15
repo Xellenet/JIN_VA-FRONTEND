@@ -22,9 +22,9 @@ import {
   ShieldCheck,
   Heart,
 } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
-import { toast } from "sonner"
+import { useFavouriteIds } from "@/hooks/use-favourites"
 
 interface BackendArtisan {
   id: string
@@ -74,8 +74,7 @@ export default function ArtisanPublicProfile() {
   const [reviews, setReviews] = useState<BackendReview[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
-  const [isSavingFav, setIsSavingFav] = useState(false)
-  const [isSaved, setIsSaved] = useState(false)
+  const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
 
   useEffect(() => {
     if (!id) return
@@ -179,7 +178,7 @@ export default function ArtisanPublicProfile() {
                       <span>{artisan.experienceYears} years experience</span>
                     )}
                     {artisan.hourlyRate && (
-                      <span>${artisan.hourlyRate}/hr</span>
+                      <span>{formatCurrency(artisan.hourlyRate)}/hr</span>
                     )}
                   </div>
                 </div>
@@ -188,25 +187,14 @@ export default function ArtisanPublicProfile() {
                   <Button
                     variant="outline"
                     className="bg-transparent"
-                    disabled={isSavingFav || isSaved}
-                    onClick={async () => {
-                      setIsSavingFav(true)
-                      try {
-                        await apiFetch(`/favourites/${artisan.id}`, { method: "POST" })
-                        setIsSaved(true)
-                        toast.success("Added to favourites.")
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Failed to save.")
-                      } finally {
-                        setIsSavingFav(false)
-                      }
-                    }}
+                    disabled={pendingId === artisan.id}
+                    onClick={() => toggleFavourite(artisan.id)}
                   >
-                    {isSavingFav
+                    {pendingId === artisan.id
                       ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      : <Heart className={`mr-2 h-4 w-4 ${isSaved ? "fill-destructive text-destructive" : ""}`} />
+                      : <Heart className={`mr-2 h-4 w-4 ${favouriteIds.has(artisan.id) ? "fill-destructive text-destructive" : ""}`} />
                     }
-                    {isSaved ? "Saved" : "Save"}
+                    {favouriteIds.has(artisan.id) ? "Saved" : "Save"}
                   </Button>
                   <Button variant="outline" asChild className="bg-transparent">
                     <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
@@ -314,7 +302,7 @@ export default function ArtisanPublicProfile() {
                   {artisan.hourlyRate && (
                     <div className="rounded-lg border border-border p-4">
                       <p className="text-sm font-medium text-foreground">Hourly Rate</p>
-                      <p className="mt-1 text-sm text-muted-foreground">${artisan.hourlyRate}/hr</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{formatCurrency(artisan.hourlyRate)}/hr</p>
                     </div>
                   )}
                 </div>

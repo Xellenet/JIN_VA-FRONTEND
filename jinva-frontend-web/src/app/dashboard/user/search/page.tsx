@@ -17,9 +17,9 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
 import { Search, ChevronDown, Star, Briefcase, UserRound, Loader2, ShieldCheck, Heart } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
-import { toast } from "sonner"
+import { useFavouriteIds } from "@/hooks/use-favourites"
 
 interface BackendArtisan {
   id: string
@@ -79,8 +79,7 @@ export default function SearchArtisansPage() {
   const [artisans, setArtisans] = useState<MappedArtisan[]>([])
   const [services, setServices] = useState<BackendService[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [savingFav, setSavingFav] = useState<string | null>(null)
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -124,20 +123,6 @@ export default function SearchArtisansPage() {
     minRating > 0 ? `${minRating}+ stars` : null,
     availabilityFilter === "AVAILABLE" ? "Available" : availabilityFilter === "BUSY" ? "Busy" : null,
   ].filter(Boolean)
-
-  const handleSaveFavourite = async (artisanId: string) => {
-    if (savedIds.has(artisanId)) return
-    setSavingFav(artisanId)
-    try {
-      await apiFetch(`/favourites/${artisanId}`, { method: "POST" })
-      setSavedIds((prev) => new Set([...prev, artisanId]))
-      toast.success("Added to favourites.")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save.")
-    } finally {
-      setSavingFav(null)
-    }
-  }
 
   const clearFilters = () => {
     setSelectedServiceId("")
@@ -312,14 +297,14 @@ export default function SearchArtisansPage() {
                         )}
                         <button
                           type="button"
-                          disabled={savingFav === artisan.id || savedIds.has(artisan.id)}
-                          onClick={() => handleSaveFavourite(artisan.id)}
+                          disabled={pendingId === artisan.id}
+                          onClick={() => toggleFavourite(artisan.id)}
                           className="absolute bottom-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-background/80 shadow-sm transition-opacity hover:bg-background disabled:opacity-50"
-                          title={savedIds.has(artisan.id) ? "Saved" : "Save to favourites"}
+                          title={favouriteIds.has(artisan.id) ? "Remove from favourites" : "Save to favourites"}
                         >
-                          {savingFav === artisan.id
+                          {pendingId === artisan.id
                             ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                            : <Heart className={`h-3.5 w-3.5 ${savedIds.has(artisan.id) ? "fill-destructive text-destructive" : "text-muted-foreground"}`} />
+                            : <Heart className={`h-3.5 w-3.5 ${favouriteIds.has(artisan.id) ? "fill-destructive text-destructive" : "text-muted-foreground"}`} />
                           }
                         </button>
                       </div>
@@ -351,7 +336,7 @@ export default function SearchArtisansPage() {
                               <span>{artisan.experienceYears}yr exp</span>
                             )}
                             {artisan.hourlyRate && (
-                              <span>${artisan.hourlyRate}/hr</span>
+                              <span>{formatCurrency(artisan.hourlyRate)}/hr</span>
                             )}
                           </div>
                           {artisan.services.length > 0 && (

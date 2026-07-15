@@ -262,7 +262,7 @@ export default function ReviewsPage() {
                 <span className="text-sm text-muted-foreground">{detail.rating}/5</span>
               </div>
               <p className="rounded-lg bg-muted/50 p-3 text-sm text-foreground leading-relaxed">
-                "{detail.comment}"
+                &ldquo;{detail.comment}&rdquo;
               </p>
               {detail.flagReason && (
                 <p className="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">

@@ -258,7 +258,7 @@ export default function ProductsPage() {
                           {product.description}
                         </td>
                         <td className="py-4 text-sm font-semibold text-foreground">
-                          ${product.price.toFixed(2)}
+                          GH₵ {product.price.toFixed(2)}
                         </td>
                         <td className="py-4 text-sm font-medium">
                           {product.stock}
@@ -307,7 +307,7 @@ export default function ProductsPage() {
               <p>
                 Total Inventory Value:{" "}
                 <span className="font-semibold text-foreground">
-                  ${mockProducts.reduce((sum, p) => sum + p.price * p.stock, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  GH₵ {mockProducts.reduce((sum, p) => sum + p.price * p.stock, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </p>
             </div>

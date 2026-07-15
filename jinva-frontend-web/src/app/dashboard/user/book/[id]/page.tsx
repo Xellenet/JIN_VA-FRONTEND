@@ -157,7 +157,7 @@ export default function BookArtisanPage() {
                             <div className="flex items-center justify-between gap-4">
                               <span>{service.name}</span>
                               {service.price != null && (
-                                <span className="text-xs text-muted-foreground">${service.price}</span>
+                                <span className="text-xs text-muted-foreground">GH₵ {service.price}</span>
                               )}
                             </div>
                           </SelectItem>
@@ -168,7 +168,7 @@ export default function BookArtisanPage() {
 
                   <div className="grid gap-5 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="budgetMin">Min Budget ($) <span className="text-destructive">*</span></Label>
+                      <Label htmlFor="budgetMin">Min Budget (GH₵) <span className="text-destructive">*</span></Label>
                       <Input
                         id="budgetMin"
                         type="number"
@@ -179,7 +179,7 @@ export default function BookArtisanPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="budgetMax">Max Budget ($) <span className="text-destructive">*</span></Label>
+                      <Label htmlFor="budgetMax">Max Budget (GH₵) <span className="text-destructive">*</span></Label>
                       <Input
                         id="budgetMax"
                         type="number"
@@ -316,13 +316,13 @@ export default function BookArtisanPage() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">{selectedServiceData.name}</span>
                       {selectedServiceData.price != null && (
-                        <span className="font-medium text-foreground">${selectedServiceData.price}</span>
+                        <span className="font-medium text-foreground">GH₵ {selectedServiceData.price}</span>
                       )}
                     </div>
                     {budgetMin && budgetMax && (
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Your budget</span>
-                        <span className="font-medium text-foreground">${budgetMin} – ${budgetMax}</span>
+                        <span className="font-medium text-foreground">GH₵ {budgetMin} – GH₵ {budgetMax}</span>
                       </div>
                     )}
                   </div>

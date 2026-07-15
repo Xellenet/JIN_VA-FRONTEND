@@ -106,7 +106,7 @@ export default function ArtisanServicesPage() {
           <div>
             <h3 className="font-semibold text-foreground">{service.name}</h3>
             {service.price !== undefined && (
-              <p className="text-sm text-muted-foreground">From ${service.price}</p>
+              <p className="text-sm text-muted-foreground">From GH₵ {service.price}</p>
             )}
           </div>
           {service.description && (

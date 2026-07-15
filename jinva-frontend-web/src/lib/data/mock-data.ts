@@ -739,7 +739,7 @@ export const mockMessages: ChatMessage[] = [
     senderName: "Robert Fox",
     senderAvatar: "/artisan-in-blue-uniform.jpg",
     content:
-      "I see, that is a common issue with older homes. I can come by tomorrow morning around 9 AM. I will need to replace the joints and possibly a section of the pipe. The total should be around $120-150.",
+      "I see, that is a common issue with older homes. I can come by tomorrow morning around 9 AM. I will need to replace the joints and possibly a section of the pipe. The total should be around GH₵ 120-150.",
     timestamp: "10:38 AM",
     isRead: true,
   },
@@ -797,13 +797,13 @@ export const mockMessages: ChatMessage[] = [
 
 export const mockNotifications: Notification[] = [
   { id: "n1", title: "New Booking Request", message: "Devon Lane booked an Emergency Leak Repair service.", type: "booking", isRead: false, time: "5 min ago" },
-  { id: "n2", title: "Payment Received", message: "Payment of $120 received for order #o1.", type: "payment", isRead: false, time: "30 min ago" },
+  { id: "n2", title: "Payment Received", message: "Payment of GH₵ 120 received for order #o1.", type: "payment", isRead: false, time: "30 min ago" },
   { id: "n3", title: "New Review", message: "Kristin Watson left a 5-star review on your profile.", type: "review", isRead: false, time: "1 hour ago" },
   { id: "n4", title: "Job Assigned", message: "You have been assigned to a Pipe Installation job for Jane Cooper.", type: "assignment", isRead: true, time: "2 hours ago" },
   { id: "n5", title: "New Message", message: "Jacob Jones sent you a message about re-piping.", type: "message", isRead: true, time: "3 hours ago" },
   { id: "n6", title: "Booking Confirmed", message: "Your booking for Water Heater Maintenance has been confirmed.", type: "booking", isRead: true, time: "5 hours ago" },
   { id: "n7", title: "System Update", message: "Plumbify platform will undergo maintenance on Feb 15 from 2-4 AM.", type: "system", isRead: true, time: "Yesterday" },
-  { id: "n8", title: "Payment Refunded", message: "Refund of $90 has been processed for order #o3.", type: "payment", isRead: true, time: "Yesterday" },
+  { id: "n8", title: "Payment Refunded", message: "Refund of GH₵ 90 has been processed for order #o3.", type: "payment", isRead: true, time: "Yesterday" },
   { id: "n9", title: "Job Completed", message: "Robert Fox marked the Emergency Leak Repair job as completed.", type: "assignment", isRead: true, time: "2 days ago" },
   { id: "n10", title: "New Review", message: "Wade Warren left a 4-star review on your profile.", type: "review", isRead: true, time: "3 days ago" },
 ]

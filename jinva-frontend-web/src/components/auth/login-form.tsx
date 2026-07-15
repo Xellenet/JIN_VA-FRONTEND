@@ -3,15 +3,18 @@
 import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Eye, EyeOff } from "lucide-react"
+import { persistAuthTokens, dashboardPathForRole } from "@/lib/auth"
 import { AuthSplitLayout } from "./auth-split-layout"
 
 export function LoginForm() {
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
@@ -39,14 +42,18 @@ export function LoginForm() {
         throw new Error(data.message || "Login failed")
       }
 
-      // Store tokens
-      localStorage.setItem("access_token", data.access_token)
-      localStorage.setItem("refresh_token", data.refresh_token)
+      persistAuthTokens(data.access_token, data.refresh_token, rememberMe)
 
-      toast.success("You have been logged in successfully.");
+      toast.success("You have been logged in successfully.")
 
-      // Redirect to dashboard or home
-      window.location.href = "/dashboard"
+      const redirectTarget = searchParams.get("redirect")
+      const roleDashboard = dashboardPathForRole(data.user?.role ?? "")
+      const destination =
+        redirectTarget?.startsWith("/") && !redirectTarget.startsWith("//")
+          ? redirectTarget
+          : roleDashboard
+
+      globalThis.location.href = destination
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Invalid credentials");
     } finally {
@@ -61,7 +68,7 @@ export function LoginForm() {
       const data = await response.json()
 
       // Redirect to OAuth provider
-      window.location.href = data.authUrl
+      globalThis.location.href = data.authUrl
     } catch (error) {
       toast.error("Failed to initiate social login" + (error instanceof Error ? `: ${error.message}` : ""));
       setIsLoading(false)

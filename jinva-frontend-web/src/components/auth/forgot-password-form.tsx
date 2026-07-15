@@ -56,10 +56,10 @@ export function ForgotPasswordForm() {
           <div className="space-y-3">
             <h1 className="text-4xl font-bold tracking-tight text-gray-900">Check your email</h1>
             <p className="text-gray-600 leading-relaxed">
-              We've sent a password reset link to <span className="font-medium text-gray-900">{email}</span>
+              We&apos;ve sent a password reset link to <span className="font-medium text-gray-900">{email}</span>
             </p>
             <p className="text-sm text-gray-500">
-              The link will expire in 24 hours. If you don't see the email, check your spam folder.
+              The link will expire in 24 hours. If you don&apos;t see the email, check your spam folder.
             </p>
           </div>
 
@@ -102,7 +102,7 @@ export function ForgotPasswordForm() {
         {/* Header */}
         <div className="space-y-2">
           <h1 className="text-4xl font-bold tracking-tight text-gray-900">Forgot Password?</h1>
-          <p className="text-gray-600 leading-relaxed">No worries, we'll send you reset instructions to your email.</p>
+          <p className="text-gray-600 leading-relaxed">No worries, we&apos;ll send you reset instructions to your email.</p>
         </div>
 
         {/* Form */}

@@ -48,16 +48,21 @@ export function ResetPasswordForm() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/reset-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      // Backend contract (S6): token travels as a ?token= query param, and the
+      // body must include both newPassword and confirmNewPassword.
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/reset-password?token=${encodeURIComponent(token)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            newPassword: formData.password,
+            confirmNewPassword: formData.confirmPassword,
+          }),
         },
-        body: JSON.stringify({
-          token,
-          newPassword: formData.password,
-        }),
-      })
+      )
 
       const data = await response.json()
 

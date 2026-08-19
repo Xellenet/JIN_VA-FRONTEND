@@ -7,9 +7,21 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   User,
   Bell,
@@ -24,13 +36,15 @@ import {
   Clock,
   UserRound,
   Loader2,
+  CreditCard,
+  Wallet,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 
 function ArtisanSettingsContent() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, logout } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
   const activeTab = searchParams.get("tab") ?? "account"
@@ -40,6 +54,14 @@ function ArtisanSettingsContent() {
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
 
+  // F7: Service Area (`location`) and Service Radius (`serviceRadiusKm`) are
+  // real, savable ArtisanProfile fields — wired up as controlled state below
+  // and included in the profile save payload.
+  const [serviceArea, setServiceArea] = useState("")
+  const [serviceRadiusKm, setServiceRadiusKm] = useState("")
+  // F6: cancellation policy is a real, savable ArtisanProfile field.
+  const [cancellationPolicy, setCancellationPolicy] = useState("")
+
   useEffect(() => {
     if (!user) return
     const parts = user.name.split(" ")
@@ -48,7 +70,87 @@ function ArtisanSettingsContent() {
     setEmail(user.email ?? "")
     setPhone(user.phone ?? "")
   }, [user])
+
+  useEffect(() => {
+    apiFetch<{ location?: string; serviceRadiusKm?: number; cancellationPolicy?: string }>(
+      "/users/me/artisan-profile",
+    )
+      .then((profile) => {
+        setServiceArea(profile.location ?? "")
+        setServiceRadiusKm(profile.serviceRadiusKm != null ? String(profile.serviceRadiusKm) : "")
+        setCancellationPolicy(profile.cancellationPolicy ?? "")
+      })
+      .catch(() => {})
+  }, [])
+
   const [isSaving, setIsSaving] = useState(false)
+
+  // ── Delete account (F4) ─────────────────────────────────────────────────
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true)
+    try {
+      await apiFetch("/users/me", { method: "DELETE" })
+      toast.success("Your account has been deleted.")
+      await logout()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      setIsDeleting(false)
+    }
+  }
+
+  // ── Payout method (F5) ──────────────────────────────────────────────────
+  type PayoutType = "mobile_money" | "bank"
+  const [payoutType, setPayoutType] = useState<PayoutType>("mobile_money")
+  const [payoutAccountName, setPayoutAccountName] = useState("")
+  const [payoutAccountNumber, setPayoutAccountNumber] = useState("")
+  const [payoutBankCode, setPayoutBankCode] = useState("")
+  const [isSavingPayout, setIsSavingPayout] = useState(false)
+  const [hasPayoutMethod, setHasPayoutMethod] = useState(false)
+
+  const handleSavePayoutMethod = async () => {
+    if (!payoutAccountName.trim() || payoutAccountName.trim().length < 2) {
+      toast.error("Enter the full name on the account.")
+      return
+    }
+    if (!payoutAccountNumber.trim() || payoutAccountNumber.trim().length < 8) {
+      toast.error(
+        payoutType === "mobile_money"
+          ? "Enter a valid mobile money number (e.g. 0241234567)."
+          : "Enter a valid bank account number.",
+      )
+      return
+    }
+    if (!payoutBankCode.trim()) {
+      toast.error(payoutType === "mobile_money" ? "Select a mobile money network." : "Enter the bank code.")
+      return
+    }
+
+    setIsSavingPayout(true)
+    try {
+      await apiFetch("/payments/payout-method", {
+        method: "POST",
+        body: JSON.stringify({
+          type: payoutType,
+          accountName: payoutAccountName.trim(),
+          accountNumber: payoutAccountNumber.trim(),
+          bankCode: payoutBankCode.trim(),
+        }),
+      })
+      setHasPayoutMethod(true)
+      toast.success("Payout method saved.")
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save payout method.")
+    } finally {
+      setIsSavingPayout(false)
+    }
+  }
+
+  const maskedAccountNumber = payoutAccountNumber
+    ? `•••• ${payoutAccountNumber.slice(-4)}`
+    : ""
 
   // ── Notification preferences ────────────────────────────────────────────
   interface ArtisanNotifPrefs {
@@ -96,11 +198,27 @@ function ArtisanSettingsContent() {
   if (!user) return null
 
   const handleSaveProfile = async () => {
+    const radiusValue = serviceRadiusKm.trim() === "" ? undefined : Number(serviceRadiusKm)
+    if (radiusValue !== undefined && (!Number.isFinite(radiusValue) || radiusValue <= 0)) {
+      toast.error("Service radius must be a positive number of kilometers.")
+      return
+    }
+
     setIsSaving(true)
     try {
       await apiFetch("/users/me", {
         method: "PATCH",
         body: JSON.stringify({ firstname, lastname, email, phoneNumber: phone }),
+      })
+      // F6/F7: Service Area, Service Radius, and Cancellation Policy live on
+      // the artisan profile, not the base user record.
+      await apiFetch("/users/me/artisan-profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          location: serviceArea || undefined,
+          ...(radiusValue !== undefined ? { serviceRadiusKm: radiusValue } : {}),
+          cancellationPolicy: cancellationPolicy || undefined,
+        }),
       })
       await refreshUser()
       toast.success("Profile updated successfully.")
@@ -247,10 +365,133 @@ function ArtisanSettingsContent() {
                     <Label htmlFor="address">Service Area</Label>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input id="address" className="pl-10" placeholder="Enter your primary service area" />
+                      <Input
+                        id="address"
+                        className="pl-10"
+                        placeholder="Enter your primary service area"
+                        value={serviceArea}
+                        onChange={(e) => setServiceArea(e.target.value)}
+                      />
                     </div>
                   </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="cancellationPolicy">Cancellation Policy</Label>
+                    <Textarea
+                      id="cancellationPolicy"
+                      placeholder="e.g. Free cancellation up to 24 hours before the scheduled job; 50% fee thereafter."
+                      value={cancellationPolicy}
+                      onChange={(e) => setCancellationPolicy(e.target.value)}
+                      rows={3}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Shown on your public profile so customers know your policy before booking.
+                    </p>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <div className="border-b p-6">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-muted p-2">
+                    <Wallet className="h-5 w-5 text-foreground" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Payout Method</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Where you get paid for completed jobs
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <CardContent className="p-6">
+                {hasPayoutMethod ? (
+                  <div className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">
+                          {payoutType === "mobile_money" ? "Mobile Money" : "Bank Account"} — {maskedAccountNumber}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{payoutAccountName}</p>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setHasPayoutMethod(false)}>
+                      Edit
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="max-w-md space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="payoutType">Payout Type</Label>
+                      <Select value={payoutType} onValueChange={(v) => setPayoutType(v as PayoutType)}>
+                        <SelectTrigger id="payoutType" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                          <SelectItem value="bank">Bank Account</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="payoutAccountName">Account Name</Label>
+                      <Input
+                        id="payoutAccountName"
+                        placeholder="Full name on the account"
+                        value={payoutAccountName}
+                        onChange={(e) => setPayoutAccountName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="payoutAccountNumber">
+                        {payoutType === "mobile_money" ? "Mobile Money Number" : "Account Number"}
+                      </Label>
+                      <Input
+                        id="payoutAccountNumber"
+                        placeholder={payoutType === "mobile_money" ? "0241234567" : "Account number"}
+                        value={payoutAccountNumber}
+                        onChange={(e) => setPayoutAccountNumber(e.target.value.replace(/\s+/g, ""))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      {payoutType === "mobile_money" ? (
+                        <>
+                          <Label htmlFor="payoutBankCode">Network</Label>
+                          <Select value={payoutBankCode} onValueChange={setPayoutBankCode}>
+                            <SelectTrigger id="payoutBankCode" className="w-full">
+                              <SelectValue placeholder="Select network" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="MTN">MTN Mobile Money</SelectItem>
+                              <SelectItem value="VOD">Vodafone Cash</SelectItem>
+                              <SelectItem value="ATL">AirtelTigo Money</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </>
+                      ) : (
+                        <>
+                          <Label htmlFor="payoutBankCode">Bank Code</Label>
+                          <Input
+                            id="payoutBankCode"
+                            placeholder="e.g. 030 for GCB"
+                            value={payoutBankCode}
+                            onChange={(e) => setPayoutBankCode(e.target.value)}
+                          />
+                        </>
+                      )}
+                    </div>
+                    <Button
+                      onClick={handleSavePayoutMethod}
+                      disabled={isSavingPayout}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    >
+                      {isSavingPayout && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Save Payout Method
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -288,8 +529,15 @@ function ArtisanSettingsContent() {
                     <Input id="maxJobs" type="number" defaultValue="3" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="radius">Service Radius (miles)</Label>
-                    <Input id="radius" type="number" defaultValue="25" />
+                    <Label htmlFor="radius">Service Radius (kilometers)</Label>
+                    <Input
+                      id="radius"
+                      type="number"
+                      min={1}
+                      placeholder="e.g. 25"
+                      value={serviceRadiusKm}
+                      onChange={(e) => setServiceRadiusKm(e.target.value)}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -545,7 +793,7 @@ function ArtisanSettingsContent() {
                       Permanently delete your account and remove your profile from the platform
                     </p>
                   </div>
-                  <Button variant="destructive" size="sm">
+                  <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete Account
                   </Button>
@@ -555,6 +803,32 @@ function ArtisanSettingsContent() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will deactivate your account immediately and log you out. This action cannot be undone from
+              within the app — contact support if you need to recover your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteAccount()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   )
 }

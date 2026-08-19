@@ -37,6 +37,7 @@ interface BackendArtisan {
   availabilityStatus: string
   isVerified: boolean
   location?: string
+  cancellationPolicy?: string
   services?: { id: string; name: string }[]
   user: {
     id: string
@@ -282,6 +283,21 @@ export default function ArtisanPublicProfile() {
                     </div>
                   </div>
                 )}
+                <div>
+                  <h4 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                    Cancellation Policy
+                  </h4>
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    {artisan.cancellationPolicy ? (
+                      <p className="text-sm leading-relaxed text-muted-foreground">{artisan.cancellationPolicy}</p>
+                    ) : (
+                      <p className="text-sm italic text-muted-foreground">
+                        This artisan hasn&apos;t set a specific cancellation policy yet. Please confirm cancellation terms directly with them before booking.
+                      </p>
+                    )}
+                  </div>
+                </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-border p-4">
                     <p className="text-sm font-medium text-foreground">Specialization</p>

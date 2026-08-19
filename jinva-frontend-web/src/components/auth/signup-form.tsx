@@ -130,7 +130,7 @@ export function SignupForm() {
 
       toast.success("Please check your email to verify your account.")
 
-      window.location.href = "/verify-email"
+      window.location.href = `/verify-email?email=${encodeURIComponent(formData.email)}`
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Registration failed")
     } finally {
@@ -149,6 +149,18 @@ export function SignupForm() {
       toast.error("Failed to initiate social signup")
       setIsLoading(false)
     }
+  }
+
+  // G9: read whichever role is currently selected on the existing role
+  // toggle at the moment "Continue with Google" is clicked, and pass it as
+  // `?role=` on GET /auth/google — omit entirely if no role is selected yet
+  // (backend defaults an unrecognized/missing role to CUSTOMER anyway). Per
+  // api-contract.md this is a real full-page navigation (the route itself
+  // 302s to Google), not a fetch-then-redirect.
+  const handleGoogleSignup = () => {
+    const role = formData.role.toLowerCase()
+    const query = role ? `?role=${encodeURIComponent(role)}` : ""
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google${query}`
   }
 
   return (
@@ -364,7 +376,7 @@ export function SignupForm() {
           <div className="space-y-3">
             <Button
               type="button"
-              onClick={() => handleSocialSignup("google")}
+              onClick={handleGoogleSignup}
               disabled={isLoading}
               className="w-full h-10 border border-gray-800 bg-gray-900 hover:bg-gray-800 font-normal text-gray-400 hover:text-gray-400 transition-colors"
             >

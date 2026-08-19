@@ -11,6 +11,16 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   User,
   Bell,
   Shield,
@@ -30,7 +40,7 @@ import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 
 function UserSettingsContent() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, logout } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
   const activeTab = searchParams.get("tab") ?? "profile"
@@ -50,6 +60,22 @@ function UserSettingsContent() {
   const [newPass, setNewPass] = useState("")
   const [confirmPass, setConfirmPass] = useState("")
   const [isUpdatingPass, setIsUpdatingPass] = useState(false)
+
+  // ── Delete account (F4) ─────────────────────────────────────────────────
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true)
+    try {
+      await apiFetch("/users/me", { method: "DELETE" })
+      toast.success("Your account has been deleted.")
+      await logout()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      setIsDeleting(false)
+    }
+  }
 
   // ── Avatar upload ────────────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -619,7 +645,7 @@ function UserSettingsContent() {
                       Permanently delete your account and all associated data
                     </p>
                   </div>
-                  <Button variant="destructive" size="sm">
+                  <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete Account
                   </Button>
@@ -629,6 +655,32 @@ function UserSettingsContent() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will deactivate your account immediately and log you out. This action cannot be undone from
+              within the app — contact support if you need to recover your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteAccount()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   )
 }

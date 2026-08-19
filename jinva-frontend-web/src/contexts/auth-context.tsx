@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
-import { clearAuthTokens, getAccessToken, mapBackendRole } from "@/lib/auth"
+import { clearAuthTokens, mapBackendRole } from "@/lib/auth"
 import type { User } from "@/lib/types"
 
 interface BackendUser {
@@ -95,7 +95,19 @@ const AuthContext = createContext<AuthContextValue>({
   refreshUser: async () => {},
 })
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  children,
+  forceFresh = false,
+}: {
+  children: ReactNode
+  // When true, skip the sessionStorage cache on the initial mount fetch and
+  // go straight to GET /users/me. Intended for routes that exist only to
+  // bootstrap a brand-new session (e.g. /auth/callback) where serving a
+  // stale cached user — possibly left behind by a previous person on a
+  // shared/kiosk browser — is never desirable. See security-report.md's
+  // "shared-computer risk" finding.
+  forceFresh?: boolean
+}) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
@@ -108,14 +120,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchingRef.current = true
 
     try {
-      // No token → user is not authenticated; clear any stale cache and bail
-      if (!getAccessToken()) {
-        clearCache()
-        setIsLoading(false)
-        return
-      }
-
-      // Serve from cache unless caller explicitly requests a fresh fetch
+      // Serve from cache unless caller explicitly requests a fresh fetch.
+      // NOTE: an absent in-memory access token (the normal state on every
+      // full page reload / new tab, since S1 holds it in memory only) is
+      // NOT treated as "logged out" here — we deliberately fall through to
+      // the apiFetch call below instead of short-circuiting, so a 401 there
+      // drives lib/api.ts's existing tryRefresh() path and silently
+      // exchanges the still-valid httpOnly refresh cookie for a new access
+      // token (requirements.md S1 AC #3). Only a failed fetch/refresh (the
+      // catch block below) means there's genuinely no valid session.
       if (!forceFresh) {
         const cached = readCache()
         if (cached) {
@@ -140,17 +153,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(built)
       writeCache(built)
     } catch {
+      // Either there was no session to begin with, or the silent refresh
+      // above also failed (expired/absent/revoked httpOnly refresh cookie)
+      // — only now do we treat the user as logged out and bounce them back
+      // to /login instead of leaving a half-rendered dashboard shell.
       setUser(null)
+      clearAuthTokens()
       clearCache()
+      const currentPath = typeof window !== "undefined" ? window.location.pathname : ""
+      if (currentPath.startsWith("/dashboard")) {
+        router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`)
+      }
     } finally {
       fetchingRef.current = false
       setIsLoading(false)
     }
-  }, [])
+  }, [router])
 
   useEffect(() => {
-    fetchUser()
-  }, [fetchUser])
+    fetchUser(forceFresh)
+  }, [fetchUser, forceFresh])
 
   const logout = useCallback(async () => {
     try {

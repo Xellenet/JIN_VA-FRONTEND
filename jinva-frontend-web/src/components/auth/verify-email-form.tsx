@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { CheckCircle2, XCircle, Loader2, Mail } from "lucide-react"
 import { AuthSplitLayout } from "./auth-split-layout"
@@ -14,6 +16,10 @@ export function VerifyEmailForm() {
   const [isResending, setIsResending] = useState(false)
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
+  // F1: the backend's resend-verification endpoint requires an email to
+  // identify the account. Prefer it from the link's query string (wired up
+  // in signup-form.tsx); fall back to asking the user for it.
+  const [email, setEmail] = useState(searchParams.get("email") ?? "")
 
   useEffect(() => {
     if (!token) {
@@ -49,6 +55,11 @@ export function VerifyEmailForm() {
   }
 
   const handleResendEmail = async () => {
+    if (!email.trim()) {
+      toast.error("Enter the email address you registered with.")
+      return
+    }
+
     setIsResending(true)
 
     try {
@@ -57,21 +68,38 @@ export function VerifyEmailForm() {
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ email: email.trim() }),
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
         throw new Error(data.message || "Failed to resend email")
       }
 
-      toast.success("Verification email has been resent.");
+      toast.success("If that email is registered and unverified, a new verification link has been sent.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to resend email")
     } finally {
       setIsResending(false)
     }
   }
+
+  const emailPrompt = !searchParams.get("email") && (
+    <div className="space-y-2 text-left">
+      <Label htmlFor="resend-email" className="text-sm text-gray-600">
+        Your email address
+      </Label>
+      <Input
+        id="resend-email"
+        type="email"
+        placeholder="you@example.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        disabled={isResending}
+      />
+    </div>
+  )
 
   if (state === "loading") {
     return (
@@ -138,6 +166,7 @@ export function VerifyEmailForm() {
           </div>
 
           <div className="space-y-4">
+            {emailPrompt}
             <Button
               onClick={handleResendEmail}
               disabled={isResending}
@@ -180,6 +209,7 @@ export function VerifyEmailForm() {
         </div>
 
         <div className="space-y-4">
+          {emailPrompt}
           <Button
             onClick={handleResendEmail}
             disabled={isResending}

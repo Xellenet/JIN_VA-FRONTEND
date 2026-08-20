@@ -89,15 +89,21 @@ export interface Product {
   image?: string
 }
 
-export interface PortfolioItem {
-  id: string
-  title: string
-  description: string
-  category: string
-  image: string
-  date: string
-  type: "image" | "video"
-  videoUrl?: string
+export type PortfolioStatus = "PENDING" | "APPROVED" | "REJECTED"
+
+// Matches api-contract.md §8 `PortfolioItem` — the real, backend-backed
+// portfolio record.
+export interface ApiPortfolioItem {
+  id: number
+  artisanId: number
+  fileUrl: string
+  fileType: string
+  caption: string | null
+  tag: string | null
+  status: PortfolioStatus
+  rejectionReason: string | null
+  sortOrder: number
+  createdAt: string
 }
 
 export interface Notification {

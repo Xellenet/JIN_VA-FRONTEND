@@ -25,6 +25,8 @@ import {
 import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
+import { PortfolioGallery } from "@/components/portfolio/portfolio-gallery"
+import type { ApiPortfolioItem } from "@/lib/types"
 
 interface BackendArtisan {
   id: string
@@ -34,11 +36,12 @@ interface BackendArtisan {
   businessName?: string
   averageRating: number
   totalReviews: number
+  completedJobsCount?: number
   availabilityStatus: string
   isVerified: boolean
   location?: string
   cancellationPolicy?: string
-  services?: { id: string; name: string }[]
+  services?: { id: string; name: string; price?: number | null }[]
   user: {
     id: string
     firstname: string
@@ -77,6 +80,11 @@ export default function ArtisanPublicProfile() {
   const [error, setError] = useState("")
   const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
 
+  // P3/PF9: this artisan's public (APPROVED-only) portfolio items
+  const [portfolioItems, setPortfolioItems] = useState<ApiPortfolioItem[]>([])
+  const [portfolioLoading, setPortfolioLoading] = useState(true)
+  const [portfolioError, setPortfolioError] = useState(false)
+
   useEffect(() => {
     if (!id) return
     setIsLoading(true)
@@ -93,6 +101,24 @@ export default function ArtisanPublicProfile() {
       })
       .catch(() => setError("Could not load artisan profile."))
       .finally(() => setIsLoading(false))
+  }, [id])
+
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    setPortfolioLoading(true)
+    setPortfolioError(false)
+    apiFetch<ApiPortfolioItem[]>(`/portfolio/${id}`)
+      .then((data) => {
+        if (!cancelled) setPortfolioItems(Array.isArray(data) ? data : [])
+      })
+      .catch(() => {
+        if (!cancelled) setPortfolioError(true)
+      })
+      .finally(() => {
+        if (!cancelled) setPortfolioLoading(false)
+      })
+    return () => { cancelled = true }
   }, [id])
 
   if (isLoading) {
@@ -128,7 +154,7 @@ export default function ArtisanPublicProfile() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 pb-24">
         <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
           <Link href="/dashboard/user/search">
             <ArrowLeft className="h-4 w-4" />
@@ -222,9 +248,9 @@ export default function ArtisanPublicProfile() {
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Award className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">{artisan.totalReviews}</span>
+                  <span className="text-2xl font-bold text-foreground">{artisan.completedJobsCount ?? 0}</span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Reviews</p>
+                <p className="mt-1 text-xs text-muted-foreground">Jobs Completed</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
@@ -236,7 +262,7 @@ export default function ArtisanPublicProfile() {
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <ImageIcon className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">0</span>
+                  <span className="text-2xl font-bold text-foreground">{portfolioItems.length}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Portfolio Items</p>
               </div>
@@ -253,15 +279,7 @@ export default function ArtisanPublicProfile() {
           </TabsList>
 
           <TabsContent value="portfolio">
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <ImageIcon className="mb-4 h-12 w-12 text-muted-foreground/50" />
-                <h3 className="text-lg font-semibold text-foreground">No portfolio items yet</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  This artisan hasn&apos;t added any portfolio items yet.
-                </p>
-              </CardContent>
-            </Card>
+            <PortfolioGallery items={portfolioItems} isLoading={portfolioLoading} error={portfolioError} />
           </TabsContent>
 
           <TabsContent value="about">
@@ -275,10 +293,18 @@ export default function ArtisanPublicProfile() {
                 </div>
                 {artisan.services && artisan.services.length > 0 && (
                   <div>
-                    <h4 className="mb-3 text-sm font-semibold text-foreground">Services Offered</h4>
-                    <div className="flex flex-wrap gap-2">
+                    <h4 className="mb-3 text-sm font-semibold text-foreground">Services &amp; Pricing</h4>
+                    <div className="grid gap-2 sm:grid-cols-2">
                       {artisan.services.map((s) => (
-                        <Badge key={s.id} variant="secondary">{s.name}</Badge>
+                        <div
+                          key={s.id}
+                          className="flex items-center justify-between rounded-lg border border-border p-3"
+                        >
+                          <span className="text-sm font-medium text-foreground">{s.name}</span>
+                          <span className={s.price != null ? "text-sm font-semibold text-primary" : "text-xs italic text-muted-foreground"}>
+                            {s.price != null ? formatCurrency(s.price) : "Price on request"}
+                          </span>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -383,6 +409,21 @@ export default function ArtisanPublicProfile() {
             </Card>
           </TabsContent>
         </Tabs>
+      </div>
+
+      {/* P4: "Book Now" stays anchored at every scroll position, on mobile
+          and desktop, offset past the sidebar on large screens so it never
+          covers navigation. `pb-24` above keeps page content clear of it. */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 p-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur supports-backdrop-blur:bg-background/80 lg:left-56">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+          <div className="hidden min-w-0 sm:block">
+            <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+            <p className="truncate text-xs text-muted-foreground">{formatCurrency(artisan.hourlyRate ?? 0)}/hr · {specialization}</p>
+          </div>
+          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto" asChild>
+            <Link href={`/dashboard/user/book/${artisan.id}`}>Book Now</Link>
+          </Button>
+        </div>
       </div>
     </DashboardLayout>
   )

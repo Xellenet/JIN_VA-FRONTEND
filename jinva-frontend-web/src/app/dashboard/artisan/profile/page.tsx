@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,37 +12,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog"
-import {
   Star,
   Mail,
   Phone,
   MapPin,
   Briefcase,
   Camera,
-  Plus,
-  Trash2,
-  ImageIcon,
-  Video,
-  Eye,
-  X,
-  Calendar,
   Award,
-  Upload,
+  ImageIcon,
   UserRound,
   Loader2,
   DollarSign,
 } from "lucide-react"
-import { mockPortfolio } from "@/lib/data/mock-data"
-import type { PortfolioItem } from "@/lib/types"
-import Image from "next/image"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { naviiAvatar } from "@/lib/utils"
@@ -131,13 +113,6 @@ export default function ArtisanProfile() {
     }
   }
 
-  // Portfolio (mock — no backend endpoint yet)
-  const [portfolio, setPortfolio] = useState<PortfolioItem[]>(mockPortfolio)
-  const [activeFilter, setActiveFilter] = useState("all")
-  const [previewItem, setPreviewItem] = useState<PortfolioItem | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [showAddDialog, setShowAddDialog] = useState(false)
-
   // Populate personal fields from auth user
   useEffect(() => {
     if (!user) return
@@ -200,14 +175,6 @@ export default function ArtisanProfile() {
   }
 
   if (!user) return null
-
-  const categories = ["all", ...Array.from(new Set(portfolio.map((p) => p.category)))]
-  const filtered = activeFilter === "all" ? portfolio : portfolio.filter((p) => p.category === activeFilter)
-
-  const handleDelete = (id: string) => {
-    setPortfolio((prev) => prev.filter((item) => item.id !== id))
-    setDeleteConfirm(null)
-  }
 
   return (
     <DashboardLayout>
@@ -286,13 +253,18 @@ export default function ArtisanProfile() {
 
                 <div className="flex gap-2">
                   <Button variant="outline" className="bg-transparent">Edit Profile</Button>
-                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90">Share Portfolio</Button>
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                    <Link href="/dashboard/artisan/portfolio">
+                      <ImageIcon className="mr-2 h-4 w-4" />
+                      Manage Portfolio
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </div>
 
             {/* Stats Row */}
-            <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
@@ -318,146 +290,16 @@ export default function ArtisanProfile() {
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Reviews</p>
               </div>
-              <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
-                <div className="flex items-center justify-center gap-1.5">
-                  <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-2xl font-bold text-foreground">{portfolio.length}</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Portfolio Items</p>
-              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Tabs Section */}
         <Tabs defaultValue="about" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 md:w-auto md:grid-cols-none md:inline-flex">
-            <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 md:w-auto md:grid-cols-none md:inline-flex">
             <TabsTrigger value="about">About</TabsTrigger>
             <TabsTrigger value="reviews">Reviews</TabsTrigger>
           </TabsList>
-
-          {/* Portfolio Tab */}
-          <TabsContent value="portfolio" className="space-y-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                {categories.map((cat) => (
-                  <Button
-                    key={cat}
-                    variant={activeFilter === cat ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setActiveFilter(cat)}
-                    className={activeFilter === cat ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}
-                  >
-                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                  </Button>
-                ))}
-              </div>
-
-              <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-                <DialogTrigger asChild>
-                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Work
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-lg">
-                  <DialogHeader>
-                    <DialogTitle>Add Portfolio Item</DialogTitle>
-                    <DialogDescription>Showcase your completed work to attract new clients.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="pf-title">Title</Label>
-                      <Input id="pf-title" placeholder="e.g., Bathroom Renovation" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pf-category">Category</Label>
-                      <Input id="pf-category" placeholder="e.g., Renovation, Repair, Installation" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pf-desc">Description</Label>
-                      <Textarea id="pf-desc" placeholder="Describe the work you did..." rows={3} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Upload Media</Label>
-                      <label
-                        htmlFor="pf-upload-img"
-                        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-8 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted"
-                      >
-                        <Upload className="h-5 w-5" />
-                        <span>Click to upload images or videos</span>
-                        <input id="pf-upload-img" type="file" accept="image/*,video/*" className="hidden" multiple />
-                      </label>
-                      <p className="text-xs text-muted-foreground">Supports JPG, PNG, MP4. Max 10MB per file.</p>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
-                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => setShowAddDialog(false)}>
-                      Add to Portfolio
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-
-            {filtered.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                  <ImageIcon className="mb-4 h-12 w-12 text-muted-foreground/50" />
-                  <h3 className="text-lg font-semibold text-foreground">No items yet</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Add your first portfolio item to showcase your work.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filtered.map((item) => (
-                  <Card key={item.id} className="group overflow-hidden">
-                    <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-                      <Image
-                        src={item.image || "/placeholder.svg"}
-                        alt={item.title}
-                        fill
-                        className="object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                      {item.type === "video" && (
-                        <div className="absolute left-3 top-3">
-                          <Badge className="bg-foreground/70 text-background">
-                            <Video className="mr-1 h-3 w-3" />Video
-                          </Badge>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-foreground/0 opacity-0 transition-all group-hover:bg-foreground/40 group-hover:opacity-100">
-                        <Button size="icon" variant="secondary" className="h-10 w-10 rounded-full" onClick={() => setPreviewItem(item)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon" variant="secondary"
-                          className="h-10 w-10 rounded-full text-destructive hover:bg-destructive hover:text-white"
-                          onClick={() => setDeleteConfirm(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <CardContent className="p-4">
-                      <h3 className="truncate font-semibold text-foreground">{item.title}</h3>
-                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
-                      <div className="mt-3 flex items-center justify-between">
-                        <Badge variant="secondary" className="text-xs">{item.category}</Badge>
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" />{item.date}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
 
           {/* About Tab */}
           <TabsContent value="about" className="space-y-6">
@@ -673,64 +515,6 @@ export default function ArtisanProfile() {
             </Card>
           </TabsContent>
         </Tabs>
-
-        {/* Lightbox */}
-        {previewItem && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/80 p-4"
-            onClick={() => setPreviewItem(null)}
-            onKeyDown={(e) => { if (e.key === "Escape") setPreviewItem(null) }}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Preview of ${previewItem.title}`}
-          >
-            <div
-              className="relative w-full max-w-3xl rounded-lg bg-background shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={() => {}}
-              role="document"
-            >
-              <Button
-                size="icon" variant="ghost"
-                className="absolute -right-2 -top-2 z-10 h-8 w-8 rounded-full bg-background shadow-md"
-                onClick={() => setPreviewItem(null)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-              <div className="relative aspect-video overflow-hidden rounded-t-lg">
-                <Image src={previewItem.image || "/placeholder.svg"} alt={previewItem.title} fill className="object-cover" />
-              </div>
-              <div className="p-5">
-                <h3 className="text-lg font-semibold text-foreground">{previewItem.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{previewItem.description}</p>
-                <div className="mt-3 flex items-center gap-3">
-                  <Badge variant="secondary">{previewItem.category}</Badge>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Calendar className="h-3 w-3" />{previewItem.date}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Delete Confirmation */}
-        <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Delete Portfolio Item</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to remove this item from your portfolio? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-              <Button variant="destructive" onClick={() => deleteConfirm && handleDelete(deleteConfirm)}>
-                <Trash2 className="mr-2 h-4 w-4" />Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   )

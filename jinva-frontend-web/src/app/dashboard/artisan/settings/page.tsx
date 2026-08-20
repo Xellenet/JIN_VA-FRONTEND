@@ -157,7 +157,7 @@ function ArtisanSettingsContent() {
     newJobOpportunities: boolean; applicationUpdates: boolean; artisanJobUpdates: boolean
     paymentReleased: boolean; reviewsAndRatings: boolean; artisanPromotions: boolean
     applicationRejected: boolean; appliedJobExpired: boolean; profileVerified: boolean
-    messageReceived: boolean
+    messageReceived: boolean; portfolioApproved: boolean; portfolioRejected: boolean
     emailEnabled: boolean; smsEnabled: boolean; pushEnabled: boolean
   }
   const [notifPrefs, setNotifPrefs] = useState<Partial<ArtisanNotifPrefs>>({})
@@ -663,6 +663,8 @@ function ArtisanSettingsContent() {
                       { key: "appliedJobExpired",   label: "Applied Job Expired",   desc: "Get notified when a job you applied to has expired" },
                       { key: "profileVerified",     label: "Profile Verified",      desc: "Get notified when your profile is verified by admin" },
                       { key: "messageReceived",     label: "New Messages",          desc: "Get notified when you receive a direct message" },
+                      { key: "portfolioApproved",   label: "Portfolio Approved",    desc: "Get notified when an admin approves a portfolio item you uploaded" },
+                      { key: "portfolioRejected",   label: "Portfolio Rejected",    desc: "Get notified when an admin rejects a portfolio item you uploaded" },
                     ] as { key: keyof ArtisanNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
                       <div key={key} className="flex items-center justify-between rounded-lg border p-4">
                         <div>

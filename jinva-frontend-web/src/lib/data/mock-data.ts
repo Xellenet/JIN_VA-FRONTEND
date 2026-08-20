@@ -7,7 +7,6 @@ import type {
   ArtisanProfile,
   Client,
   Product,
-  PortfolioItem,
   ChatConversation,
   ChatMessage,
   Notification,
@@ -556,67 +555,6 @@ export const mockProducts: Product[] = [
     stock: 0,
     sku: "ET-012",
     status: "out-of-stock",
-  },
-]
-
-export const mockPortfolio: PortfolioItem[] = [
-  {
-    id: "pf1",
-    title: "Modern Bathroom Renovation",
-    description:
-      "Complete bathroom overhaul including new fixtures, tiling, and plumbing for a residential client in Springfield.",
-    category: "Renovation",
-    image: "/portfolio/job-bathroom-reno.jpg",
-    date: "Aug 15, 2025",
-    type: "image",
-  },
-  {
-    id: "pf2",
-    title: "Copper Pipe Installation",
-    description: "Full copper re-piping for a 3-bedroom home. Replaced old galvanized pipes with modern copper supply lines.",
-    category: "Installation",
-    image: "/portfolio/job-pipe-install.jpg",
-    date: "Jul 22, 2025",
-    type: "image",
-  },
-  {
-    id: "pf3",
-    title: "Tankless Water Heater Setup",
-    description: "Installed a high-efficiency tankless water heater for a family of four, including gas line and venting.",
-    category: "Installation",
-    image: "/portfolio/job-water-heater.jpg",
-    date: "Jul 5, 2025",
-    type: "image",
-  },
-  {
-    id: "pf4",
-    title: "Kitchen Sink & Faucet Upgrade",
-    description:
-      "Replaced an old basin sink with a modern undermount stainless steel sink and touchless faucet in a kitchen remodel.",
-    category: "Renovation",
-    image: "/portfolio/job-kitchen-sink.jpg",
-    date: "Jun 18, 2025",
-    type: "image",
-  },
-  {
-    id: "pf5",
-    title: "Emergency Leak Repair",
-    description:
-      "Resolved a major pipe burst under a kitchen sink at 2 AM. Replaced corroded joints and re-sealed all connections.",
-    category: "Repair",
-    image: "/portfolio/job-leak-repair.jpg",
-    date: "Jun 2, 2025",
-    type: "image",
-  },
-  {
-    id: "pf6",
-    title: "Commercial Drain Cleaning",
-    description:
-      "Cleared a severely clogged main drain line for a restaurant kitchen using hydro-jetting equipment.",
-    category: "Maintenance",
-    image: "/portfolio/job-drain-clean.jpg",
-    date: "May 20, 2025",
-    type: "image",
   },
 ]
 

@@ -36,7 +36,15 @@ async function tryRefresh(): Promise<boolean> {
 
 type ApiFetchOptions = RequestInit & { skipAuth?: boolean }
 
-export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+interface ApiEnvelope<T> {
+  status?: string
+  statusCode?: number
+  message?: string
+  data?: T
+  meta?: Record<string, unknown>
+}
+
+async function apiFetchEnvelope<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<ApiEnvelope<T>> {
   const { skipAuth, ...init } = options
   const token = skipAuth ? null : getAccessToken()
 
@@ -84,8 +92,30 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
     throw new Error(err.message ?? `Request failed with status ${res.status}`)
   }
 
-  const body = await res.json()
+  if (res.status === 204) return {} as ApiEnvelope<T>
 
+  return await res.json().catch(() => ({}) as ApiEnvelope<T>)
+}
+
+export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const body = await apiFetchEnvelope<T>(path, options)
   // Unwrap the NestJS ResponseInterceptor envelope: { statusCode, message, data }
-  return (body?.data !== undefined ? body.data : body) as T
+  return (body?.data !== undefined ? body.data : (body as unknown)) as T
+}
+
+/**
+ * Same as `apiFetch`, but also surfaces the envelope's `meta` block
+ * (e.g. `{ total, page, limit, totalPages }` on paginated list endpoints)
+ * instead of discarding it. Use this whenever a page needs real
+ * pagination controls rather than just the `data` array.
+ */
+export async function apiFetchWithMeta<T = unknown>(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<{ data: T; meta: Record<string, unknown> | undefined }> {
+  const body = await apiFetchEnvelope<T>(path, options)
+  return {
+    data: (body?.data !== undefined ? body.data : (body as unknown)) as T,
+    meta: body?.meta,
+  }
 }

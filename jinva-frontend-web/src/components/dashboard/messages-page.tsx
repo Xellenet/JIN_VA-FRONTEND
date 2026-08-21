@@ -272,6 +272,8 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
 
   // ── Poll the open thread ──────────────────────────────────────────────────
 
+  const currentUserId = Number(user?.id)
+
   useEffect(() => {
     if (selectedId === null || selectedId === PENDING_CONVERSATION_ID) return
     const id = setInterval(() => {
@@ -283,11 +285,22 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
           // MR2 depends on this poll for the sent -> read transition, so unlike
           // the old length-only comparison it always adopts the server's rows.
           setMessages((prev) => [...items, ...prev.filter((m) => m.id < 0)])
+
+          // MR1 — a message that arrives while this thread is open is being
+          // read right now, so mark it read too. Without this, NR1's new list
+          // refresh would put an unread badge on the conversation the user is
+          // actively looking at.
+          if (items.some((m) => m.sender.id !== currentUserId && !m.isRead)) {
+            apiFetch(`/messages/${selectedId}/read`, { method: "PATCH" }).catch(() => {})
+            setConversations((prev) =>
+              prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)),
+            )
+          }
         })
         .catch(() => {})
     }, THREAD_POLL_MS)
     return () => clearInterval(id)
-  }, [selectedId])
+  }, [selectedId, currentUserId])
 
   // ── Derived ───────────────────────────────────────────────────────────────
 

@@ -6,10 +6,18 @@
  * conversation rows without importing from the page component — that would
  * cycle through dashboard/layout -> dashboard/header.
  *
- * NOTE: these describe today's `/direct-messages/*` module. MB1 consolidates
- * the two competing messaging backends onto one canonical module; when the
- * backend engineer publishes that contract, this file is the single place the
- * conversation/message shapes need updating.
+ * NOTE: these shapes describe the `/direct-messages/*` module.
+ *
+ * TODO(messaging-notifications, pass 2 — MB1 rewire): as of 2026-08-21 the
+ * backend has retired `/direct-messages` entirely and made `/messages` the
+ * canonical module (`POST /messages`, `GET /messages`, `GET /messages/:id`,
+ * `PATCH /messages/:id/read`). Every `/direct-messages/*` call in the frontend
+ * therefore 500s / 404s until it is repointed — that rewire is deliberately out
+ * of scope for this pass because the response shapes aren't published in
+ * api-contract.md yet, and guessing them is exactly what the contract exists to
+ * prevent. The call sites to change are `messages-page.tsx` (list, thread,
+ * mark-read, send) and `messages-popover.tsx` (list); the shapes below are the
+ * single place their types need updating.
  */
 
 export interface BackendContact {

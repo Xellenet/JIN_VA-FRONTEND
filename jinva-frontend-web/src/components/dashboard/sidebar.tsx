@@ -27,6 +27,7 @@ import {
   Star,
   MessageSquare,
   Plus,
+  Wallet,
 } from "lucide-react"
 import type { UserRole } from "@/lib/types"
 
@@ -55,6 +56,7 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
   const artisanLinks = [
     { href: "/dashboard/artisan",                 label: "Overview",  icon: LayoutGrid    },
     { href: "/dashboard/artisan/jobs",            label: "My Jobs",   icon: ClipboardList },
+    { href: "/dashboard/artisan/earnings",        label: "Earnings",  icon: Wallet        },
     { href: "/dashboard/artisan/profile",         label: "Profile",   icon: UserCircle    },
     { href: "/dashboard/artisan/services",        label: "Services",  icon: Wrench        },
     { href: "/dashboard/artisan/portfolio",       label: "Portfolio", icon: ImageIcon     },
@@ -67,7 +69,8 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     { href: "/dashboard/user",                    label: "Overview",      icon: LayoutGrid    },
     { href: "/dashboard/user/post-job",           label: "Post a Job",    icon: Plus          },
     { href: "/dashboard/user/search",             label: "Find Artisans", icon: Search        },
-    { href: "/dashboard/user/bookings",           label: "My Jobs",       icon: ClipboardList },
+    { href: "/dashboard/user/bookings",           label: "My Bookings",   icon: CalendarDays  },
+    { href: "/dashboard/user/jobs",               label: "My Jobs",       icon: ClipboardList },
     { href: "/dashboard/user/favourites",         label: "Favourites",    icon: Heart         },
     { href: "/dashboard/user/messages",           label: "Messages",      icon: MessageSquare },
   ]

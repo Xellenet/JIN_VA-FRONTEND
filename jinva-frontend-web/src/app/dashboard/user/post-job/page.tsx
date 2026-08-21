@@ -172,6 +172,9 @@ export default function PostJobPage() {
         serviceId: selectedService,
         budgetMin: Number(budgetMin),
         budgetMax: Number(budgetMax),
+        // GHS is the only currency the platform supports in-app; hardcoded
+        // since no currency picker is wanted (backend requires this field).
+        currency: "GHS",
       }
       const job = await apiFetch<{ id: string }>("/jobs", {
         method: "POST",
@@ -584,7 +587,7 @@ export default function PostJobPage() {
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => router.push(createdJobId ? `/dashboard/user/bookings/${createdJobId}` : "/dashboard/user/bookings")}
+              onClick={() => router.push(createdJobId ? `/dashboard/user/jobs/${createdJobId}` : "/dashboard/user/jobs")}
             >
               Track My Job
             </Button>

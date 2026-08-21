@@ -31,6 +31,23 @@ const ROLE_HOME: Record<string, string> = {
 
 const SESSION_COOKIE_NAME = "jinva_session" // must match VARIABLES.AUTH_SESSION_COOKIE_NAME on the backend
 
+// Dev-only fallback, kept byte-for-byte identical to the backend's
+// getSessionSecret() (JIN_VA-BACKEND/src/auth/utils/session-cookie.util.ts).
+// Without this, an unset SESSION_COOKIE_SECRET here (even if the backend is
+// happily using its own matching fallback) makes `secret` undefined below,
+// which makes every single session — Google OAuth or plain email/password,
+// brand-new account or existing — silently fail verification and bounce
+// straight back to /login, regardless of how valid the cookie actually is.
+// Production must still set the real shared secret explicitly on both sides.
+const DEV_SESSION_SECRET_FALLBACK = "dev-only-insecure-session-secret-change-me"
+
+function getSessionSecret(): string | undefined {
+  const secret = process.env.SESSION_COOKIE_SECRET
+  if (secret) return secret
+  if (process.env.NODE_ENV === "production") return undefined
+  return DEV_SESSION_SECRET_FALLBACK
+}
+
 function roleForPath(pathname: string): string | null {
   if (pathname.startsWith("/dashboard/admin")) return "admin"
   if (pathname.startsWith("/dashboard/artisan")) return "artisan"
@@ -54,7 +71,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const secret = process.env.SESSION_COOKIE_SECRET
+  const secret = getSessionSecret()
   const session = cookieValue && secret ? await verifyAuthSessionCookie(cookieValue, secret) : null
   const role = session ? mapBackendRole(session.role) : null
 

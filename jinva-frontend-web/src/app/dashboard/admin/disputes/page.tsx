@@ -33,10 +33,26 @@ import {
   Clock,
   XCircle,
   Loader2,
+  CreditCard,
+  ArrowRight,
 } from "lucide-react"
-import { naviiAvatar, cn } from "@/lib/utils"
+import Link from "next/link"
+import { naviiAvatar, cn, formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
+import { getPaymentStatusConfig } from "@/lib/status-badges"
+
+// 3.6: GET /admin/disputes/:id (unlike the list endpoint) already returns
+// the dispute↔payment linkage the backend added for Ad3 — `jobId` and
+// `payment` are null when the underlying booking never produced a paid job
+// (a real, expected case, not an error).
+interface LinkedPayment {
+  id: number
+  amount: number
+  status: string
+  paidAt?: string
+  reference: string
+}
 
 type DisputeStatus = "OPEN" | "UNDER_REVIEW" | "RESOLVED" | "CLOSED"
 
@@ -76,6 +92,22 @@ export default function DisputesPage() {
   const [active, setActive] = useState<BackendDispute | null>(null)
   const [resolution, setResolution] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // 3.6: linked payment — fetched from the dispute detail endpoint the
+  // moment a dispute is opened, since the list endpoint doesn't carry it.
+  const [linkedPayment, setLinkedPayment] = useState<LinkedPayment | null | undefined>(undefined)
+  const [isLoadingPayment, setIsLoadingPayment] = useState(false)
+
+  const openDispute = (d: BackendDispute) => {
+    setActive(d)
+    setResolution(d.resolution ?? "")
+    setLinkedPayment(undefined)
+    setIsLoadingPayment(true)
+    apiFetch<{ jobId: number | null; payment: LinkedPayment | null }>(`/admin/disputes/${d.id}`)
+      .then((detail) => setLinkedPayment(detail.payment ?? null))
+      .catch(() => setLinkedPayment(null))
+      .finally(() => setIsLoadingPayment(false))
+  }
 
   useEffect(() => {
     apiFetch<BackendDispute[] | { items: BackendDispute[] }>("/admin/disputes?limit=100")
@@ -266,7 +298,7 @@ export default function DisputesPage() {
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7"
-                                onClick={() => { setActive(d); setResolution(d.resolution ?? "") }}
+                                onClick={() => openDispute(d)}
                               >
                                 <MessageSquare className="h-3.5 w-3.5" />
                               </Button>
@@ -284,7 +316,7 @@ export default function DisputesPage() {
                                 <Button
                                   size="sm"
                                   className="h-7 bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90"
-                                  onClick={() => { setActive(d); setResolution(d.resolution ?? "") }}
+                                  onClick={() => openDispute(d)}
                                 >
                                   Resolve
                                 </Button>
@@ -312,7 +344,7 @@ export default function DisputesPage() {
         </Card>
       </div>
 
-      <Dialog open={!!active} onOpenChange={(o) => { if (!o) { setActive(null); setResolution("") } }}>
+      <Dialog open={!!active} onOpenChange={(o) => { if (!o) { setActive(null); setResolution(""); setLinkedPayment(undefined) } }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
@@ -340,6 +372,40 @@ export default function DisputesPage() {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Unknown</p>
+                )}
+              </div>
+
+              {/* 3.6: Linked Payment panel (Ad3) */}
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Linked Payment
+                </p>
+                {isLoadingPayment ? (
+                  <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Checking for a linked payment…
+                  </div>
+                ) : linkedPayment ? (
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{formatCurrency(linkedPayment.amount)}</p>
+                      <Badge variant="outline" className={cn("mt-1 text-xs", getPaymentStatusConfig(linkedPayment.status).className)}>
+                        {getPaymentStatusConfig(linkedPayment.status).label}
+                      </Badge>
+                      {linkedPayment.paidAt && (
+                        <p className="mt-1 text-xs text-muted-foreground">Paid {fmtDate(linkedPayment.paidAt)}</p>
+                      )}
+                    </div>
+                    <Link
+                      href="/dashboard/admin/transactions"
+                      className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      View in Transactions <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No payment on file for this booking.</p>
                 )}
               </div>
 

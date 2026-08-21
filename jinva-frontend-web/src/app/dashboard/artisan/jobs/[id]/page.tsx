@@ -365,7 +365,9 @@ export default function ArtisanJobDetailPage() {
                   )}
                   {job.customer && (
                     <Button variant="outline" className="bg-transparent" asChild>
-                      <Link href={`/dashboard/artisan/messages?client=${job.customer.id}`}>
+                      {/* MC2 — `&job=` rides along so the message carries a
+                          reference to this job (feeds AD1's evidence view). */}
+                      <Link href={`/dashboard/artisan/messages?client=${job.customer.id}&job=${job.id}`}>
                         <MessageSquare className="mr-2 h-4 w-4" />
                         Contact Client
                       </Link>

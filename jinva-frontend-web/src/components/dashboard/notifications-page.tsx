@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,75 +11,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Calendar,
-  CreditCard,
-  Star,
-  Briefcase,
-  MessageSquare,
-  Settings,
-  Bell,
-  Check,
-  CheckCheck,
-  Loader2,
-} from "lucide-react"
+import { Bell, Check, CheckCheck, Loader2 } from "lucide-react"
 import type { Notification } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
-
-interface BackendNotification {
-  id: string
-  type: string
-  title: string
-  body: string
-  isRead: boolean
-  payload?: unknown
-  createdAt: string
-}
-
-function mapNotificationType(type: string): Notification["type"] {
-  const t = type.toUpperCase()
-  if (t.includes("PAYMENT") || t.includes("REFUND")) return "payment"
-  if (t.includes("REVIEW")) return "review"
-  if (t.includes("MESSAGE")) return "message"
-  if (t.includes("BOOKING")) return "booking"
-  if (t.includes("JOB") || t.includes("ASSIGN")) return "assignment"
-  return "system"
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  if (diff < 60_000) return "just now"
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
-  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-}
-
-function mapNotification(n: BackendNotification): Notification {
-  return {
-    id: n.id,
-    title: n.title,
-    message: n.body,
-    type: mapNotificationType(n.type),
-    isRead: n.isRead,
-    time: formatTime(n.createdAt),
-  }
-}
-
-const typeConfig: Record<
-  Notification["type"],
-  { icon: React.ElementType; color: string; bg: string; label: string }
-> = {
-  booking:    { icon: Calendar,       color: "text-foreground",       bg: "bg-muted",       label: "Booking" },
-  payment:    { icon: CreditCard,     color: "text-primary",          bg: "bg-primary/10",  label: "Payment" },
-  review:     { icon: Star,           color: "text-yellow-600",       bg: "bg-yellow-100",  label: "Review" },
-  assignment: { icon: Briefcase,      color: "text-blue-600",         bg: "bg-blue-100",    label: "Assignment" },
-  message:    { icon: MessageSquare,  color: "text-violet-600",       bg: "bg-violet-100",  label: "Message" },
-  system:     { icon: Settings,       color: "text-muted-foreground", bg: "bg-muted",       label: "System" },
-}
+import { getNotificationTypeConfig } from "@/lib/status-badges"
+import {
+  mapNotification,
+  readNotificationList,
+  type BackendNotification,
+} from "@/lib/notifications"
 
 export function NotificationsPage() {
   const { user } = useAuth()
@@ -90,10 +32,7 @@ export function NotificationsPage() {
 
   useEffect(() => {
     apiFetch<BackendNotification[] | { items: BackendNotification[] }>("/notifications?page=1&limit=50")
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: BackendNotification[] }).items ?? []
-        setNotifications(items.map(mapNotification))
-      })
+      .then((r) => setNotifications(readNotificationList(r).map(mapNotification)))
       .catch(() => {})
       .finally(() => setIsLoading(false))
   }, [])
@@ -188,7 +127,7 @@ export function NotificationsPage() {
             ) : (
               <div className="divide-y divide-border">
                 {displayed.map((notification) => {
-                  const config = typeConfig[notification.type]
+                  const config = getNotificationTypeConfig(notification.type)
                   const Icon = config.icon
                   return (
                     <button
@@ -249,7 +188,7 @@ export function NotificationsPage() {
       <Dialog open={!!selectedNotification} onOpenChange={(open) => !open && setSelectedNotification(null)}>
         <DialogContent className="sm:max-w-md">
           {selectedNotification && (() => {
-            const config = typeConfig[selectedNotification.type]
+            const config = getNotificationTypeConfig(selectedNotification.type)
             const Icon = config.icon
             return (
               <>

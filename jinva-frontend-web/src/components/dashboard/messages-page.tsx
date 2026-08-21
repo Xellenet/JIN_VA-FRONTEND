@@ -74,7 +74,17 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
           lastSenderId: 0,
           unreadCount: 0,
         }
-        setConversations((prev) => [placeholder, ...prev])
+        // Guard against inserting the same placeholder twice — the conversation
+        // list is keyed on contact.id, and this effect can run more than once
+        // for the same deep link (React StrictMode double-invokes it in dev,
+        // and a re-run would otherwise stack duplicates). Surfaced by MC1:
+        // until the artisan route passed ?client= through, this branch was
+        // only ever reachable from the customer route.
+        setConversations((prev) =>
+          prev.some((c) => String(c.contact.id) === String(openConversationId))
+            ? prev
+            : [placeholder, ...prev],
+        )
         setSelected(placeholder)
       }
     })

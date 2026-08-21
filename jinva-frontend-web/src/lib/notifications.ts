@@ -68,3 +68,25 @@ export function readNotificationList(r: BackendNotification[] | { items?: Backen
   if (Array.isArray(r)) return r
   return r?.items ?? []
 }
+
+/**
+ * Strips the preferences row's own `id` out of a notification-preferences
+ * payload before it is PATCHed back.
+ *
+ * `GET /notifications/preferences` includes `id` (the NotificationPreferences
+ * row's primary key), but the Settings screens build their PATCH body from
+ * that same fetched object — and `PATCH /notifications/preferences` validates
+ * against `UpdateNotificationPreferencesDto` behind a global ValidationPipe
+ * with `forbidNonWhitelisted: true`. An undeclared property doesn't get
+ * ignored, it 400s the whole request: verified live against the running
+ * backend, `PATCH` with the unmodified GET payload returns
+ * `["property id should not exist", ...]` and nothing saves at all.
+ *
+ * `id` is row metadata, never a user preference, so dropping it client-side is
+ * the correct fix rather than something the backend should start accepting.
+ */
+export function stripPreferenceMetadata<T extends object>(prefs: T): Omit<T, "id"> {
+  const rest = { ...prefs } as T & { id?: unknown }
+  delete rest.id
+  return rest as Omit<T, "id">
+}

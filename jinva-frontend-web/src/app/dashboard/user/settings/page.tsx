@@ -46,6 +46,7 @@ import {
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { applyPushPreference } from "@/lib/push-notifications"
+import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/utils"
 import { getPaymentStatusConfig } from "@/lib/status-badges"
@@ -174,7 +175,10 @@ function UserSettingsContent() {
     try {
       await apiFetch("/notifications/preferences", {
         method: "PATCH",
-        body: JSON.stringify(notifPrefs),
+        // stripPreferenceMetadata drops the row `id` the GET response carries —
+        // PATCH validates against a whitelist DTO and 400s the entire save if
+        // an undeclared property is present. See its doc comment.
+        body: JSON.stringify(stripPreferenceMetadata(notifPrefs)),
       })
       toast.success("Notification preferences saved.")
     } catch {

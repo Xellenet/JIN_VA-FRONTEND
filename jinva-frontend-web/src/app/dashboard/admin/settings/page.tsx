@@ -61,16 +61,21 @@ import { applyPushPreference } from "@/lib/push-notifications"
  * Expected endpoints, unchanged from what Customer/Artisan already use:
  *   GET   /notifications/preferences   -> admin-shaped DTO
  *   PATCH /notifications/preferences   -> partial admin-shaped DTO
- * Confirm the final key names against api-contract.md when it lands — the
- * names below are this screen's proposal, derived from the design spec's row
- * labels, not an agreed contract.
+ * The five key names below are taken from the backend's own in-progress
+ * `UpdateNotificationPreferencesDto` / `ADMIN_UPDATABLE` (`disputeFiled`,
+ * `paymentTransferFailed`, `verificationSubmitted`, `reviewFlagged`,
+ * `artisanRegistered`) rather than invented here, so pass 2 should be a payload
+ * change and nothing else. Verified against the running server on 2026-08-21:
+ * all five are still rejected with `property <key> should not exist`, i.e. that
+ * backend work is written but not yet deployed. Re-confirm the names against
+ * api-contract.md before wiring.
  */
 interface AdminNotifPrefs {
   disputeFiled: boolean
   paymentTransferFailed: boolean
-  artisanVerificationSubmitted: boolean
+  verificationSubmitted: boolean
   reviewFlagged: boolean
-  newArtisanRegistered: boolean
+  artisanRegistered: boolean
   emailEnabled: boolean
   smsEnabled: boolean
   pushEnabled: boolean
@@ -80,9 +85,9 @@ interface AdminNotifPrefs {
 const ADMIN_NOTIF_DEFAULTS: AdminNotifPrefs = {
   disputeFiled: true,
   paymentTransferFailed: true,
-  artisanVerificationSubmitted: true,
+  verificationSubmitted: true,
   reviewFlagged: true,
-  newArtisanRegistered: false,
+  artisanRegistered: false,
   emailEnabled: true,
   smsEnabled: false,
   pushEnabled: true,
@@ -91,9 +96,9 @@ const ADMIN_NOTIF_DEFAULTS: AdminNotifPrefs = {
 const ADMIN_EVENT_ROWS: { key: keyof AdminNotifPrefs; label: string; desc: string }[] = [
   { key: "disputeFiled", label: "Dispute Filed", desc: "Get notified when a customer or artisan opens a new dispute that needs review" },
   { key: "paymentTransferFailed", label: "Payment Transfer Failed", desc: "Get notified when an artisan payout fails and needs manual attention" },
-  { key: "artisanVerificationSubmitted", label: "Artisan Verification Submitted", desc: "Get notified when a new artisan submits documents for verification" },
+  { key: "verificationSubmitted", label: "Artisan Verification Submitted", desc: "Get notified when a new artisan submits documents for verification" },
   { key: "reviewFlagged", label: "Review Flagged for Moderation", desc: "Get notified when a review is flagged and enters the moderation queue" },
-  { key: "newArtisanRegistered", label: "New Artisan Registered", desc: "Get notified when a new artisan creates an account on the platform" },
+  { key: "artisanRegistered", label: "New Artisan Registered", desc: "Get notified when a new artisan creates an account on the platform" },
 ]
 
 export default function AdminSettingsPage() {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,7 +15,7 @@ import { Bell, Check, CheckCheck, Loader2 } from "lucide-react"
 import type { Notification } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { getNotificationTypeConfig } from "@/lib/status-badges"
 import {
   mapNotification,
@@ -23,19 +23,100 @@ import {
   type BackendNotification,
 } from "@/lib/notifications"
 
+/**
+ * NR4 — real pagination instead of a hardcoded `limit=50` with nothing beyond
+ * it reachable. Same "Load more" + `meta.pagination` idiom the reviews lists
+ * already use (see `artisan/reviews/page.tsx`).
+ */
+const PAGE_SIZE = 20
+
+/**
+ * NR2 — the feed refreshes on a cadence and on window focus, so a notification
+ * that arrives while the page is open shows up without a manual reload. Matched
+ * to the header bell's own poll (`header-badge.ts`'s `POPOVER_POLL_MS`) so the
+ * badge above and the list beneath it can't contradict each other.
+ */
+const FEED_POLL_MS = 30_000
+
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
+
+function fetchPage(page: number): Promise<{ items: Notification[]; totalPages: number }> {
+  return apiFetchWithMeta<BackendNotification[] | { items: BackendNotification[] }>(
+    `/notifications?page=${page}&limit=${PAGE_SIZE}`,
+  ).then(({ data, meta }) => ({
+    items: readNotificationList(data).map(mapNotification),
+    totalPages: extractTotalPages(meta),
+  }))
+}
+
 export function NotificationsPage() {
   const { user } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
   const [filter, setFilter] = useState<"all" | "unread">("all")
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
 
+  /**
+   * Ids read in this session. A refresh that was already in flight when the
+   * user marked something read would otherwise flip it back to unread.
+   */
+  const locallyRead = useRef<Set<string>>(new Set())
+  /** How many pages are currently on screen, so a refresh re-fetches all of them. */
+  const loadedPages = useRef(1)
+
+  const applyLocalReads = useCallback(
+    (items: Notification[]) =>
+      items.map((n) => (locallyRead.current.has(n.id) ? { ...n, isRead: true } : n)),
+    [],
+  )
+
+  // NR2 — refresh every loaded page so "load more" state survives a poll.
+  const refresh = useCallback(async () => {
+    try {
+      const pages = await Promise.all(
+        Array.from({ length: loadedPages.current }, (_, i) => fetchPage(i + 1)),
+      )
+      setNotifications(applyLocalReads(pages.flatMap((p) => p.items)))
+      setTotalPages(pages[pages.length - 1]?.totalPages ?? 1)
+    } catch {
+      // Keep what's on screen rather than blanking the feed on a transient error.
+    }
+  }, [applyLocalReads])
+
   useEffect(() => {
-    apiFetch<BackendNotification[] | { items: BackendNotification[] }>("/notifications?page=1&limit=50")
-      .then((r) => setNotifications(readNotificationList(r).map(mapNotification)))
-      .catch(() => {})
-      .finally(() => setIsLoading(false))
-  }, [])
+    refresh().finally(() => setIsLoading(false))
+    const id = setInterval(refresh, FEED_POLL_MS)
+    const onFocus = () => refresh()
+    window.addEventListener("focus", onFocus)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [refresh])
+
+  const loadMore = async () => {
+    setIsLoadingMore(true)
+    try {
+      const next = page + 1
+      const { items, totalPages: total } = await fetchPage(next)
+      setNotifications((prev) => [...prev, ...applyLocalReads(items)])
+      setPage(next)
+      setTotalPages(total)
+      loadedPages.current = next
+    } catch {
+      // Nothing appended; the button stays available for another try.
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
 
   if (!user) return null
 
@@ -43,15 +124,17 @@ export function NotificationsPage() {
   const displayed = filter === "unread" ? notifications.filter((n) => !n.isRead) : notifications
 
   const markAllRead = async () => {
+    notifications.forEach((n) => locallyRead.current.add(n.id))
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
     try {
       await apiFetch("/notifications/read-all", { method: "PATCH" })
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
     } catch {
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+      // optimistic update already applied
     }
   }
 
   const markRead = async (id: string) => {
+    locallyRead.current.add(id)
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
     try {
       await apiFetch(`/notifications/${id}/read`, { method: "PATCH" })
@@ -183,6 +266,16 @@ export function NotificationsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* NR4 — anything past the first page is reachable rather than lost. */}
+        {!isLoading && page < totalPages && (
+          <div className="flex justify-center">
+            <Button variant="outline" className="bg-transparent" onClick={loadMore} disabled={isLoadingMore}>
+              {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Load more notifications
+            </Button>
+          </div>
+        )}
       </div>
 
       <Dialog open={!!selectedNotification} onOpenChange={(open) => !open && setSelectedNotification(null)}>

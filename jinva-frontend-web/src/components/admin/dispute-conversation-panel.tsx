@@ -162,7 +162,9 @@ function ReadyPanel({
   isSheetOpen: boolean
   onSheetOpenChange: (open: boolean) => void
 }>) {
-  const { customer, artisan, messages, totalMessages } = conversation
+  const { customer, artisan } = conversation
+  const messages = conversation.messages ?? []
+  const totalMessages = conversation.totalMessages ?? messages.length
   const preview = messages.slice(-2)
   const isTruncated = totalMessages > messages.length
 

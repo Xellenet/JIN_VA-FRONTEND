@@ -42,33 +42,15 @@ import { applyPushPreference } from "@/lib/push-notifications"
  * Warnings") on a services marketplace with no orders and no inventory, behind
  * a Save button that had no onClick at all.
  *
- * BACKEND DEPENDENCY — these five keys do not exist yet. The backend today
- * only has customer- and artisan-shaped notification-preference DTOs
- * (`CustomerNotificationPreferencesResponseDto` /
- * `ArtisanNotificationPreferencesResponseDto`), and for an ADMIN caller
- * `GET/PATCH /notifications/preferences` falls through to the customer shape.
- * design-spec.md section 7 item 6 asks the backend engineer for an
- * admin-shaped DTO on that same endpoint.
+ * `GET`/`PATCH /notifications/preferences` now return and accept the
+ * admin-shaped body (api-contract.md §6): the five event keys plus the three
+ * channel flags, all five defaulting to `true` server-side. Every one of them
+ * is hydrated from the GET response and sent on save — nothing on this tab is
+ * a local default, so the screen always shows the state the server holds.
  *
- * TODO(messaging-notifications, pass 2): once the admin-shaped DTO ships,
- *   1. add the five ADMIN_EVENT_ROWS keys to the PATCH payload in
- *      handleSaveNotifications (they are excluded today because the backend
- *      runs a global ValidationPipe with `forbidNonWhitelisted: true`, so
- *      posting an unknown key 400s the entire request — including the channel
- *      toggles that do work);
- *   2. hydrate them from the GET response instead of ADMIN_NOTIF_DEFAULTS;
- *   3. restore the "Notification preferences saved." toast copy.
- * Expected endpoints, unchanged from what Customer/Artisan already use:
- *   GET   /notifications/preferences   -> admin-shaped DTO
- *   PATCH /notifications/preferences   -> partial admin-shaped DTO
- * The five key names below are taken from the backend's own in-progress
- * `UpdateNotificationPreferencesDto` / `ADMIN_UPDATABLE` (`disputeFiled`,
- * `paymentTransferFailed`, `verificationSubmitted`, `reviewFlagged`,
- * `artisanRegistered`) rather than invented here, so pass 2 should be a payload
- * change and nothing else. Verified against the running server on 2026-08-21:
- * all five are still rejected with `property <key> should not exist`, i.e. that
- * backend work is written but not yet deployed. Re-confirm the names against
- * api-contract.md before wiring.
+ * Writes are role-scoped in both directions server-side (an admin sending a
+ * customer key has it ignored), so the whole id-stripped object is safe to
+ * PATCH, matching what the Customer and Artisan tabs already do.
  */
 interface AdminNotifPrefs {
   disputeFiled: boolean
@@ -81,13 +63,19 @@ interface AdminNotifPrefs {
   pushEnabled: boolean
 }
 
-/** Defaults mirror the mockup: everything on except "New Artisan Registered". */
-const ADMIN_NOTIF_DEFAULTS: AdminNotifPrefs = {
+/**
+ * Pre-hydration placeholder only — the Notifications tab renders a spinner
+ * until the GET lands, so these values are never shown as if they were real
+ * state. They mirror the server's own defaults (api-contract.md §6: all five
+ * event toggles default to `true`) so a fetch failure can't misreport a toggle
+ * as off when the backend has it on.
+ */
+const ADMIN_NOTIF_FALLBACK: AdminNotifPrefs = {
   disputeFiled: true,
   paymentTransferFailed: true,
   verificationSubmitted: true,
   reviewFlagged: true,
-  artisanRegistered: false,
+  artisanRegistered: true,
   emailEnabled: true,
   smsEnabled: false,
   pushEnabled: true,
@@ -107,23 +95,28 @@ export default function AdminSettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   // ── Notification preferences (PR3) ──────────────────────────────────────
-  const [notifPrefs, setNotifPrefs] = useState<AdminNotifPrefs>(ADMIN_NOTIF_DEFAULTS)
+  const [notifPrefs, setNotifPrefs] = useState<AdminNotifPrefs>(ADMIN_NOTIF_FALLBACK)
   const [isLoadingNotifs, setIsLoadingNotifs] = useState(true)
   const [isSavingNotifs, setIsSavingNotifs] = useState(false)
 
   useEffect(() => {
-    // Only the channel toggles are real on this endpoint for an admin today;
-    // the five event keys stay on their defaults until the backend DTO exists.
+    // Hydrate every toggle from the server, event keys included — a local
+    // default shown as live state is how "artisanRegistered" ended up
+    // displaying as off while the backend had it on.
     apiFetch<Partial<AdminNotifPrefs>>("/notifications/preferences")
       .then((r) =>
         setNotifPrefs((p) => ({
-          ...p,
+          disputeFiled: r?.disputeFiled ?? p.disputeFiled,
+          paymentTransferFailed: r?.paymentTransferFailed ?? p.paymentTransferFailed,
+          verificationSubmitted: r?.verificationSubmitted ?? p.verificationSubmitted,
+          reviewFlagged: r?.reviewFlagged ?? p.reviewFlagged,
+          artisanRegistered: r?.artisanRegistered ?? p.artisanRegistered,
           emailEnabled: r?.emailEnabled ?? p.emailEnabled,
           smsEnabled: r?.smsEnabled ?? p.smsEnabled,
           pushEnabled: r?.pushEnabled ?? p.pushEnabled,
         })),
       )
-      .catch(() => {})
+      .catch(() => toast.error("Couldn't load notification preferences."))
       .finally(() => setIsLoadingNotifs(false))
   }, [])
 
@@ -137,18 +130,16 @@ export default function AdminSettingsPage() {
   const handleSaveNotifications = async () => {
     setIsSavingNotifs(true)
     try {
-      // See the TODO above: ADMIN_EVENT_KEYS are deliberately not sent yet.
+      // All eight fields — the five admin event toggles and the three channels.
+      // `stripPreferenceMetadata` is not needed here because this component's
+      // state never holds the preferences row's own `id`.
       await apiFetch("/notifications/preferences", {
         method: "PATCH",
-        body: JSON.stringify({
-          emailEnabled: notifPrefs.emailEnabled,
-          smsEnabled: notifPrefs.smsEnabled,
-          pushEnabled: notifPrefs.pushEnabled,
-        }),
+        body: JSON.stringify(notifPrefs),
       })
-      toast.success("Notification channels saved.")
-    } catch {
-      toast.error("Failed to save notification preferences.")
+      toast.success("Notification preferences saved.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save notification preferences.")
     } finally {
       setIsSavingNotifs(false)
     }

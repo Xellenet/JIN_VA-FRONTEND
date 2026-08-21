@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect, useCallback } from "react"
+import { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -115,13 +115,24 @@ export default function FavouritesPage() {
   const [loadError, setLoadError] = useState(false)
   const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<SortBy>("recent")
+  const sortTouchedRef = useRef(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setIsLoading(true)
     setLoadError(false)
     apiFetch<BackendArtisan[] | FavouritesEnvelope>("/favourites")
-      .then((r) => setFavourites(extractFavourites(r).map(mapArtisan)))
+      .then((r) => {
+        const mapped = extractFavourites(r).map(mapArtisan)
+        setFavourites(mapped)
+        // design-spec.md §10.2: if the backend hasn't shipped `favouritedAt`
+        // yet, "Recently Saved" has nothing real to sort by — fall back to
+        // "Highest Rated" rather than a no-op sort, unless the customer
+        // already picked a sort themselves.
+        if (!sortTouchedRef.current && mapped.length > 0 && !mapped.some((a) => a.favouritedAt)) {
+          setSortBy("rating")
+        }
+      })
       .catch(() => {
         setLoadError(true)
         toast.error("Could not load favourites.")
@@ -216,7 +227,7 @@ export default function FavouritesPage() {
               {sortOptions.map((opt) => (
                 <DropdownMenuItem
                   key={opt.value}
-                  onClick={() => setSortBy(opt.value)}
+                  onClick={() => { setSortBy(opt.value); sortTouchedRef.current = true }}
                   className={sortBy === opt.value ? "bg-accent text-accent-foreground" : ""}
                 >
                   {opt.label}

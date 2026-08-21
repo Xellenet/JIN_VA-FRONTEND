@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,6 +11,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import {
   Star,
   Mail,
@@ -26,12 +34,23 @@ import {
   MessageSquare,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { naviiAvatar } from "@/lib/utils"
 import { toast } from "sonner"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
 import type { ApiReview } from "@/lib/types"
+
+// RV2: reviews are paginated server-side (default limit 10, max 50) — always
+// send `page`/`limit` explicitly, or reviews 11+ are silently unreachable.
+const REVIEWS_PAGE_SIZE = 10
+
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
 
 interface BackendArtisanProfile {
   id: string
@@ -70,6 +89,8 @@ export default function ArtisanProfile() {
   // Loaded data
   const [artisanProfile, setArtisanProfile] = useState<BackendArtisanProfile | null>(null)
   const [reviews, setReviews] = useState<ApiReview[]>([])
+  const [reviewsPage, setReviewsPage] = useState(1)
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -118,6 +139,20 @@ export default function ArtisanProfile() {
     setPhone(user.phone ?? "")
   }, [user])
 
+  // RV2: paginated so reviews 11+ stay reachable — reused by the pager below.
+  const loadReviewsPage = useCallback((artisanProfileId: string, p: number) => {
+    apiFetchWithMeta<ApiReview[] | { items: ApiReview[] }>(
+      `/reviews/artisan-profile/${artisanProfileId}?page=${p}&limit=${REVIEWS_PAGE_SIZE}`,
+    )
+      .then(({ data, meta }) => {
+        const items = Array.isArray(data) ? data : (data as { items: ApiReview[] })?.items ?? []
+        setReviews(items)
+        setReviewsPage(p)
+        setReviewsTotalPages(extractTotalPages(meta))
+      })
+      .catch(() => setReviews((prev) => (p === 1 ? [] : prev)))
+  }, [])
+
   // Load artisan profile + reviews
   useEffect(() => {
     apiFetch<BackendArtisanProfile>("/users/me/artisan-profile")
@@ -128,17 +163,11 @@ export default function ArtisanProfile() {
         setExperienceYears(profile.experienceYears != null ? String(profile.experienceYears) : "")
         setBusinessName(profile.businessName ?? "")
         setHourlyRate(profile.hourlyRate != null ? String(profile.hourlyRate) : "")
-
-        return apiFetch<ApiReview[] | { items: ApiReview[] }>(
-          `/reviews/artisan-profile/${profile.id}`,
-        ).catch(() => [] as ApiReview[])
-      })
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: ApiReview[] }).items ?? []
-        setReviews(items)
+        loadReviewsPage(profile.id, 1)
       })
       .catch(() => {})
       .finally(() => setIsLoadingProfile(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSaveProfile = async () => {
@@ -522,6 +551,45 @@ export default function ArtisanProfile() {
                   })
                 )}
               </CardContent>
+              {reviewsTotalPages > 1 && (
+                <div className="border-t border-border p-3">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            if (artisanProfile && reviewsPage > 1) loadReviewsPage(artisanProfile.id, reviewsPage - 1)
+                          }}
+                          className={reviewsPage === 1 ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: reviewsTotalPages }, (_, i) => i + 1).map((p) => (
+                        <PaginationItem key={p}>
+                          <PaginationLink
+                            href="#"
+                            isActive={p === reviewsPage}
+                            onClick={(e) => { e.preventDefault(); if (artisanProfile) loadReviewsPage(artisanProfile.id, p) }}
+                          >
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            if (artisanProfile && reviewsPage < reviewsTotalPages) loadReviewsPage(artisanProfile.id, reviewsPage + 1)
+                          }}
+                          className={reviewsPage === reviewsTotalPages ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
             </Card>
           </TabsContent>
         </Tabs>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import {
   Star,
   MapPin,
@@ -25,7 +33,7 @@ import {
   Pencil,
 } from "lucide-react"
 import { naviiAvatar, formatCurrency } from "@/lib/utils"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { useAuth } from "@/contexts/auth-context"
 import { PortfolioGallery } from "@/components/portfolio/portfolio-gallery"
@@ -68,10 +76,27 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
 }
 
-function fetchReviews(artisanId: string): Promise<ApiReview[]> {
-  return apiFetch<ApiReview[] | { items: ApiReview[] }>(`/reviews/artisan-profile/${artisanId}`)
-    .then((r) => (Array.isArray(r) ? r : (r as { items: ApiReview[] }).items ?? []))
-    .catch(() => [] as ApiReview[])
+// RV2: reviews are paginated server-side (default limit 10, max 50) — always
+// send `page`/`limit` explicitly and surface `meta.pagination` rather than
+// relying on the backend default, or reviews 11+ are silently unreachable.
+const REVIEWS_PAGE_SIZE = 10
+
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
+
+function fetchReviews(artisanId: string, page: number): Promise<{ reviews: ApiReview[]; totalPages: number }> {
+  return apiFetchWithMeta<ApiReview[] | { items: ApiReview[] }>(
+    `/reviews/artisan-profile/${artisanId}?page=${page}&limit=${REVIEWS_PAGE_SIZE}`,
+  )
+    .then(({ data, meta }) => ({
+      reviews: Array.isArray(data) ? data : (data as { items: ApiReview[] })?.items ?? [],
+      totalPages: extractTotalPages(meta),
+    }))
+    .catch(() => ({ reviews: [] as ApiReview[], totalPages: 1 }))
 }
 
 export default function ArtisanPublicProfile() {
@@ -80,6 +105,8 @@ export default function ArtisanPublicProfile() {
 
   const [artisan, setArtisan] = useState<BackendArtisan | null>(null)
   const [reviews, setReviews] = useState<ApiReview[]>([])
+  const [reviewsPage, setReviewsPage] = useState(1)
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [flagTarget, setFlagTarget] = useState<ApiReview | null>(null)
@@ -93,14 +120,32 @@ export default function ArtisanPublicProfile() {
   useEffect(() => {
     if (!id) return
     setIsLoading(true)
-    Promise.all([apiFetch<BackendArtisan>(`/artisans/${id}`), fetchReviews(id)])
-      .then(([profile, reviewItems]) => {
+    Promise.all([apiFetch<BackendArtisan>(`/artisans/${id}`), fetchReviews(id, 1)])
+      .then(([profile, reviewData]) => {
         setArtisan(profile)
-        setReviews(reviewItems)
+        setReviews(reviewData.reviews)
+        setReviewsPage(1)
+        setReviewsTotalPages(reviewData.totalPages)
       })
       .catch(() => setError("Could not load artisan profile."))
       .finally(() => setIsLoading(false))
   }, [id])
+
+  // RV2: reused both by the pagination control and by the post-flag refresh
+  // below. If flagging emptied the current page (e.g. the last review on the
+  // last page gets flagged), step back a page rather than show a dead end —
+  // same guard already used by the admin reviews queue's pager.
+  const loadReviewsPage = useCallback((artisanId: string, p: number) => {
+    fetchReviews(artisanId, p).then(({ reviews: items, totalPages }) => {
+      if (items.length === 0 && p > 1) {
+        loadReviewsPage(artisanId, p - 1)
+        return
+      }
+      setReviews(items)
+      setReviewsPage(p)
+      setReviewsTotalPages(totalPages)
+    })
+  }, [])
 
   const handleFlagSubmitted = async (reason: string) => {
     if (!flagTarget) return
@@ -109,9 +154,10 @@ export default function ArtisanPublicProfile() {
       body: JSON.stringify({ reason }),
     })
     // FL1: hides immediately for everyone except the original reviewer, who
-    // still sees it marked "Under review" — refetch rather than guess which
-    // branch applies, so the list always matches what the server would return.
-    if (id) setReviews(await fetchReviews(id))
+    // still sees it marked "Under review" — refetch the current page rather
+    // than guess which branch applies, so the list always matches what the
+    // server would return.
+    if (id) loadReviewsPage(id, reviewsPage)
     toast.success("Reported — this review has been hidden pending review.")
   }
 
@@ -291,7 +337,7 @@ export default function ArtisanPublicProfile() {
           <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
             <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
-            <TabsTrigger value="reviews">Reviews ({reviews.length})</TabsTrigger>
+            <TabsTrigger value="reviews">Reviews ({Number(artisan.totalReviews ?? reviews.length)})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="portfolio">
@@ -476,6 +522,39 @@ export default function ArtisanPublicProfile() {
                   })
                 )}
               </CardContent>
+              {reviewsTotalPages > 1 && (
+                <div className="border-t border-border p-3">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => { e.preventDefault(); if (id && reviewsPage > 1) loadReviewsPage(id, reviewsPage - 1) }}
+                          className={reviewsPage === 1 ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: reviewsTotalPages }, (_, i) => i + 1).map((p) => (
+                        <PaginationItem key={p}>
+                          <PaginationLink
+                            href="#"
+                            isActive={p === reviewsPage}
+                            onClick={(e) => { e.preventDefault(); if (id) loadReviewsPage(id, p) }}
+                          >
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => { e.preventDefault(); if (id && reviewsPage < reviewsTotalPages) loadReviewsPage(id, reviewsPage + 1) }}
+                          className={reviewsPage === reviewsTotalPages ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
             </Card>
           </TabsContent>
         </Tabs>

@@ -15,11 +15,16 @@ import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badg
 import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbnails"
 import { AlertTriangle, ExternalLink, Loader2, MessageSquare, Star, UserRound } from "lucide-react"
 import { naviiAvatar, cn } from "@/lib/utils"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { toast } from "sonner"
 import type { ApiReview } from "@/lib/types"
 
 const REPLY_MAX_LENGTH = 300
+
+// RV2: reviews are paginated server-side (default limit 10, max 50) — always
+// send `page`/`limit` explicitly and load further pages via "Load more," or
+// reviews 11+ are silently unreachable (and un-repliable, breaking AR1).
+const REVIEWS_PAGE_SIZE = 10
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
@@ -31,10 +36,20 @@ interface BackendArtisanProfile {
   totalReviews: number
 }
 
-function fetchArtisanReviews(artisanProfileId: string): Promise<ApiReview[]> {
-  return apiFetch<ApiReview[] | { items: ApiReview[] }>(`/reviews/artisan-profile/${artisanProfileId}`).then((r) =>
-    Array.isArray(r) ? r : (r as { items: ApiReview[] }).items ?? [],
-  )
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
+
+function fetchArtisanReviews(artisanProfileId: string, page: number): Promise<{ reviews: ApiReview[]; totalPages: number }> {
+  return apiFetchWithMeta<ApiReview[] | { items: ApiReview[] }>(
+    `/reviews/artisan-profile/${artisanProfileId}?page=${page}&limit=${REVIEWS_PAGE_SIZE}`,
+  ).then(({ data, meta }) => ({
+    reviews: Array.isArray(data) ? data : (data as { items: ApiReview[] })?.items ?? [],
+    totalPages: extractTotalPages(meta),
+  }))
 }
 
 function ReviewCardSkeleton() {
@@ -57,8 +72,12 @@ function ReviewCardSkeleton() {
 
 export default function ArtisanMyReviewsPage() {
   const [summary, setSummary] = useState<{ averageRating: number; totalReviews: number } | null>(null)
+  const [artisanProfileId, setArtisanProfileId] = useState<string | null>(null)
   const [reviews, setReviews] = useState<ApiReview[]>([])
+  const [reviewsPage, setReviewsPage] = useState(1)
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [ratingFilter, setRatingFilter] = useState<number | null>(null)
 
@@ -75,14 +94,37 @@ export default function ArtisanMyReviewsPage() {
           averageRating: Number(profile.averageRating ?? 0),
           totalReviews: Number(profile.totalReviews ?? 0),
         })
-        return fetchArtisanReviews(profile.id)
+        setArtisanProfileId(profile.id)
+        return fetchArtisanReviews(profile.id, 1)
       })
-      .then(setReviews)
+      .then(({ reviews: items, totalPages }) => {
+        setReviews(items)
+        setReviewsPage(1)
+        setReviewsTotalPages(totalPages)
+      })
       .catch(() => setLoadError(true))
       .finally(() => setIsLoading(false))
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // RV2: appends rather than replaces — the rating-filter chips and the
+  // summary counts below are computed from whatever's currently loaded, so
+  // growing the set (instead of paging through disjoint slices) keeps them
+  // monotonically accurate as more is loaded, rather than only ever
+  // reflecting a single page of 10.
+  const loadMore = () => {
+    if (!artisanProfileId || isLoadingMore || reviewsPage >= reviewsTotalPages) return
+    setIsLoadingMore(true)
+    fetchArtisanReviews(artisanProfileId, reviewsPage + 1)
+      .then(({ reviews: items, totalPages }) => {
+        setReviews((prev) => [...prev, ...items])
+        setReviewsPage((p) => p + 1)
+        setReviewsTotalPages(totalPages)
+      })
+      .catch(() => toast.error("Couldn't load more reviews."))
+      .finally(() => setIsLoadingMore(false))
+  }
 
   const counts = useMemo(() => {
     const c: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
@@ -340,6 +382,24 @@ export default function ArtisanMyReviewsPage() {
                     </Card>
                   )
                 })}
+              </div>
+            )}
+
+            {reviewsPage < reviewsTotalPages && (
+              <div className="flex flex-col items-center gap-2 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  Showing {reviews.length} of {summary?.totalReviews ?? reviews.length} reviews
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-transparent"
+                  disabled={isLoadingMore}
+                  onClick={loadMore}
+                >
+                  {isLoadingMore && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                  Load more reviews
+                </Button>
               </div>
             )}
           </>

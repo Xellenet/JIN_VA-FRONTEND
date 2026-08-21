@@ -17,49 +17,12 @@ import { cn, naviiAvatar } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
-
-// ── Backend shapes ────────────────────────────────────────────────────────────
-
-interface BackendConversation {
-  contact: {
-    id: number
-    firstname: string
-    lastname: string
-    profilePicture: string | null
-  }
-  lastMessage: string
-  lastMessageTime: string
-  lastSenderId: number
-  unreadCount: number
-}
-
-interface BackendDM {
-  id: number
-  content: string
-  isRead: boolean
-  createdAt: string
-  sender: {
-    id: number
-    firstname: string
-    lastname: string
-    profilePicture: string | null
-  }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmt(iso: string): string {
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  if (diff < 60_000) return "just now"
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86_400_000) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-}
-
-function contactName(c: BackendConversation["contact"]): string {
-  return `${c.firstname} ${c.lastname}`.trim()
-}
+import {
+  contactName,
+  formatMessageTime as fmt,
+  type BackendConversation,
+  type BackendDM,
+} from "@/lib/messages"
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 

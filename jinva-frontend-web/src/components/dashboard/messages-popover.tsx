@@ -12,8 +12,10 @@ import { cn, naviiAvatar } from "@/lib/utils"
 import {
   contactName,
   conversationHref,
+  conversationTimestamp,
   countUnreadConversations,
   formatMessageTime,
+  lastMessagePreview,
   type BackendConversation,
 } from "@/lib/messages"
 import { HeaderIconBadge, POPOVER_POLL_MS, PREVIEW_ROW_LIMIT } from "./header-badge"
@@ -41,8 +43,14 @@ export function MessagesPopover({
   const load = useCallback(async () => {
     setHasError(false)
     try {
-      const r = await apiFetch<BackendConversation[]>("/direct-messages/conversations")
-      setConversations(Array.isArray(r) ? r : [])
+      // MB1 — the canonical, paginated conversation list (api-contract.md §2).
+      // The dropdown only previews 5 rows, but the badge counts every
+      // conversation with unread messages, so this asks for the endpoint's
+      // maximum page rather than 5.
+      const r = await apiFetch<BackendConversation[] | { items: BackendConversation[] }>(
+        "/messages?page=1&limit=50",
+      )
+      setConversations(Array.isArray(r) ? r : r?.items ?? [])
     } catch {
       setHasError(true)
       setConversations([])
@@ -132,10 +140,12 @@ export function MessagesPopover({
             <div className="divide-y divide-border">
               {preview.map((conv) => {
                 const name = contactName(conv.contact)
-                const isLastByMe = conv.lastSenderId === Number(currentUserId)
+                const isLastByMe = conv.lastMessage?.senderId === Number(currentUserId)
+                const lastMessageText = lastMessagePreview(conv.lastMessage)
+                const timestamp = conversationTimestamp(conv)
                 return (
                   <Link
-                    key={conv.contact.id}
+                    key={conv.id}
                     href={conversationHref(role, roleBase, conv.contact.id)}
                     onClick={() => setOpen(false)}
                     className={cn(
@@ -166,13 +176,13 @@ export function MessagesPopover({
                         >
                           {name}
                         </span>
-                        {conv.lastMessageTime && (
+                        {timestamp && (
                           <span className="flex-shrink-0 text-[10px] text-muted-foreground">
-                            {formatMessageTime(conv.lastMessageTime)}
+                            {formatMessageTime(timestamp)}
                           </span>
                         )}
                       </div>
-                      {conv.lastMessage && (
+                      {lastMessageText && (
                         <p
                           className={cn(
                             "mt-0.5 line-clamp-1 text-[11px]",
@@ -180,7 +190,7 @@ export function MessagesPopover({
                           )}
                         >
                           {isLastByMe && <span>You: </span>}
-                          {conv.lastMessage}
+                          {lastMessageText}
                         </p>
                       )}
                     </div>

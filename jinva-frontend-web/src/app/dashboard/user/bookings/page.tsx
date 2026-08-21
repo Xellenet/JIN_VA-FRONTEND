@@ -26,88 +26,96 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Calendar, Clock, Search, ChevronDown, MessageSquare, Loader2, UserRound } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { Calendar, Clock, Search, ChevronDown, Loader2, UserRound, Wrench } from "lucide-react"
+import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
+import { getBookingStatusConfig } from "@/lib/status-badges"
 
-interface BackendJob {
-  id: string
-  title: string
-  description?: string
-  location?: string
+interface BackendBooking {
+  id: number
+  scheduledDate: string
+  startTime: string
+  endTime: string
   status: string
+  agreedPrice?: number
+  currency?: string
   createdAt: string
-  acceptedArtisan?: { id: string; firstname: string; lastname: string; profilePicture?: string }
-  service?: { id: string; name: string }
+  artisanProfile?: { id: number; businessName?: string; user?: { id: number; firstname: string; lastname: string; profilePicture?: string } }
+  service?: { id: number; name: string }
+  jobId?: number
 }
 
 const statusOptions = [
   { label: "All Status", value: "all" },
-  { label: "Open", value: "OPEN" },
   { label: "Pending", value: "PENDING" },
-  { label: "In Progress", value: "IN_PROGRESS" },
-  { label: "Completed", value: "COMPLETED" },
+  { label: "Confirmed", value: "CONFIRMED" },
+  { label: "Declined", value: "DECLINED" },
+  { label: "Expired", value: "EXPIRED" },
+  { label: "No-show", value: "NO_SHOW" },
   { label: "Cancelled", value: "CANCELLED" },
+  { label: "Completed", value: "COMPLETED" },
 ]
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  IN_PROGRESS: { label: "In Progress", className: "bg-muted text-muted-foreground border-muted" },
-  COMPLETED: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
-  CANCELLED: { label: "Cancelled", className: "bg-red-100 text-red-700 border-red-200" },
-  PENDING: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  OPEN: { label: "Open", className: "bg-blue-100 text-blue-700 border-blue-200" },
-  EXPIRED: { label: "Expired", className: "bg-gray-100 text-gray-600 border-gray-200" },
-}
-
+/**
+ * Decisions #2: this is now a real, standalone bookings list — pending,
+ * confirmed, declined, expired, no-show, cancelled, and completed *booking
+ * requests* only, read from `GET /bookings/my`. Job progress (once a booking
+ * is confirmed and a Job is created/linked, R2) lives on its own separate
+ * page at /dashboard/user/jobs — this list must never fold that back in.
+ */
 export default function UserBookingsPage() {
-  const [jobs, setJobs] = useState<BackendJob[]>([])
+  const [bookings, setBookings] = useState<BackendBooking[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [cancelJobId, setCancelJobId] = useState<string | null>(null)
+  const [cancelBookingId, setCancelBookingId] = useState<number | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
 
   useEffect(() => {
-    apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs/mine")
+    apiFetch<BackendBooking[] | { items?: BackendBooking[] }>("/bookings/my?limit=100")
       .then((data) => {
         const items = Array.isArray(data) ? data : (data.items ?? [])
-        setJobs(items.map((j) => ({ ...j, id: String(j.id) })))
+        setBookings(items)
       })
-      .catch(() => setJobs([]))
+      .catch(() => setBookings([]))
       .finally(() => setIsLoading(false))
   }, [])
 
-  const filteredJobs = useMemo(() => {
-    return jobs.filter((job) => {
-      const artisanName = job.acceptedArtisan
-        ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`
-        : ""
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      const artisanName = b.artisanProfile?.user
+        ? `${b.artisanProfile.user.firstname} ${b.artisanProfile.user.lastname}`
+        : b.artisanProfile?.businessName ?? ""
       const matchesSearch =
         !searchQuery ||
-        job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (job.service?.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (b.service?.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         artisanName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.id.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesStatus = statusFilter === "all" || job.status === statusFilter
+        String(b.id).includes(searchQuery)
+      const matchesStatus = statusFilter === "all" || b.status === statusFilter
       return matchesSearch && matchesStatus
     })
-  }, [jobs, searchQuery, statusFilter])
+  }, [bookings, searchQuery, statusFilter])
+
+  const canCancel = (status: string) => status === "PENDING" || status === "CONFIRMED"
 
   const handleCancelBooking = async () => {
-    if (!cancelJobId) return
+    if (cancelBookingId == null) return
     setIsCancelling(true)
     try {
-      await apiFetch(`/jobs/${cancelJobId}/cancel`, { method: "PATCH" })
-      setJobs((prev) =>
-        prev.map((j) => (j.id === cancelJobId ? { ...j, status: "CANCELLED" } : j))
+      await apiFetch(`/bookings/${cancelBookingId}`, { method: "DELETE" })
+      setBookings((prev) =>
+        prev.map((b) => (b.id === cancelBookingId ? { ...b, status: "CANCELLED" } : b))
       )
       toast.success("Booking cancelled successfully.")
     } catch (err) {
+      // R2 edge case: DELETE /bookings/:id is blocked once the linked job has
+      // progressed past PENDING — the backend's message already names the
+      // correct next step (use the job's own cancel action).
       toast.error(err instanceof Error ? err.message : "Failed to cancel booking.")
     } finally {
       setIsCancelling(false)
-      setCancelJobId(null)
+      setCancelBookingId(null)
     }
   }
 
@@ -115,8 +123,8 @@ export default function UserBookingsPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My Jobs</h1>
-          <p className="text-muted-foreground">View and manage all your service jobs</p>
+          <h1 className="text-2xl font-bold text-foreground">My Bookings</h1>
+          <p className="text-muted-foreground">Track the status of your booking requests with artisans</p>
         </div>
 
         <Card>
@@ -125,7 +133,7 @@ export default function UserBookingsPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search jobs..."
+                  placeholder="Search bookings..."
                   className="pl-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -156,7 +164,7 @@ export default function UserBookingsPage() {
             </div>
 
             <p className="mb-4 text-sm text-muted-foreground">
-              Showing {filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""}
+              Showing {filteredBookings.length} booking{filteredBookings.length !== 1 ? "s" : ""}
             </p>
 
             {isLoading ? (
@@ -165,48 +173,55 @@ export default function UserBookingsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredJobs.length === 0 ? (
+                {filteredBookings.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <Search className="mb-4 h-12 w-12 text-muted-foreground/40" />
-                    <h3 className="text-lg font-semibold text-foreground">No jobs found</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">Try adjusting your search or filters.</p>
-                    <Button
-                      variant="outline"
-                      className="mt-4 bg-transparent"
-                      onClick={() => { setSearchQuery(""); setStatusFilter("all") }}
-                    >
-                      Clear Filters
-                    </Button>
+                    <h3 className="text-lg font-semibold text-foreground">No bookings found</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {bookings.length === 0
+                        ? "Book an artisan directly from their profile to see requests here."
+                        : "Try adjusting your search or filters."}
+                    </p>
+                    {bookings.length > 0 && (
+                      <Button
+                        variant="outline"
+                        className="mt-4 bg-transparent"
+                        onClick={() => { setSearchQuery(""); setStatusFilter("all") }}
+                      >
+                        Clear Filters
+                      </Button>
+                    )}
                   </div>
                 ) : (
-                  filteredJobs.map((job) => {
-                    const artisanName = job.acceptedArtisan
-                      ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`.trim()
-                      : "Awaiting artisan"
-                    const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
+                  filteredBookings.map((booking) => {
+                    const artisanName = booking.artisanProfile?.user
+                      ? `${booking.artisanProfile.user.firstname} ${booking.artisanProfile.user.lastname}`.trim()
+                      : booking.artisanProfile?.businessName ?? "Artisan"
+                    const cfg = getBookingStatusConfig(booking.status)
                     return (
-                      <div key={job.id} className="rounded-lg border p-4">
+                      <div key={booking.id} className="rounded-lg border p-4">
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                           <div className="flex items-start gap-4">
                             <Avatar className="h-14 w-14">
-                              <AvatarImage src={job.acceptedArtisan?.profilePicture || naviiAvatar(artisanName)} />
+                              <AvatarImage src={booking.artisanProfile?.user?.profilePicture || naviiAvatar(artisanName)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
-                              <h3 className="font-semibold text-foreground">{job.title}</h3>
-                              <p className="text-sm text-muted-foreground">Booking ID: #{job.id.substring(0, 8)}</p>
+                              <h3 className="font-semibold text-foreground">{booking.service?.name ?? "Service booking"}</h3>
+                              <p className="text-sm text-muted-foreground">with {artisanName} · Booking #{booking.id}</p>
                               <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                                {job.service && (
-                                  <span className="text-muted-foreground">{job.service.name}</span>
-                                )}
                                 <div className="flex items-center gap-1 text-muted-foreground">
                                   <Calendar className="h-4 w-4" />
-                                  {new Date(job.createdAt).toLocaleDateString()}
+                                  {new Date(booking.scheduledDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                                 </div>
-                                {job.location && (
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  <Clock className="h-4 w-4" />
+                                  {booking.startTime} – {booking.endTime}
+                                </div>
+                                {booking.agreedPrice != null && (
                                   <div className="flex items-center gap-1 text-muted-foreground">
-                                    <Clock className="h-4 w-4" />
-                                    {job.location}
+                                    <Wrench className="h-4 w-4" />
+                                    {formatCurrency(booking.agreedPrice)}
                                   </div>
                                 )}
                               </div>
@@ -221,26 +236,18 @@ export default function UserBookingsPage() {
                           </div>
                         </div>
 
-                        <div className="mt-4 flex gap-2 border-t pt-4">
+                        <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
                           <Button variant="outline" size="sm" asChild className="bg-transparent">
-                            <Link href={`/dashboard/user/bookings/${job.id}`}>View Details</Link>
+                            <Link href={`/dashboard/user/bookings/${booking.id}`}>View Details</Link>
                           </Button>
-                          {job.acceptedArtisan && (
+                          {booking.jobId && (
                             <Button variant="outline" size="sm" asChild className="bg-transparent">
-                              <Link href={`/dashboard/user/messages?artisan=${job.acceptedArtisan.id}`}>
-                                <MessageSquare className="mr-2 h-4 w-4" />
-                                Contact Artisan
-                              </Link>
+                              <Link href={`/dashboard/user/jobs/${booking.jobId}`}>View Job</Link>
                             </Button>
                           )}
-                          {job.status === "COMPLETED" && (
-                            <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                              <Link href={`/dashboard/user/review/${job.id}`}>Leave Review</Link>
-                            </Button>
-                          )}
-                          {job.status === "OPEN" && (
-                            <Button size="sm" variant="destructive" onClick={() => setCancelJobId(job.id)}>
-                              Cancel Booking
+                          {canCancel(booking.status) && (
+                            <Button size="sm" variant="destructive" onClick={() => setCancelBookingId(booking.id)}>
+                              Cancel
                             </Button>
                           )}
                         </div>
@@ -254,12 +261,12 @@ export default function UserBookingsPage() {
         </Card>
       </div>
 
-      <AlertDialog open={!!cancelJobId} onOpenChange={(open) => !open && setCancelJobId(null)}>
+      <AlertDialog open={cancelBookingId != null} onOpenChange={(open) => !open && setCancelBookingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Job</AlertDialogTitle>
+            <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel this job? This action cannot be undone and any associated payment will be refunded.
+              Are you sure you want to cancel this booking request? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

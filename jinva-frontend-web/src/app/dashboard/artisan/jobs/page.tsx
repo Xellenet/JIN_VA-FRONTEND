@@ -409,7 +409,11 @@ export default function ArtisanJobsPage() {
                     : "Unknown"
                   const cfg = statusConfig[job.status as StatusKey] ?? { label: job.status, className: "", icon: AlertCircle }
                   const StatusIcon = cfg.icon
-                  const isMyJob = String(job.acceptedArtisan?.id) === String(user?.id)
+                  // GET /jobs does not yet expose `acceptedArtisan` (flagged
+                  // to backend-engineer) — fall back to "assume mine" so this
+                  // action isn't permanently hidden; the server's own
+                  // ownership guard is the real gate.
+                  const isMyJob = job.acceptedArtisan ? String(job.acceptedArtisan.id) === String(user?.id) : true
 
                   return (
                     <div

@@ -4,8 +4,23 @@ import { useCallback, useEffect, useState } from "react"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 
-interface FavouriteArtisan {
+interface FavouriteArtisanRef {
   id: string
+}
+
+// FB1: the real `GET /favourites` response is `{ message, data, pagination }`
+// — there is no `items` field. Defensively also accept a bare array in case
+// the shape is ever simplified server-side (matches the dual-shape check
+// pattern used for other paginated list endpoints across the app).
+interface FavouritesEnvelope {
+  message?: string
+  data?: FavouriteArtisanRef[]
+  pagination?: { total: number; page: number; limit: number; totalPages: number }
+}
+
+function extractFavouriteIds(response: FavouriteArtisanRef[] | FavouritesEnvelope): string[] {
+  const items = Array.isArray(response) ? response : response?.data ?? []
+  return items.map((a) => a.id)
 }
 
 export function useFavouriteIds() {
@@ -13,11 +28,8 @@ export function useFavouriteIds() {
   const [pendingId, setPendingId] = useState<string | null>(null)
 
   useEffect(() => {
-    apiFetch<FavouriteArtisan[] | { items: FavouriteArtisan[] }>("/favourites")
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: FavouriteArtisan[] }).items ?? []
-        setFavouriteIds(new Set(items.map((a) => a.id)))
-      })
+    apiFetch<FavouriteArtisanRef[] | FavouritesEnvelope>("/favourites")
+      .then((r) => setFavouriteIds(new Set(extractFavouriteIds(r))))
       .catch(() => {})
   }, [])
 
@@ -35,7 +47,16 @@ export function useFavouriteIds() {
         })
         toast.success(isFavourited ? "Removed from favourites." : "Added to favourites.")
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to update favourites.")
+        // Edge case: duplicate-favourite 409 should read as a friendly no-op,
+        // not a raw error — surface it that way while still reconciling the
+        // local Set state with reality.
+        const message = err instanceof Error ? err.message : ""
+        if (/already/i.test(message)) {
+          setFavouriteIds((prev) => new Set(prev).add(artisanId))
+          toast.info("Already in your favourites.")
+        } else {
+          toast.error(message || "Failed to update favourites.")
+        }
       } finally {
         setPendingId(null)
       }

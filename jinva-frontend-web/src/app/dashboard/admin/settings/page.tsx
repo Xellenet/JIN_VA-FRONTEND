@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,13 +28,121 @@ import {
   Search,
   Users,
   Wrench,
+  Loader2,
 } from "lucide-react"
 import { mockProducts } from "@/lib/data/mock-data"
+import { apiFetch } from "@/lib/api"
+
+/**
+ * PR3 — admin notification preferences (design-spec.md section 5).
+ *
+ * The five event rows below replace eight hardcoded, uncontrolled rows whose
+ * copy described an e-commerce store ("New Order Alerts", "Low Stock
+ * Warnings") on a services marketplace with no orders and no inventory, behind
+ * a Save button that had no onClick at all.
+ *
+ * BACKEND DEPENDENCY — these five keys do not exist yet. The backend today
+ * only has customer- and artisan-shaped notification-preference DTOs
+ * (`CustomerNotificationPreferencesResponseDto` /
+ * `ArtisanNotificationPreferencesResponseDto`), and for an ADMIN caller
+ * `GET/PATCH /notifications/preferences` falls through to the customer shape.
+ * design-spec.md section 7 item 6 asks the backend engineer for an
+ * admin-shaped DTO on that same endpoint.
+ *
+ * TODO(messaging-notifications, pass 2): once the admin-shaped DTO ships,
+ *   1. add the five ADMIN_EVENT_ROWS keys to the PATCH payload in
+ *      handleSaveNotifications (they are excluded today because the backend
+ *      runs a global ValidationPipe with `forbidNonWhitelisted: true`, so
+ *      posting an unknown key 400s the entire request — including the channel
+ *      toggles that do work);
+ *   2. hydrate them from the GET response instead of ADMIN_NOTIF_DEFAULTS;
+ *   3. restore the "Notification preferences saved." toast copy.
+ * Expected endpoints, unchanged from what Customer/Artisan already use:
+ *   GET   /notifications/preferences   -> admin-shaped DTO
+ *   PATCH /notifications/preferences   -> partial admin-shaped DTO
+ * Confirm the final key names against api-contract.md when it lands — the
+ * names below are this screen's proposal, derived from the design spec's row
+ * labels, not an agreed contract.
+ */
+interface AdminNotifPrefs {
+  disputeFiled: boolean
+  paymentTransferFailed: boolean
+  artisanVerificationSubmitted: boolean
+  reviewFlagged: boolean
+  newArtisanRegistered: boolean
+  emailEnabled: boolean
+  smsEnabled: boolean
+  pushEnabled: boolean
+}
+
+/** Defaults mirror the mockup: everything on except "New Artisan Registered". */
+const ADMIN_NOTIF_DEFAULTS: AdminNotifPrefs = {
+  disputeFiled: true,
+  paymentTransferFailed: true,
+  artisanVerificationSubmitted: true,
+  reviewFlagged: true,
+  newArtisanRegistered: false,
+  emailEnabled: true,
+  smsEnabled: false,
+  pushEnabled: true,
+}
+
+const ADMIN_EVENT_ROWS: { key: keyof AdminNotifPrefs; label: string; desc: string }[] = [
+  { key: "disputeFiled", label: "Dispute Filed", desc: "Get notified when a customer or artisan opens a new dispute that needs review" },
+  { key: "paymentTransferFailed", label: "Payment Transfer Failed", desc: "Get notified when an artisan payout fails and needs manual attention" },
+  { key: "artisanVerificationSubmitted", label: "Artisan Verification Submitted", desc: "Get notified when a new artisan submits documents for verification" },
+  { key: "reviewFlagged", label: "Review Flagged for Moderation", desc: "Get notified when a review is flagged and enters the moderation queue" },
+  { key: "newArtisanRegistered", label: "New Artisan Registered", desc: "Get notified when a new artisan creates an account on the platform" },
+]
 
 export default function AdminSettingsPage() {
   const [products, setProducts] = useState(mockProducts)
   const [productSearch, setProductSearch] = useState("")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+
+  // ── Notification preferences (PR3) ──────────────────────────────────────
+  const [notifPrefs, setNotifPrefs] = useState<AdminNotifPrefs>(ADMIN_NOTIF_DEFAULTS)
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState(true)
+  const [isSavingNotifs, setIsSavingNotifs] = useState(false)
+
+  useEffect(() => {
+    // Only the channel toggles are real on this endpoint for an admin today;
+    // the five event keys stay on their defaults until the backend DTO exists.
+    apiFetch<Partial<AdminNotifPrefs>>("/notifications/preferences")
+      .then((r) =>
+        setNotifPrefs((p) => ({
+          ...p,
+          emailEnabled: r?.emailEnabled ?? p.emailEnabled,
+          smsEnabled: r?.smsEnabled ?? p.smsEnabled,
+          pushEnabled: r?.pushEnabled ?? p.pushEnabled,
+        })),
+      )
+      .catch(() => {})
+      .finally(() => setIsLoadingNotifs(false))
+  }, [])
+
+  const toggleNotif = (key: keyof AdminNotifPrefs, val: boolean) =>
+    setNotifPrefs((p) => ({ ...p, [key]: val }))
+
+  const handleSaveNotifications = async () => {
+    setIsSavingNotifs(true)
+    try {
+      // See the TODO above: ADMIN_EVENT_KEYS are deliberately not sent yet.
+      await apiFetch("/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({
+          emailEnabled: notifPrefs.emailEnabled,
+          smsEnabled: notifPrefs.smsEnabled,
+          pushEnabled: notifPrefs.pushEnabled,
+        }),
+      })
+      toast.success("Notification channels saved.")
+    } catch {
+      toast.error("Failed to save notification preferences.")
+    } finally {
+      setIsSavingNotifs(false)
+    }
+  }
 
   const filteredProducts = products.filter(
     (p) =>
@@ -262,48 +371,85 @@ export default function AdminSettingsPage() {
             </div>
           </TabsContent>
 
-          {/* Notifications */}
+          {/* Notifications (PR3, design-spec.md section 5) */}
           <TabsContent value="notifications" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Bell className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">System Notification Settings</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Control which notifications are sent system-wide
-                    </p>
-                  </div>
-                </div>
+            {isLoadingNotifs ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-              <CardContent className="p-6 space-y-4">
-                {[
-                  { label: "New Order Alerts", desc: "Notify admins when a new order is placed", on: true },
-                  { label: "Cancellation Alerts", desc: "Notify when an order is cancelled", on: true },
-                  { label: "Payment Received", desc: "Notify when a payment is successfully processed", on: true },
-                  { label: "New User Registration", desc: "Notify when a new user or artisan registers", on: false },
-                  { label: "Low Stock Warnings", desc: "Alert when product stock drops below threshold", on: true },
-                  { label: "Artisan Rating Alerts", desc: "Notify when a artisan receives a low rating", on: true },
-                  { label: "Daily Summary Email", desc: "Send a daily digest of platform activity", on: false },
-                  { label: "Weekly Revenue Report", desc: "Send weekly revenue summaries via email", on: true },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+            ) : (
+              <>
+                <Card>
+                  <div className="border-b p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg bg-muted p-2">
+                        <Bell className="h-5 w-5 text-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Notification Preferences</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Choose which platform events you want to be alerted about
+                        </p>
+                      </div>
                     </div>
-                    <Switch defaultChecked={item.on} />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Notifications
-              </Button>
-            </div>
+                  <CardContent className="p-6 space-y-4">
+                    {ADMIN_EVENT_ROWS.map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key]}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <div className="border-b p-6">
+                    <h3 className="font-semibold">Notification Channels</h3>
+                    <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
+                  </div>
+                  <CardContent className="p-6 space-y-4">
+                    {/*
+                      PR2: the SMS row is deliberately absent, not disabled — no SMS delivery
+                      capability exists anywhere on the platform. Same treatment as the Customer
+                      and Artisan tabs.
+                    */}
+                    {([
+                      { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
+                      { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
+                    ] as { key: keyof AdminNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key]}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end">
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={handleSaveNotifications}
+                    disabled={isSavingNotifs}
+                  >
+                    {isSavingNotifs && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Notifications
+                  </Button>
+                </div>
+              </>
+            )}
           </TabsContent>
 
           {/* Security */}

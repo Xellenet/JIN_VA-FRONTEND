@@ -43,6 +43,7 @@ import {
 import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
+import { RatingStars } from "@/components/ui/rating-stars"
 
 interface BackendArtisan {
   id: string
@@ -73,6 +74,7 @@ function mapArtisan(a: BackendArtisan) {
     specialization: a.businessName || a.services?.[0]?.name || "General Service",
     avatar: a.user.profilePicture,
     avgRating: Number(a.averageRating ?? 0),
+    totalReviews: Number(a.totalReviews ?? 0),
     completedJobsCount: Number(a.completedJobsCount ?? 0),
     availability: a.availabilityStatus === "AVAILABLE" ? "available" : "busy",
     location: a.location,
@@ -528,10 +530,11 @@ export default function SearchArtisansPage() {
                             <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
-                          <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-background px-2.5 py-1 text-sm font-semibold text-foreground shadow-sm">
-                            <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                            {artisan.avgRating.toFixed(1)}
-                          </div>
+                          {artisan.totalReviews > 0 && (
+                            <div className="absolute right-3 top-3 rounded-full bg-background px-2.5 py-1 shadow-sm">
+                              <RatingStars rating={artisan.avgRating} totalReviews={artisan.totalReviews} size="sm" />
+                            </div>
+                          )}
                           {artisan.isVerified && (
                             <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium text-primary shadow-sm">
                               <ShieldCheck className="h-3 w-3" />
@@ -556,6 +559,11 @@ export default function SearchArtisansPage() {
                           <div className="text-center">
                             <h3 className="font-semibold text-foreground">{artisan.name}</h3>
                             <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
+                            {artisan.totalReviews === 0 && (
+                              <div className="mt-1 flex justify-center">
+                                <RatingStars rating={0} totalReviews={0} size="sm" />
+                              </div>
+                            )}
                             <Badge
                               variant="outline"
                               className={

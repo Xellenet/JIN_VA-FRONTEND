@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import {
   Star,
   MapPin,
@@ -21,12 +29,23 @@ import {
   Loader2,
   ShieldCheck,
   Heart,
+  Flag,
+  Pencil,
 } from "lucide-react"
 import { naviiAvatar, formatCurrency } from "@/lib/utils"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
+import { useAuth } from "@/contexts/auth-context"
 import { PortfolioGallery } from "@/components/portfolio/portfolio-gallery"
-import type { ApiPortfolioItem } from "@/lib/types"
+import { RatingStars } from "@/components/ui/rating-stars"
+import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
+import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbnails"
+import { ReviewReasonDialog } from "@/components/reviews/review-reason-dialog"
+import type { ApiPortfolioItem, ApiReview } from "@/lib/types"
+import { toast } from "sonner"
+
+// RE1 — matches `REVIEW_EDIT_WINDOW_HOURS` in api-contract.md §1.
+const REVIEW_EDIT_WINDOW_HOURS = 48
 
 interface BackendArtisan {
   id: string
@@ -53,31 +72,44 @@ interface BackendArtisan {
   createdAt: string
 }
 
-interface BackendReview {
-  id: string
-  rating: number
-  review?: string
-  reviewerName?: string
-  reviewerUser?: {
-    id: string
-    firstname: string
-    lastname: string
-    profilePicture?: string
-  }
-  createdAt: string
-}
-
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
 }
 
+// RV2: reviews are paginated server-side (default limit 10, max 50) — always
+// send `page`/`limit` explicitly and surface `meta.pagination` rather than
+// relying on the backend default, or reviews 11+ are silently unreachable.
+const REVIEWS_PAGE_SIZE = 10
+
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
+
+function fetchReviews(artisanId: string, page: number): Promise<{ reviews: ApiReview[]; totalPages: number }> {
+  return apiFetchWithMeta<ApiReview[] | { items: ApiReview[] }>(
+    `/reviews/artisan-profile/${artisanId}?page=${page}&limit=${REVIEWS_PAGE_SIZE}`,
+  )
+    .then(({ data, meta }) => ({
+      reviews: Array.isArray(data) ? data : (data as { items: ApiReview[] })?.items ?? [],
+      totalPages: extractTotalPages(meta),
+    }))
+    .catch(() => ({ reviews: [] as ApiReview[], totalPages: 1 }))
+}
+
 export default function ArtisanPublicProfile() {
   const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
 
   const [artisan, setArtisan] = useState<BackendArtisan | null>(null)
-  const [reviews, setReviews] = useState<BackendReview[]>([])
+  const [reviews, setReviews] = useState<ApiReview[]>([])
+  const [reviewsPage, setReviewsPage] = useState(1)
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const [flagTarget, setFlagTarget] = useState<ApiReview | null>(null)
   const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
 
   // P3/PF9: this artisan's public (APPROVED-only) portfolio items
@@ -88,20 +120,46 @@ export default function ArtisanPublicProfile() {
   useEffect(() => {
     if (!id) return
     setIsLoading(true)
-    Promise.all([
-      apiFetch<BackendArtisan>(`/artisans/${id}`),
-      apiFetch<BackendReview[] | { items: BackendReview[] }>(`/reviews/artisan-profile/${id}`).catch(() => [] as BackendReview[]),
-    ])
-      .then(([profile, reviewsResult]) => {
+    Promise.all([apiFetch<BackendArtisan>(`/artisans/${id}`), fetchReviews(id, 1)])
+      .then(([profile, reviewData]) => {
         setArtisan(profile)
-        const reviewItems = Array.isArray(reviewsResult)
-          ? reviewsResult
-          : (reviewsResult as { items: BackendReview[] }).items ?? []
-        setReviews(reviewItems)
+        setReviews(reviewData.reviews)
+        setReviewsPage(1)
+        setReviewsTotalPages(reviewData.totalPages)
       })
       .catch(() => setError("Could not load artisan profile."))
       .finally(() => setIsLoading(false))
   }, [id])
+
+  // RV2: reused both by the pagination control and by the post-flag refresh
+  // below. If flagging emptied the current page (e.g. the last review on the
+  // last page gets flagged), step back a page rather than show a dead end —
+  // same guard already used by the admin reviews queue's pager.
+  const loadReviewsPage = useCallback((artisanId: string, p: number) => {
+    fetchReviews(artisanId, p).then(({ reviews: items, totalPages }) => {
+      if (items.length === 0 && p > 1) {
+        loadReviewsPage(artisanId, p - 1)
+        return
+      }
+      setReviews(items)
+      setReviewsPage(p)
+      setReviewsTotalPages(totalPages)
+    })
+  }, [])
+
+  const handleFlagSubmitted = async (reason: string) => {
+    if (!flagTarget) return
+    await apiFetch(`/reviews/${flagTarget.id}/flag`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    })
+    // FL1: hides immediately for everyone except the original reviewer, who
+    // still sees it marked "Under review" — refetch the current page rather
+    // than guess which branch applies, so the list always matches what the
+    // server would return.
+    if (id) loadReviewsPage(id, reviewsPage)
+    toast.success("Reported — this review has been hidden pending review.")
+  }
 
   useEffect(() => {
     if (!id) return
@@ -240,8 +298,12 @@ export default function ArtisanPublicProfile() {
             <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
-                  <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                  <span className="text-2xl font-bold text-foreground">{Number(artisan.averageRating).toFixed(1)}</span>
+                  <RatingStars
+                    rating={Number(artisan.averageRating)}
+                    totalReviews={Number(artisan.totalReviews ?? 0)}
+                    size="lg"
+                    showCount={false}
+                  />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Avg. Rating</p>
               </div>
@@ -275,7 +337,7 @@ export default function ArtisanPublicProfile() {
           <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
             <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
-            <TabsTrigger value="reviews">Reviews ({reviews.length})</TabsTrigger>
+            <TabsTrigger value="reviews">Reviews ({Number(artisan.totalReviews ?? reviews.length)})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="portfolio">
@@ -357,11 +419,7 @@ export default function ArtisanPublicProfile() {
               <div className="border-b border-border p-5">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-foreground">Client Reviews</h3>
-                  <div className="flex items-center gap-2">
-                    <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                    <span className="font-bold text-foreground">{Number(artisan.averageRating).toFixed(1)}</span>
-                    <span className="text-sm text-muted-foreground">({artisan.totalReviews} reviews)</span>
-                  </div>
+                  <RatingStars rating={Number(artisan.averageRating)} totalReviews={Number(artisan.totalReviews ?? 0)} size="lg" />
                 </div>
               </div>
               <CardContent className="divide-y divide-border p-0">
@@ -376,16 +434,33 @@ export default function ArtisanPublicProfile() {
                       ? `${review.reviewerUser.firstname} ${review.reviewerUser.lastname}`.trim()
                       : (review.reviewerName ?? "Anonymous")
                     const avatar = review.reviewerUser?.profilePicture
+                    const isOwnReview = !!user && !!review.reviewerUser && String(review.reviewerUser.id) === String(user.id)
+                    const hoursElapsed = (Date.now() - new Date(review.createdAt).getTime()) / 3_600_000
+                    const hoursLeft = Math.ceil(REVIEW_EDIT_WINDOW_HOURS - hoursElapsed)
+                    const canEdit = isOwnReview && hoursLeft > 0 && !!review.job?.id
+                    const isUnderReview = review.status === "FLAGGED" && isOwnReview
+
                     return (
                       <div key={review.id} className="p-5">
-                        <div className="flex items-start justify-between">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10">
                               <AvatarImage src={avatar || naviiAvatar(reviewerName)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="text-sm font-medium text-foreground">{reviewerName}</p>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className="text-sm font-medium text-foreground">{reviewerName}</p>
+                                {review.verifiedBooking && <VerifiedBookingBadge />}
+                                {isUnderReview && (
+                                  <Badge variant="outline" className="border-yellow-200 bg-yellow-100 text-yellow-700">
+                                    Under review
+                                  </Badge>
+                                )}
+                                {review.editedAt && (
+                                  <Badge variant="outline" className="text-muted-foreground">Edited</Badge>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</p>
                             </div>
                           </div>
@@ -401,15 +476,103 @@ export default function ArtisanPublicProfile() {
                         {review.review && (
                           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{review.review}</p>
                         )}
+                        <ReviewPhotoThumbnails photos={review.photos} />
+                        {review.artisanReply && (
+                          <div className="mt-3 rounded-r-lg border-l-2 border-primary bg-primary/5 py-2 pl-3 pr-2">
+                            <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                              <MessageSquare className="h-3 w-3" />
+                              Response from {artisan.businessName || name}
+                              {review.artisanRepliedAt && (
+                                <span className="font-normal text-muted-foreground">· {formatDate(review.artisanRepliedAt)}</span>
+                              )}
+                            </p>
+                            <p className="mt-1 text-sm leading-relaxed text-foreground">{review.artisanReply}</p>
+                          </div>
+                        )}
+                        {isUnderReview && (
+                          <p className="mt-2 text-xs italic text-muted-foreground">
+                            This review is under moderation review and is temporarily hidden from other users.
+                          </p>
+                        )}
+                        {(canEdit || !isOwnReview) && (
+                          <div className="mt-2 flex items-center gap-3">
+                            {canEdit && (
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary" asChild>
+                                <Link href={`/dashboard/user/review/${review.job!.id}?editReviewId=${review.id}`}>
+                                  <Pencil className="mr-1 h-3 w-3" />
+                                  Edit ({hoursLeft}h left)
+                                </Link>
+                              </Button>
+                            )}
+                            {!isOwnReview && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                onClick={() => setFlagTarget(review)}
+                              >
+                                <Flag className="mr-1 h-3 w-3" />
+                                Report
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })
                 )}
               </CardContent>
+              {reviewsTotalPages > 1 && (
+                <div className="border-t border-border p-3">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => { e.preventDefault(); if (id && reviewsPage > 1) loadReviewsPage(id, reviewsPage - 1) }}
+                          className={reviewsPage === 1 ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: reviewsTotalPages }, (_, i) => i + 1).map((p) => (
+                        <PaginationItem key={p}>
+                          <PaginationLink
+                            href="#"
+                            isActive={p === reviewsPage}
+                            onClick={(e) => { e.preventDefault(); if (id) loadReviewsPage(id, p) }}
+                          >
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => { e.preventDefault(); if (id && reviewsPage < reviewsTotalPages) loadReviewsPage(id, reviewsPage + 1) }}
+                          className={reviewsPage === reviewsTotalPages ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
             </Card>
           </TabsContent>
         </Tabs>
       </div>
+
+      <ReviewReasonDialog
+        open={!!flagTarget}
+        onOpenChange={(o) => !o && setFlagTarget(null)}
+        title="Report Review"
+        subtitle={flagTarget ? `By ${flagTarget.reviewerUser ? `${flagTarget.reviewerUser.firstname} ${flagTarget.reviewerUser.lastname}`.trim() : flagTarget.reviewerName}` : undefined}
+        reasonLabel="Why are you reporting this review?"
+        reasonPlaceholder="Describe why this review looks fake, abusive, or off-topic…"
+        minLength={10}
+        maxLength={500}
+        confirmLabel="Submit Report"
+        helperText="This hides the review from public view while our team investigates. Your reason is recorded for the moderation team."
+        onConfirm={handleFlagSubmitted}
+      />
 
       {/* P4: "Book Now" stays anchored at every scroll position, on mobile
           and desktop, offset past the sidebar on large screens so it never

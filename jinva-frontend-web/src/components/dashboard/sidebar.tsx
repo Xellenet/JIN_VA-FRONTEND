@@ -60,6 +60,7 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     { href: "/dashboard/artisan/profile",         label: "Profile",   icon: UserCircle    },
     { href: "/dashboard/artisan/services",        label: "Services",  icon: Wrench        },
     { href: "/dashboard/artisan/portfolio",       label: "Portfolio", icon: ImageIcon     },
+    { href: "/dashboard/artisan/reviews",         label: "Reviews",   icon: Star          },
     { href: "/dashboard/artisan/calendar",        label: "Calendar",  icon: CalendarDays  },
     { href: "/dashboard/artisan/analytics",       label: "Analytics", icon: BarChart2     },
     { href: "/dashboard/artisan/messages",        label: "Messages",  icon: MessageSquare },

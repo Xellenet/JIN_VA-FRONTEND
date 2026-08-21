@@ -28,9 +28,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { ArrowLeft, Star, CalendarDays, CreditCard, CheckCircle, Loader2, UserRound, AlertTriangle } from "lucide-react"
+import { ArrowLeft, CalendarDays, CreditCard, CheckCircle, Loader2, UserRound, AlertTriangle } from "lucide-react"
 import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { RatingStars } from "@/components/ui/rating-stars"
 import { toast } from "sonner"
 
 interface BackendService {
@@ -563,10 +564,8 @@ export default function BookArtisanPage() {
                       <div>
                         <h4 className="font-semibold text-foreground">{artisan.name}</h4>
                         <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
-                        <div className="mt-1 flex items-center gap-1">
-                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                          <span className="text-sm font-medium">{artisan.avgRating.toFixed(1)}</span>
-                          <span className="text-xs text-muted-foreground">({artisan.reviews} reviews)</span>
+                        <div className="mt-1">
+                          <RatingStars rating={artisan.avgRating} totalReviews={artisan.reviews} size="sm" />
                         </div>
                       </div>
                     </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,6 +11,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import {
   Star,
   Mail,
@@ -23,11 +31,26 @@ import {
   UserRound,
   Loader2,
   DollarSign,
+  MessageSquare,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { naviiAvatar } from "@/lib/utils"
 import { toast } from "sonner"
+import { RatingStars } from "@/components/ui/rating-stars"
+import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
+import type { ApiReview } from "@/lib/types"
+
+// RV2: reviews are paginated server-side (default limit 10, max 50) — always
+// send `page`/`limit` explicitly, or reviews 11+ are silently unreachable.
+const REVIEWS_PAGE_SIZE = 10
+
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
 
 interface BackendArtisanProfile {
   id: string
@@ -41,15 +64,6 @@ interface BackendArtisanProfile {
   isVerified: boolean
   location?: string
   services?: { id: string; name: string }[]
-}
-
-interface BackendReview {
-  id: string
-  rating: number
-  review?: string
-  reviewerName?: string
-  reviewerUser?: { id: string; firstname: string; lastname: string; profilePicture?: string }
-  createdAt: string
 }
 
 function formatDate(iso: string): string {
@@ -74,7 +88,9 @@ export default function ArtisanProfile() {
 
   // Loaded data
   const [artisanProfile, setArtisanProfile] = useState<BackendArtisanProfile | null>(null)
-  const [reviews, setReviews] = useState<BackendReview[]>([])
+  const [reviews, setReviews] = useState<ApiReview[]>([])
+  const [reviewsPage, setReviewsPage] = useState(1)
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -123,6 +139,20 @@ export default function ArtisanProfile() {
     setPhone(user.phone ?? "")
   }, [user])
 
+  // RV2: paginated so reviews 11+ stay reachable — reused by the pager below.
+  const loadReviewsPage = useCallback((artisanProfileId: string, p: number) => {
+    apiFetchWithMeta<ApiReview[] | { items: ApiReview[] }>(
+      `/reviews/artisan-profile/${artisanProfileId}?page=${p}&limit=${REVIEWS_PAGE_SIZE}`,
+    )
+      .then(({ data, meta }) => {
+        const items = Array.isArray(data) ? data : (data as { items: ApiReview[] })?.items ?? []
+        setReviews(items)
+        setReviewsPage(p)
+        setReviewsTotalPages(extractTotalPages(meta))
+      })
+      .catch(() => setReviews((prev) => (p === 1 ? [] : prev)))
+  }, [])
+
   // Load artisan profile + reviews
   useEffect(() => {
     apiFetch<BackendArtisanProfile>("/users/me/artisan-profile")
@@ -133,17 +163,11 @@ export default function ArtisanProfile() {
         setExperienceYears(profile.experienceYears != null ? String(profile.experienceYears) : "")
         setBusinessName(profile.businessName ?? "")
         setHourlyRate(profile.hourlyRate != null ? String(profile.hourlyRate) : "")
-
-        return apiFetch<BackendReview[] | { items: BackendReview[] }>(
-          `/reviews/artisan-profile/${profile.id}`,
-        ).catch(() => [] as BackendReview[])
-      })
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: BackendReview[] }).items ?? []
-        setReviews(items)
+        loadReviewsPage(profile.id, 1)
       })
       .catch(() => {})
       .finally(() => setIsLoadingProfile(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSaveProfile = async () => {
@@ -267,10 +291,12 @@ export default function ArtisanProfile() {
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
-                  <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                  <span className="text-2xl font-bold text-foreground">
-                    {Number(artisanProfile?.averageRating ?? 0).toFixed(1) ?? user.rating?.toFixed(1) ?? "0.0"}
-                  </span>
+                  <RatingStars
+                    rating={Number(artisanProfile?.averageRating ?? user.rating ?? 0)}
+                    totalReviews={artisanProfile?.totalReviews ?? user.reviews ?? 0}
+                    size="lg"
+                    showCount={false}
+                  />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Avg. Rating</p>
               </div>
@@ -456,15 +482,11 @@ export default function ArtisanProfile() {
               <div className="border-b border-border p-5">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-foreground">Client Reviews</h3>
-                  <div className="flex items-center gap-2">
-                    <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                    <span className="font-bold text-foreground">
-                      {Number(artisanProfile?.averageRating ?? 0).toFixed(1) ?? (user.rating ?? 0).toFixed(1)}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      ({artisanProfile?.totalReviews ?? user.reviews ?? 0} reviews)
-                    </span>
-                  </div>
+                  <RatingStars
+                    rating={Number(artisanProfile?.averageRating ?? user.rating ?? 0)}
+                    totalReviews={artisanProfile?.totalReviews ?? user.reviews ?? 0}
+                    size="lg"
+                  />
                 </div>
               </div>
               <CardContent className="divide-y divide-border p-0">
@@ -491,7 +513,10 @@ export default function ArtisanProfile() {
                           </Avatar>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
-                              <h4 className="font-medium text-foreground">{reviewerName}</h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium text-foreground">{reviewerName}</h4>
+                                {review.verifiedBooking && <VerifiedBookingBadge />}
+                              </div>
                               <span className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</span>
                             </div>
                             <div className="mt-1 flex items-center gap-0.5">
@@ -505,6 +530,20 @@ export default function ArtisanProfile() {
                             {review.review && (
                               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{review.review}</p>
                             )}
+                            {review.artisanReply && (
+                              <div className="mt-3 rounded-r-lg border-l-2 border-primary bg-primary/5 py-2 pl-3 pr-2">
+                                <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                                  <MessageSquare className="h-3 w-3" />
+                                  Your response
+                                  {review.artisanRepliedAt && (
+                                    <span className="font-normal text-muted-foreground">
+                                      · {formatDate(review.artisanRepliedAt)}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="mt-1 text-xs leading-relaxed text-foreground">{review.artisanReply}</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -512,6 +551,45 @@ export default function ArtisanProfile() {
                   })
                 )}
               </CardContent>
+              {reviewsTotalPages > 1 && (
+                <div className="border-t border-border p-3">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            if (artisanProfile && reviewsPage > 1) loadReviewsPage(artisanProfile.id, reviewsPage - 1)
+                          }}
+                          className={reviewsPage === 1 ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: reviewsTotalPages }, (_, i) => i + 1).map((p) => (
+                        <PaginationItem key={p}>
+                          <PaginationLink
+                            href="#"
+                            isActive={p === reviewsPage}
+                            onClick={(e) => { e.preventDefault(); if (artisanProfile) loadReviewsPage(artisanProfile.id, p) }}
+                          >
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            if (artisanProfile && reviewsPage < reviewsTotalPages) loadReviewsPage(artisanProfile.id, reviewsPage + 1)
+                          }}
+                          className={reviewsPage === reviewsTotalPages ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
             </Card>
           </TabsContent>
         </Tabs>

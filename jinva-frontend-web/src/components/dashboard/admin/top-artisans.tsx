@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Star, ChevronRight, UserRound } from "lucide-react"
+import { RatingStars } from "@/components/ui/rating-stars"
+import { ChevronRight, UserRound } from "lucide-react"
 import type { ArtisanProfile } from "@/lib/types"
 import { naviiAvatar } from "@/lib/utils"
 
@@ -37,10 +38,7 @@ export function TopArtisans({ artisans }: TopArtisansProps) {
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <p className="text-sm font-medium">{artisan.jobsCompleted} Jobs Completed</p>
-                  <div className="flex items-center gap-1 text-sm">
-                    <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                    <span>{artisan.avgRating}</span>
-                  </div>
+                  <RatingStars rating={artisan.avgRating} totalReviews={artisan.reviews} size="sm" showCount={false} />
                 </div>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
                   <ChevronRight className="h-4 w-4" />

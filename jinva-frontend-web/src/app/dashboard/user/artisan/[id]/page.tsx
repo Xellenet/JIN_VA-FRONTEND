@@ -282,7 +282,11 @@ export default function ArtisanPublicProfile() {
                     {favouriteIds.has(artisan.id) ? "Saved" : "Save"}
                   </Button>
                   <Button variant="outline" asChild className="bg-transparent">
-                    <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
+                    {/* The deep link takes the artisan's **user** id, not this
+                        page's artisan-profile id — they are different sequences
+                        and a profile id can collide with an unrelated user's id
+                        (qa-report.md F4). */}
+                    <Link href={`/dashboard/user/messages?artisan=${artisan.user.id}`}>
                       <MessageSquare className="mr-2 h-4 w-4" />
                       Message
                     </Link>

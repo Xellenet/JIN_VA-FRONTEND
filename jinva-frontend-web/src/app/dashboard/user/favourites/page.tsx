@@ -67,6 +67,10 @@ function extractFavourites(response: BackendArtisan[] | FavouritesEnvelope): Bac
 function mapArtisan(a: BackendArtisan) {
   return {
     id: a.id,
+    // The Message deep link needs the artisan's **user** id, which is a
+    // different sequence from the artisan-profile id above and can collide with
+    // an unrelated user's id (qa-report.md F4).
+    userId: a.user.id,
     name: `${a.user.firstname} ${a.user.lastname}`.trim(),
     specialization: a.businessName || a.services?.[0]?.name || "General Service",
     avatar: a.user.profilePicture,
@@ -359,7 +363,7 @@ export default function FavouritesPage() {
 
                         <div className="grid grid-cols-2 gap-2">
                           <Button variant="outline" size="sm" className="bg-transparent text-xs" asChild>
-                            <Link href={`/dashboard/user/messages?artisan=${artisan.id}`}>
+                            <Link href={`/dashboard/user/messages?artisan=${artisan.userId}`}>
                               <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
                               Message
                             </Link>

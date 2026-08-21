@@ -1,18 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ArrowLeft, Star, CheckCircle2, Loader2, UserRound } from "lucide-react"
+import { ArrowLeft, Star, CheckCircle2, Loader2, UserRound, Clock, AlertTriangle } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { naviiAvatar } from "@/lib/utils"
 import { toast } from "sonner"
+import { ReviewPhotoPicker } from "@/components/reviews/review-photo-picker"
+import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbnails"
+import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
+import type { ApiReview } from "@/lib/types"
+
+// RE1 — matches `REVIEW_EDIT_WINDOW_HOURS` in api-contract.md §1.
+const REVIEW_EDIT_WINDOW_HOURS = 48
 
 interface BackendJob {
   id: string
@@ -36,24 +43,42 @@ const ratingLabels: Record<number, string> = {
   5: "Excellent",
 }
 
-export default function ReviewPage() {
+function ReviewPageContent() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editReviewId = searchParams.get("editReviewId")
+  const isEditMode = !!editReviewId
 
   const [job, setJob] = useState<BackendJob | null>(null)
   const [isLoadingJob, setIsLoadingJob] = useState(true)
+  const [existingReview, setExistingReview] = useState<ApiReview | null>(null)
   const [rating, setRating] = useState(0)
   const [hoveredRating, setHoveredRating] = useState(0)
   const [comment, setComment] = useState("")
+  const [photoUrls, setPhotoUrls] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
   useEffect(() => {
-    apiFetch<BackendJob>(`/jobs/${id}`)
-      .then(setJob)
-      .catch(() => toast.error("Failed to load booking details."))
+    const tasks: Promise<unknown>[] = [apiFetch<BackendJob>(`/jobs/${id}`).then(setJob)]
+    if (editReviewId) {
+      tasks.push(
+        apiFetch<ApiReview>(`/reviews/${editReviewId}`).then((review) => {
+          setExistingReview(review)
+          setRating(Math.round(Number(review.rating)))
+          setComment(review.review ?? "")
+        }),
+      )
+    }
+    Promise.all(tasks)
+      .catch(() => toast.error(editReviewId ? "Failed to load this review." : "Failed to load booking details."))
       .finally(() => setIsLoadingJob(false))
-  }, [id])
+  }, [id, editReviewId])
+
+  const hoursElapsed = existingReview ? (Date.now() - new Date(existingReview.createdAt).getTime()) / 3_600_000 : 0
+  const hoursLeft = Math.max(0, Math.ceil(REVIEW_EDIT_WINDOW_HOURS - hoursElapsed))
+  const editWindowExpired = isEditMode && !!existingReview && hoursLeft <= 0
 
   const handleSubmit = async () => {
     if (rating === 0 || !job) return
@@ -61,19 +86,34 @@ export default function ReviewPage() {
       toast.error("Review text must be at least 20 characters (or leave it blank).")
       return
     }
+    if (editWindowExpired) {
+      toast.error("The 48-hour edit window for this review has passed.")
+      return
+    }
     setIsSubmitting(true)
     try {
-      await apiFetch("/reviews", {
-        method: "POST",
-        body: JSON.stringify({
-          jobId: Number(id),
-          rating,
-          ...(comment.trim().length >= 20 ? { review: comment.trim() } : {}),
-        }),
-      })
+      if (isEditMode && existingReview) {
+        await apiFetch(`/reviews/${existingReview.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            rating,
+            ...(comment.trim().length >= 20 ? { review: comment.trim() } : {}),
+          }),
+        })
+      } else {
+        await apiFetch("/reviews", {
+          method: "POST",
+          body: JSON.stringify({
+            jobId: Number(id),
+            rating,
+            ...(comment.trim().length >= 20 ? { review: comment.trim() } : {}),
+            ...(photoUrls.length > 0 ? { photoUrls } : {}),
+          }),
+        })
+      }
       setSubmitted(true)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to submit review.")
+      toast.error(err instanceof Error ? err.message : `Failed to ${isEditMode ? "update" : "submit"} your review.`)
     } finally {
       setIsSubmitting(false)
     }
@@ -93,6 +133,10 @@ export default function ReviewPage() {
     ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`.trim()
     : "Artisan"
 
+  const backToProfileHref = existingReview?.artisanProfile
+    ? `/dashboard/user/artisan/${existingReview.artisanProfile.id}`
+    : null
+
   if (submitted) {
     return (
       <DashboardLayout>
@@ -102,9 +146,13 @@ export default function ReviewPage() {
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
                 <CheckCircle2 className="h-8 w-8 text-green-600" />
               </div>
-              <h2 className="mt-4 text-xl font-bold text-foreground">Review Submitted</h2>
+              <h2 className="mt-4 text-xl font-bold text-foreground">
+                {isEditMode ? "Review Updated" : "Review Submitted"}
+              </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Thank you for your feedback! Your review helps other customers make informed decisions.
+                {isEditMode
+                  ? "Your changes have been saved."
+                  : "Thank you for your feedback! Your review helps other customers make informed decisions."}
               </p>
               <div className="mt-4 flex items-center gap-1">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -114,11 +162,14 @@ export default function ReviewPage() {
                   />
                 ))}
               </div>
+              <div className="mt-3">
+                <VerifiedBookingBadge />
+              </div>
               <Button
                 className="mt-6 bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={() => router.push("/dashboard/user/bookings")}
+                onClick={() => router.push(isEditMode && backToProfileHref ? backToProfileHref : "/dashboard/user/bookings")}
               >
-                Back to Bookings
+                {isEditMode ? "Back to Profile" : "Back to Bookings"}
               </Button>
             </CardContent>
           </Card>
@@ -131,16 +182,38 @@ export default function ReviewPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
-          <Link href={`/dashboard/user/bookings/${id}`}>
+          <Link href={isEditMode && backToProfileHref ? backToProfileHref : `/dashboard/user/bookings/${id}`}>
             <ArrowLeft className="h-4 w-4" />
-            Back to Booking Details
+            {isEditMode && backToProfileHref ? "Back to Artisan Profile" : "Back to Booking Details"}
           </Link>
         </Button>
 
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Leave a Review</h1>
-          <p className="text-muted-foreground">Share your experience with {artisanName}</p>
+          <h1 className="text-2xl font-bold text-foreground">{isEditMode ? "Edit Your Review" : "Leave a Review"}</h1>
+          <p className="text-muted-foreground">
+            {isEditMode ? `Update your review for ${artisanName}` : `Share your experience with ${artisanName}`}
+          </p>
         </div>
+
+        {isEditMode && existingReview && (
+          editWindowExpired ? (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              The 48-hour edit window for this review has passed — it can no longer be edited.
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4 shrink-0" />
+              {hoursLeft}h left to edit this review.
+            </div>
+          )
+        )}
+        {isEditMode && existingReview?.status === "FLAGGED" && (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+            This review is under moderation review and is temporarily hidden from other users. You can still edit
+            it — editing won&apos;t clear the flag.
+          </div>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
@@ -157,10 +230,11 @@ export default function ReviewPage() {
                         <button
                           key={i}
                           type="button"
+                          disabled={editWindowExpired}
                           onClick={() => setRating(starValue)}
                           onMouseEnter={() => setHoveredRating(starValue)}
                           onMouseLeave={() => setHoveredRating(0)}
-                          className="transition-transform hover:scale-110"
+                          className="transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:hover:scale-100"
                         >
                           <Star
                             className={`h-10 w-10 transition-colors ${
@@ -198,9 +272,24 @@ export default function ReviewPage() {
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     maxLength={500}
+                    disabled={editWindowExpired}
                   />
                   <p className="text-xs text-muted-foreground">{comment.length}/500 characters</p>
                 </div>
+
+                {!isEditMode && (
+                  <div className="space-y-2 pt-2">
+                    <Label>Add Photos (optional)</Label>
+                    <ReviewPhotoPicker value={photoUrls} onChange={setPhotoUrls} disabled={isSubmitting} />
+                  </div>
+                )}
+                {isEditMode && existingReview && existingReview.photos.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <Label>Photos</Label>
+                    <ReviewPhotoThumbnails photos={existingReview.photos} />
+                    <p className="text-xs text-muted-foreground">Photos can&apos;t be changed after a review is submitted.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -208,13 +297,15 @@ export default function ReviewPage() {
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleSubmit}
-                disabled={rating === 0 || isSubmitting}
+                disabled={rating === 0 || isSubmitting || editWindowExpired}
               >
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Submit Review
+                {isEditMode ? "Update Review" : "Submit Review"}
               </Button>
               <Button variant="outline" className="bg-transparent" asChild>
-                <Link href={`/dashboard/user/bookings/${id}`}>Cancel</Link>
+                <Link href={isEditMode && backToProfileHref ? backToProfileHref : `/dashboard/user/bookings/${id}`}>
+                  Cancel
+                </Link>
               </Button>
             </div>
           </div>
@@ -268,5 +359,13 @@ export default function ReviewPage() {
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function ReviewPage() {
+  return (
+    <Suspense>
+      <ReviewPageContent />
+    </Suspense>
   )
 }

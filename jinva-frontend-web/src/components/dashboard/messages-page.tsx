@@ -116,6 +116,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   const [context, setContext] = useState<MessageContext | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const attachmentToken = useRef(0)
 
   const selectedId = selected?.id ?? null
   const isPending = selectedId === PENDING_CONVERSATION_ID
@@ -314,6 +315,9 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   // ── MC4 — attachment picking / upload ─────────────────────────────────────
 
   const uploadAttachment = async (file: File, previewUrl: string) => {
+    // Picking a second image while the first is still uploading must not let the
+    // older response land on top of the newer pick.
+    const token = ++attachmentToken.current
     setAttachment({ file, previewUrl, status: "uploading" })
     try {
       const formData = new FormData()
@@ -322,10 +326,12 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
         method: "POST",
         body: formData,
       })
+      if (token !== attachmentToken.current) return
       setAttachment({ file, previewUrl, status: "ready", url: res.url })
     } catch {
       // Never silently send text-only — the chip switches to a retry affordance
       // and the send is blocked until it succeeds or the image is removed.
+      if (token !== attachmentToken.current) return
       setAttachment({ file, previewUrl, status: "error" })
     }
   }

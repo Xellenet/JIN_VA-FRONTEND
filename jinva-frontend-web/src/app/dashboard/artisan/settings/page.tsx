@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import {
   User,
   Bell,
@@ -39,9 +40,11 @@ import {
   CreditCard,
   Wallet,
 } from "lucide-react"
+import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
+import { RETRYABLE_PAYOUT_STATUSES } from "@/lib/status-badges"
 
 function ArtisanSettingsContent() {
   const { user, refreshUser, logout } = useAuth()
@@ -72,14 +75,42 @@ function ArtisanSettingsContent() {
   }, [user])
 
   useEffect(() => {
-    apiFetch<{ location?: string; serviceRadiusKm?: number; cancellationPolicy?: string }>(
-      "/users/me/artisan-profile",
-    )
+    apiFetch<{
+      location?: string
+      serviceRadiusKm?: number
+      cancellationPolicy?: string
+      payoutType?: "mobile_money" | "bank"
+      payoutAccountName?: string
+      payoutAccountNumber?: string // masked to last 4 chars server-side — never the full number
+      payoutBankCode?: string
+    }>("/users/me/artisan-profile")
       .then((profile) => {
         setServiceArea(profile.location ?? "")
         setServiceRadiusKm(profile.serviceRadiusKm != null ? String(profile.serviceRadiusKm) : "")
         setCancellationPolicy(profile.cancellationPolicy ?? "")
+        // A1: read back the artisan's actual saved payout status instead of
+        // defaulting to unconfigured — this is the real, demonstrated bug
+        // requirements.md calls out (a page refresh made a correctly
+        // configured artisan look unconfigured).
+        if (profile.payoutType) {
+          setHasPayoutMethod(true)
+          setPayoutType(profile.payoutType)
+          setSavedPayoutAccountName(profile.payoutAccountName ?? "")
+          setSavedMaskedAccountNumber(profile.payoutAccountNumber ?? "")
+          setSavedPayoutBankCode(profile.payoutBankCode ?? "")
+        }
       })
+      .catch(() => {})
+  }, [])
+
+  // A3/3.3: has any of this artisan's payments ever gotten stuck on a
+  // transfer to the currently-saved payout method? Drives the "Last
+  // transfer failed" summary-card language — links to Earnings (A3) rather
+  // than duplicating the retry action here.
+  const [hasStuckTransfer, setHasStuckTransfer] = useState(false)
+  useEffect(() => {
+    apiFetch<{ status: string }[]>("/payments/my-earnings")
+      .then((rows) => setHasStuckTransfer(rows.some((r) => (RETRYABLE_PAYOUT_STATUSES as readonly string[]).includes(r.status))))
       .catch(() => {})
   }, [])
 
@@ -109,6 +140,25 @@ function ArtisanSettingsContent() {
   const [payoutBankCode, setPayoutBankCode] = useState("")
   const [isSavingPayout, setIsSavingPayout] = useState(false)
   const [hasPayoutMethod, setHasPayoutMethod] = useState(false)
+  // What's actually on file, per the server (A1) — distinct from the form's
+  // own draft state above, which is only ever populated when the artisan is
+  // actively (re)filling the form to overwrite it.
+  const [savedPayoutAccountName, setSavedPayoutAccountName] = useState("")
+  const [savedMaskedAccountNumber, setSavedMaskedAccountNumber] = useState("")
+  const [savedPayoutBankCode, setSavedPayoutBankCode] = useState("")
+
+  // QA LOW (2026-08-20): "Edit" used to just flip hasPayoutMethod, leaving
+  // Account Name/Network-Bank-Code blank even though the real values are
+  // already known (displayed one line above). Pre-fills the draft fields
+  // from what's actually on file before showing the form. The masked
+  // account number is still deliberately left blank — the backend never
+  // returns the full number, so there's nothing real to pre-fill there.
+  const handleEditPayoutMethod = () => {
+    setPayoutAccountName(savedPayoutAccountName)
+    setPayoutBankCode(savedPayoutBankCode)
+    setPayoutAccountNumber("")
+    setHasPayoutMethod(false)
+  }
 
   const handleSavePayoutMethod = async () => {
     if (!payoutAccountName.trim() || payoutAccountName.trim().length < 2) {
@@ -140,6 +190,9 @@ function ArtisanSettingsContent() {
         }),
       })
       setHasPayoutMethod(true)
+      setSavedPayoutAccountName(payoutAccountName.trim())
+      setSavedMaskedAccountNumber(`••••${payoutAccountNumber.trim().slice(-4)}`)
+      setSavedPayoutBankCode(payoutBankCode.trim())
       toast.success("Payout method saved.")
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to save payout method.")
@@ -148,16 +201,14 @@ function ArtisanSettingsContent() {
     }
   }
 
-  const maskedAccountNumber = payoutAccountNumber
-    ? `•••• ${payoutAccountNumber.slice(-4)}`
-    : ""
-
   // ── Notification preferences ────────────────────────────────────────────
   interface ArtisanNotifPrefs {
     newJobOpportunities: boolean; applicationUpdates: boolean; artisanJobUpdates: boolean
     paymentReleased: boolean; reviewsAndRatings: boolean; artisanPromotions: boolean
     applicationRejected: boolean; appliedJobExpired: boolean; profileVerified: boolean
     messageReceived: boolean; portfolioApproved: boolean; portfolioRejected: boolean
+    // A7: 24h/2h pre-appointment reminders for confirmed bookings.
+    bookingReminders: boolean
     emailEnabled: boolean; smsEnabled: boolean; pushEnabled: boolean
   }
   const [notifPrefs, setNotifPrefs] = useState<Partial<ArtisanNotifPrefs>>({})
@@ -407,19 +458,39 @@ function ArtisanSettingsContent() {
               </div>
               <CardContent className="p-6">
                 {hasPayoutMethod ? (
-                  <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                       <CreditCard className="h-5 w-5 text-muted-foreground" />
                       <div>
                         <p className="font-medium">
-                          {payoutType === "mobile_money" ? "Mobile Money" : "Bank Account"} — {maskedAccountNumber}
+                          {payoutType === "mobile_money" ? "Mobile Money" : "Bank Account"} — {savedMaskedAccountNumber}
                         </p>
-                        <p className="text-sm text-muted-foreground">{payoutAccountName}</p>
+                        <p className="text-sm text-muted-foreground">{savedPayoutAccountName}</p>
+                        {/* 3.3: "Working" (default) vs "Last transfer failed" once a
+                            payment on this artisan's account has actually been
+                            blocked — links to Earnings instead of duplicating the
+                            retry action here. */}
+                        {hasStuckTransfer ? (
+                          <Badge variant="outline" className="mt-1.5 border-destructive/20 bg-destructive/10 text-destructive">
+                            Last transfer failed
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="mt-1.5 border-green-200 bg-green-100 text-green-700">
+                            Working
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => setHasPayoutMethod(false)}>
-                      Edit
-                    </Button>
+                    <div className="flex gap-2">
+                      {hasStuckTransfer && (
+                        <Button size="sm" variant="outline" className="bg-transparent" asChild>
+                          <Link href="/dashboard/artisan/earnings">View Earnings</Link>
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={handleEditPayoutMethod}>
+                        Edit
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="max-w-md space-y-4">
@@ -665,6 +736,7 @@ function ArtisanSettingsContent() {
                       { key: "messageReceived",     label: "New Messages",          desc: "Get notified when you receive a direct message" },
                       { key: "portfolioApproved",   label: "Portfolio Approved",    desc: "Get notified when an admin approves a portfolio item you uploaded" },
                       { key: "portfolioRejected",   label: "Portfolio Rejected",    desc: "Get notified when an admin rejects a portfolio item you uploaded" },
+                      { key: "bookingReminders",    label: "Appointment Reminders", desc: "24h and 2h reminders before your confirmed bookings" },
                     ] as { key: keyof ArtisanNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
                       <div key={key} className="flex items-center justify-between rounded-lg border p-4">
                         <div>

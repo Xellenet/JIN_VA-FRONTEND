@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef, Suspense } from "react"
+import { Fragment, useState, useEffect, useRef, Suspense } from "react"
+import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -10,6 +11,10 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,10 +39,35 @@ import {
   Loader2,
   Lock,
   CreditCard,
+  ChevronDown,
+  ChevronRight,
+  Receipt,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
+import { formatCurrency } from "@/lib/utils"
+import { getPaymentStatusConfig } from "@/lib/status-badges"
+
+// C4: matches GET /payments/history's real, unpaginated shape verbatim — no
+// client-side pagination is invented for a list the backend doesn't paginate.
+//
+// QA re-verification (2026-08-21, NEW MAJOR): `getMyHistory`'s response
+// shape changed when the backend closed security-report.md finding #5 (it
+// no longer returns the raw Payment entity). The top-level `jobId` field is
+// gone (only `job.id` remains) and `createdAt` was renamed to `date`. This
+// interface and every read site below were updated to match — `jobId` is
+// kept as an optional fallback only, `date` replaces `createdAt`.
+interface BackendPayment {
+  id: number
+  jobId?: number
+  amount: number
+  status: string
+  reference: string
+  paidAt?: string
+  date: string
+  job?: { id: number; title: string }
+}
 
 function UserSettingsContent() {
   const { user, refreshUser, logout } = useAuth()
@@ -149,6 +179,25 @@ function UserSettingsContent() {
     }
   }
 
+  // ── Payment history (C4 / design-spec.md 2.2) ───────────────────────────
+  const [payments, setPayments] = useState<BackendPayment[]>([])
+  const [isLoadingPayments, setIsLoadingPayments] = useState(true)
+  const [paymentsError, setPaymentsError] = useState(false)
+  const [expandedPaymentId, setExpandedPaymentId] = useState<number | null>(null)
+
+  const loadPayments = () => {
+    setIsLoadingPayments(true)
+    setPaymentsError(false)
+    apiFetch<BackendPayment[]>("/payments/history")
+      .then(setPayments)
+      .catch(() => setPaymentsError(true))
+      .finally(() => setIsLoadingPayments(false))
+  }
+
+  useEffect(() => {
+    loadPayments()
+  }, [])
+
   useEffect(() => {
     if (!user) return
     const parts = user.name.split(" ")
@@ -236,6 +285,10 @@ function UserSettingsContent() {
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
               Notifications
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="gap-2">
+              <CreditCard className="h-4 w-4" />
+              Payments
             </TabsTrigger>
             <TabsTrigger value="security" className="gap-2">
               <Shield className="h-4 w-4" />
@@ -549,6 +602,175 @@ function UserSettingsContent() {
                 </div>
               </>
             )}
+          </TabsContent>
+
+          {/* Payments (C4, design-spec.md 2.2) */}
+          <TabsContent value="payments" className="space-y-6">
+            <Card>
+              <div className="border-b p-6">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-muted p-2">
+                    <CreditCard className="h-5 w-5 text-foreground" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Payment History</h3>
+                    <p className="text-sm text-muted-foreground">Everything you&apos;ve paid for on JinVa, newest first</p>
+                  </div>
+                </div>
+              </div>
+              <CardContent className="p-0">
+                {isLoadingPayments ? (
+                  <div className="space-y-3 p-6">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full rounded-lg" />
+                    ))}
+                  </div>
+                ) : paymentsError ? (
+                  <Empty className="border-0 py-12">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <AlertTriangle className="text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>Couldn&apos;t load your payments</EmptyTitle>
+                      <EmptyDescription>Something went wrong fetching your payment history.</EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button variant="outline" className="bg-transparent" onClick={loadPayments}>Try Again</Button>
+                    </EmptyContent>
+                  </Empty>
+                ) : payments.length === 0 ? (
+                  <Empty className="border-0 py-12">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Receipt className="text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>No payments yet</EmptyTitle>
+                      <EmptyDescription>Payments you make for jobs will show up here.</EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                        <a href="/dashboard/user/search">Browse Artisans</a>
+                      </Button>
+                    </EmptyContent>
+                  </Empty>
+                ) : (
+                  <>
+                    {/* QA MEDIUM (2026-08-20): below md, this table's Status
+                        column was pushed off-screen with no scroll affordance —
+                        replaced with stacked cards carrying the same fields.
+                        Table stays for md+ where it fits without scrolling. */}
+                    <div className="hidden overflow-x-auto md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Job</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="w-8" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {payments.map((p) => {
+                            const cfg = getPaymentStatusConfig(p.status)
+                            const isExpanded = expandedPaymentId === p.id
+                            return (
+                              <Fragment key={p.id}>
+                                <TableRow
+                                  className="cursor-pointer hover:bg-muted/30"
+                                  onClick={() => setExpandedPaymentId(isExpanded ? null : p.id)}
+                                >
+                                  <TableCell className="max-w-[180px] truncate font-medium text-foreground">
+                                    {p.job?.title ?? `Job #${p.job?.id ?? p.jobId}`}
+                                  </TableCell>
+                                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                    {new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                                  </TableCell>
+                                  <TableCell className="text-right font-medium text-foreground">
+                                    {formatCurrency(p.amount)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className={cfg.className}>
+                                      <cfg.icon className="h-3 w-3" />
+                                      {cfg.label}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                                  </TableCell>
+                                </TableRow>
+                                {isExpanded && (
+                                  <TableRow className="bg-muted/20 hover:bg-muted/20">
+                                    <TableCell colSpan={5} className="text-xs text-muted-foreground">
+                                      <div className="flex flex-wrap gap-x-6 gap-y-1 py-1">
+                                        <span>Reference: <span className="font-mono">{p.reference}</span></span>
+                                        {p.paidAt && (
+                                          <span>Paid at: {new Date(p.paidAt).toLocaleString("en-GB")}</span>
+                                        )}
+                                        <Link
+                                          href={`/dashboard/user/jobs/${p.job?.id ?? p.jobId}`}
+                                          className="text-primary hover:underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          View Job
+                                        </Link>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </Fragment>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="divide-y md:hidden">
+                      {payments.map((p) => {
+                        const cfg = getPaymentStatusConfig(p.status)
+                        const isExpanded = expandedPaymentId === p.id
+                        return (
+                          <div
+                            key={p.id}
+                            className="cursor-pointer space-y-2 p-4"
+                            onClick={() => setExpandedPaymentId(isExpanded ? null : p.id)}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="truncate font-medium text-foreground">{p.job?.title ?? `Job #${p.job?.id ?? p.jobId}`}</p>
+                              {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <Badge variant="outline" className={cfg.className}>
+                                <cfg.icon className="h-3 w-3" />
+                                {cfg.label}
+                              </Badge>
+                              <span className="font-medium text-foreground">{formatCurrency(p.amount)}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                            {isExpanded && (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
+                                <span>Reference: <span className="font-mono">{p.reference}</span></span>
+                                {p.paidAt && (
+                                  <span>Paid at: {new Date(p.paidAt).toLocaleString("en-GB")}</span>
+                                )}
+                                <Link
+                                  href={`/dashboard/user/jobs/${p.job?.id ?? p.jobId}`}
+                                  className="text-primary hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  View Job
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Security */}

@@ -343,7 +343,7 @@ function ReviewPageContent() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Booking ID</span>
-                      <span className="font-medium text-foreground">#{job.id.substring(0, 8)}</span>
+                      <span className="font-medium text-foreground">#{String(job.id).substring(0, 8)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Date</span>

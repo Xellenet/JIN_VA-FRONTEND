@@ -23,11 +23,15 @@ import {
   UserRound,
   Loader2,
   DollarSign,
+  MessageSquare,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { naviiAvatar } from "@/lib/utils"
 import { toast } from "sonner"
+import { RatingStars } from "@/components/ui/rating-stars"
+import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
+import type { ApiReview } from "@/lib/types"
 
 interface BackendArtisanProfile {
   id: string
@@ -41,15 +45,6 @@ interface BackendArtisanProfile {
   isVerified: boolean
   location?: string
   services?: { id: string; name: string }[]
-}
-
-interface BackendReview {
-  id: string
-  rating: number
-  review?: string
-  reviewerName?: string
-  reviewerUser?: { id: string; firstname: string; lastname: string; profilePicture?: string }
-  createdAt: string
 }
 
 function formatDate(iso: string): string {
@@ -74,7 +69,7 @@ export default function ArtisanProfile() {
 
   // Loaded data
   const [artisanProfile, setArtisanProfile] = useState<BackendArtisanProfile | null>(null)
-  const [reviews, setReviews] = useState<BackendReview[]>([])
+  const [reviews, setReviews] = useState<ApiReview[]>([])
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -134,12 +129,12 @@ export default function ArtisanProfile() {
         setBusinessName(profile.businessName ?? "")
         setHourlyRate(profile.hourlyRate != null ? String(profile.hourlyRate) : "")
 
-        return apiFetch<BackendReview[] | { items: BackendReview[] }>(
+        return apiFetch<ApiReview[] | { items: ApiReview[] }>(
           `/reviews/artisan-profile/${profile.id}`,
-        ).catch(() => [] as BackendReview[])
+        ).catch(() => [] as ApiReview[])
       })
       .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: BackendReview[] }).items ?? []
+        const items = Array.isArray(r) ? r : (r as { items: ApiReview[] }).items ?? []
         setReviews(items)
       })
       .catch(() => {})
@@ -267,10 +262,12 @@ export default function ArtisanProfile() {
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5">
-                  <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                  <span className="text-2xl font-bold text-foreground">
-                    {Number(artisanProfile?.averageRating ?? 0).toFixed(1) ?? user.rating?.toFixed(1) ?? "0.0"}
-                  </span>
+                  <RatingStars
+                    rating={Number(artisanProfile?.averageRating ?? user.rating ?? 0)}
+                    totalReviews={artisanProfile?.totalReviews ?? user.reviews ?? 0}
+                    size="lg"
+                    showCount={false}
+                  />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Avg. Rating</p>
               </div>
@@ -456,15 +453,11 @@ export default function ArtisanProfile() {
               <div className="border-b border-border p-5">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-foreground">Client Reviews</h3>
-                  <div className="flex items-center gap-2">
-                    <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                    <span className="font-bold text-foreground">
-                      {Number(artisanProfile?.averageRating ?? 0).toFixed(1) ?? (user.rating ?? 0).toFixed(1)}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      ({artisanProfile?.totalReviews ?? user.reviews ?? 0} reviews)
-                    </span>
-                  </div>
+                  <RatingStars
+                    rating={Number(artisanProfile?.averageRating ?? user.rating ?? 0)}
+                    totalReviews={artisanProfile?.totalReviews ?? user.reviews ?? 0}
+                    size="lg"
+                  />
                 </div>
               </div>
               <CardContent className="divide-y divide-border p-0">
@@ -491,7 +484,10 @@ export default function ArtisanProfile() {
                           </Avatar>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
-                              <h4 className="font-medium text-foreground">{reviewerName}</h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium text-foreground">{reviewerName}</h4>
+                                {review.verifiedBooking && <VerifiedBookingBadge />}
+                              </div>
                               <span className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</span>
                             </div>
                             <div className="mt-1 flex items-center gap-0.5">
@@ -504,6 +500,20 @@ export default function ArtisanProfile() {
                             </div>
                             {review.review && (
                               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{review.review}</p>
+                            )}
+                            {review.artisanReply && (
+                              <div className="mt-3 rounded-r-lg border-l-2 border-primary bg-primary/5 py-2 pl-3 pr-2">
+                                <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                                  <MessageSquare className="h-3 w-3" />
+                                  Your response
+                                  {review.artisanRepliedAt && (
+                                    <span className="font-normal text-muted-foreground">
+                                      · {formatDate(review.artisanRepliedAt)}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="mt-1 text-xs leading-relaxed text-foreground">{review.artisanReply}</p>
+                              </div>
                             )}
                           </div>
                         </div>

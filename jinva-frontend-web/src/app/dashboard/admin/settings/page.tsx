@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { mockProducts } from "@/lib/data/mock-data"
 import { apiFetch } from "@/lib/api"
+import { applyPushPreference } from "@/lib/push-notifications"
 
 /**
  * PR3 — admin notification preferences (design-spec.md section 5).
@@ -121,8 +122,12 @@ export default function AdminSettingsPage() {
       .finally(() => setIsLoadingNotifs(false))
   }, [])
 
-  const toggleNotif = (key: keyof AdminNotifPrefs, val: boolean) =>
+  const toggleNotif = (key: keyof AdminNotifPrefs, val: boolean) => {
     setNotifPrefs((p) => ({ ...p, [key]: val }))
+    // PN1: the push channel toggle is where browser permission is requested and
+    // this device's FCM token is registered/unregistered.
+    if (key === "pushEnabled") applyPushPreference(val)
+  }
 
   const handleSaveNotifications = async () => {
     setIsSavingNotifs(true)

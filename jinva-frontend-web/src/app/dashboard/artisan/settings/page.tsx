@@ -43,6 +43,7 @@ import {
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
+import { applyPushPreference } from "@/lib/push-notifications"
 import { toast } from "sonner"
 import { RETRYABLE_PAYOUT_STATUSES } from "@/lib/status-badges"
 
@@ -231,8 +232,12 @@ function ArtisanSettingsContent() {
       .finally(() => setIsLoadingNotifs(false))
   }, [])
 
-  const toggleNotif = (key: keyof ArtisanNotifPrefs, val: boolean) =>
+  const toggleNotif = (key: keyof ArtisanNotifPrefs, val: boolean) => {
     setNotifPrefs((p) => ({ ...p, [key]: val }))
+    // PN1: the push channel toggle is where browser permission is requested and
+    // this device's FCM token is registered/unregistered.
+    if (key === "pushEnabled") applyPushPreference(val)
+  }
 
   const handleSaveNotifications = async () => {
     setIsSavingNotifs(true)

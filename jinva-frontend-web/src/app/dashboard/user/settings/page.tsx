@@ -45,6 +45,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
+import { applyPushPreference } from "@/lib/push-notifications"
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/utils"
 import { getPaymentStatusConfig } from "@/lib/status-badges"
@@ -161,8 +162,12 @@ function UserSettingsContent() {
       .finally(() => setIsLoadingNotifs(false))
   }, [])
 
-  const toggleNotif = (key: keyof CustomerNotifPrefs, val: boolean) =>
+  const toggleNotif = (key: keyof CustomerNotifPrefs, val: boolean) => {
     setNotifPrefs((p) => ({ ...p, [key]: val }))
+    // PN1: the push channel toggle is where browser permission is requested and
+    // this device's FCM token is registered/unregistered.
+    if (key === "pushEnabled") applyPushPreference(val)
+  }
 
   const handleSaveNotifications = async () => {
     setIsSavingNotifs(true)

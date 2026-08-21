@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react"
 import { Sidebar } from "./sidebar"
 import { DashboardHeader } from "./header"
+import { PushSync } from "./push-sync"
 import { useAuth } from "@/contexts/auth-context"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -58,6 +59,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* PN1 — keeps this device's push token registered for the signed-in user */}
+      <PushSync />
       <Sidebar role={user.role} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <DashboardHeader onMenuToggle={() => setSidebarOpen(true)} />

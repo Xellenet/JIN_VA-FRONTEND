@@ -480,10 +480,20 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
 
       const status = err instanceof ApiError ? err.status : 0
       const message = err instanceof Error ? err.message : "Failed to send message."
-      // RL1 — the server's own copy is already user-facing; this only guards
-      // against a bare/absent body so a rate limit is never a raw 429.
-      if (status === 429) {
-        toast.error(message || "You're sending messages too fast. Try again shortly.")
+      // RL1 — matched on the stable code rather than the status alone
+      // (api-contract.md §3.1). The server's copy is already user-facing; the
+      // fallbacks only guard against a bare body so a rate limit is never
+      // surfaced as a raw 429.
+      const isRateLimited =
+        (err instanceof ApiError && err.code === "MESSAGE_RATE_LIMIT_EXCEEDED") || status === 429
+      if (isRateLimited) {
+        const retryIn = err instanceof ApiError ? err.retryAfterSeconds : undefined
+        toast.error(
+          message ||
+            (retryIn
+              ? `You're sending messages too fast. Try again in about ${retryIn} seconds.`
+              : "You're sending messages too fast. Try again shortly."),
+        )
       } else {
         toast.error(message)
       }

@@ -127,15 +127,18 @@ async function apiFetchEnvelope<T = unknown>(path: string, options: ApiFetchOpti
       message?: string | string[]
       error?: string
       retryAfterSeconds?: number
-      meta?: { error?: string }
+      meta?: { error?: string; retryAfterSeconds?: number }
     } = await res.json().catch(() => ({ message: "Request failed" }))
     // A ValidationPipe rejection returns `message` as an array of strings.
     const message = Array.isArray(err.message) ? err.message.join(" ") : err.message
+    // api-contract.md §3.1: the error code and retry hint live in `meta`
+    // (`meta.error`, `meta.retryAfterSeconds`) — the top-level reading was an
+    // earlier, corrected version of that contract, kept only as a fallback.
     throw new ApiError(
       message ?? `Request failed with status ${res.status}`,
       res.status,
-      err.error ?? err.meta?.error,
-      err.retryAfterSeconds,
+      err.meta?.error ?? err.error,
+      err.meta?.retryAfterSeconds ?? err.retryAfterSeconds,
     )
   }
 

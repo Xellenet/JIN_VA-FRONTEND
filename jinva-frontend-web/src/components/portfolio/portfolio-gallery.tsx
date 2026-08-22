@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { ImageIcon, Loader2, AlertTriangle, Video, X, ChevronLeft, ChevronRight, PlayCircle } from "lucide-react"
+import { Lightbox } from "@/components/ui/lightbox"
+import { ImageIcon, Loader2, AlertTriangle, Video, PlayCircle } from "lucide-react"
 import { resolveMediaUrl } from "@/lib/utils"
 import type { ApiPortfolioItem } from "@/lib/types"
 
@@ -19,18 +19,8 @@ interface PortfolioGalleryProps {
 }
 
 export function PortfolioGallery({ items, isLoading, error }: PortfolioGalleryProps) {
+  // Escape / arrow-key handling lives in the shared `Lightbox` overlay.
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (lightboxIndex === null) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setLightboxIndex(null)
-      if (e.key === "ArrowRight") setLightboxIndex((i) => (i === null ? i : Math.min(i + 1, items.length - 1)))
-      if (e.key === "ArrowLeft") setLightboxIndex((i) => (i === null ? i : Math.max(i - 1, 0)))
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [lightboxIndex, items.length])
 
   if (isLoading) {
     return (
@@ -111,72 +101,40 @@ export function PortfolioGallery({ items, isLoading, error }: PortfolioGalleryPr
       </div>
 
       {active && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/90 p-4"
-          onClick={() => setLightboxIndex(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setLightboxIndex(null) }}
-          role="dialog"
-          aria-modal="true"
-          aria-label={active.caption || "Portfolio preview"}
+        <Lightbox
+          label={active.caption || "Portfolio preview"}
+          className="max-w-4xl"
+          onClose={() => setLightboxIndex(null)}
+          onPrev={
+            lightboxIndex! > 0
+              ? () => setLightboxIndex((i) => (i === null ? i : Math.max(i - 1, 0)))
+              : undefined
+          }
+          onNext={
+            lightboxIndex! < items.length - 1
+              ? () => setLightboxIndex((i) => (i === null ? i : Math.min(i + 1, items.length - 1)))
+              : undefined
+          }
         >
-          <div
-            className="relative w-full max-w-4xl"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={() => {}}
-            role="document"
-          >
-            <Button
-              size="icon"
-              variant="ghost"
-              className="absolute -right-2 -top-12 z-10 h-9 w-9 rounded-full bg-background/90 shadow-md hover:bg-background"
-              onClick={() => setLightboxIndex(null)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-
-            {lightboxIndex! > 0 && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="absolute -left-4 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-full bg-background/90 shadow-md hover:bg-background sm:-left-14"
-                onClick={() => setLightboxIndex((i) => (i === null ? i : Math.max(i - 1, 0)))}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
+          <div className="relative flex max-h-[75vh] items-center justify-center bg-black">
+            {isVideo(active) ? (
+              <VideoPlayer src={resolveMediaUrl(active.fileUrl)} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={resolveMediaUrl(active.fileUrl)}
+                alt={active.caption || active.tag || "Portfolio item"}
+                className="max-h-[75vh] w-full object-contain"
+              />
             )}
-            {lightboxIndex! < items.length - 1 && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="absolute -right-4 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-full bg-background/90 shadow-md hover:bg-background sm:-right-14"
-                onClick={() => setLightboxIndex((i) => (i === null ? i : Math.min(i + 1, items.length - 1)))}
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Button>
-            )}
-
-            <div className="overflow-hidden rounded-lg bg-background shadow-2xl">
-              <div className="relative flex max-h-[75vh] items-center justify-center bg-black">
-                {isVideo(active) ? (
-                  <VideoPlayer src={resolveMediaUrl(active.fileUrl)} />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={resolveMediaUrl(active.fileUrl)}
-                    alt={active.caption || active.tag || "Portfolio item"}
-                    className="max-h-[75vh] w-full object-contain"
-                  />
-                )}
-              </div>
-              {(active.caption || active.tag) && (
-                <div className="p-4">
-                  {active.tag && <Badge variant="secondary" className="mb-1">{active.tag}</Badge>}
-                  {active.caption && <p className="text-sm text-muted-foreground">{active.caption}</p>}
-                </div>
-              )}
-            </div>
           </div>
-        </div>
+          {(active.caption || active.tag) && (
+            <div className="p-4">
+              {active.tag && <Badge variant="secondary" className="mb-1">{active.tag}</Badge>}
+              {active.caption && <p className="text-sm text-muted-foreground">{active.caption}</p>}
+            </div>
+          )}
+        </Lightbox>
       )}
     </>
   )

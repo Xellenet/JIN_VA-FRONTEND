@@ -23,7 +23,7 @@ import {
 } from "lucide-react"
 import { cn, naviiAvatar } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch, ApiError } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta, ApiError } from "@/lib/api"
 import { toast } from "sonner"
 import { MessageImage } from "@/components/messages/message-image"
 import {
@@ -94,6 +94,63 @@ function readList<T>(r: T[] | { items?: T[] } | null | undefined): T[] {
   return r?.items ?? []
 }
 
+/**
+ * `meta.pagination.totalPages`, tolerating the flat and nested envelope shapes
+ * the app's paginated endpoints use — same reader as `notifications-page.tsx`.
+ */
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
+
+/**
+ * One page of a thread, with the page count it came back with.
+ *
+ * `GET /messages/:id` is **oldest-first** (api-contract.md §3), so page 1 holds
+ * the *oldest* 50 messages and the newest ones live on the **last** page. Every
+ * thread read therefore goes through `apiFetchWithMeta` and keeps `totalPages`
+ * instead of assuming page 1 is what the user wants to see (qa-report.md B1).
+ */
+function fetchThreadPage(
+  conversationId: number,
+  page: number,
+): Promise<{ items: BackendDM[]; totalPages: number }> {
+  return apiFetchWithMeta<BackendDM[] | { items: BackendDM[] }>(
+    `/messages/${conversationId}?page=${page}&limit=${PAGE_LIMIT}`,
+  ).then(({ data, meta }) => ({ items: readList(data), totalPages: extractTotalPages(meta) }))
+}
+
+/** Thread order: oldest first, with not-yet-confirmed sends pinned to the end. */
+function compareThread(a: BackendDM, b: BackendDM): number {
+  const aPending = a.id < 0
+  const bPending = b.id < 0
+  if (aPending !== bPending) return aPending ? 1 : -1
+  const byTime = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  if (byTime !== 0) return byTime
+  // Optimistic ids are `-Date.now()`, so of two pending sends the earlier one is
+  // the *larger* id; server rows sort by ascending id as usual.
+  return aPending ? b.id - a.id : a.id - b.id
+}
+
+/**
+ * Fold a freshly-fetched page into what's already on screen.
+ *
+ * The poll used to *replace* state with whatever page it fetched, keeping only
+ * optimistic bubbles — so every message living on another page was discarded,
+ * and a send disappeared the moment the server confirmed it and gave it a real
+ * id (qa-report.md B1). Server rows win on an id collision, which is what
+ * carries MR2's `isRead` sent → read transition through.
+ */
+function mergeThread(prev: readonly BackendDM[], incoming: readonly BackendDM[]): BackendDM[] {
+  if (incoming.length === 0) return prev as BackendDM[]
+  const byId = new Map<number, BackendDM>()
+  for (const m of prev) byId.set(m.id, m)
+  for (const m of incoming) byId.set(m.id, m)
+  return [...byId.values()].sort(compareThread)
+}
+
 /** MC2's job-context chip label (design-spec.md §6.3). */
 interface MessageContext {
   label: string
@@ -114,9 +171,21 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   const [isSending, setIsSending] = useState(false)
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
   const [context, setContext] = useState<MessageContext | null>(null)
+  /**
+   * B1 — the lowest thread page currently on screen. A thread opens on its
+   * newest page, so anything above `1` means there is older history to reach and
+   * the "Load older messages" control is offered.
+   */
+  const [oldestLoadedPage, setOldestLoadedPage] = useState(1)
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const attachmentToken = useRef(0)
+  /** The page the poll watches — it moves forward as the thread grows. */
+  const newestPageRef = useRef(1)
+  /** Distance from the bottom to restore after an older page is prepended. */
+  const restoreScrollRef = useRef<number | null>(null)
 
   const selectedId = selected?.id ?? null
   const isPending = selectedId === PENDING_CONVERSATION_ID
@@ -246,23 +315,52 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
     if (selectedId === null) return
     setMessages([])
     setAttachment(null)
+    setOldestLoadedPage(1)
+    newestPageRef.current = 1
+    restoreScrollRef.current = null
     if (selectedId === PENDING_CONVERSATION_ID) {
       // Nothing to fetch: this pair has no conversation row yet.
       setIsLoadingMsgs(false)
       return
     }
     setIsLoadingMsgs(true)
-    apiFetch<BackendDM[] | { items: BackendDM[] }>(`/messages/${selectedId}?page=1&limit=${PAGE_LIMIT}`)
-      .then((r) => {
-        setMessages(readList(r))
+    let cancelled = false
+
+    const run = async () => {
+      try {
+        // B1 — open on the thread's *newest* page. Page 1 is the oldest 50, so
+        // asking for it (as this used to) hides everything a busy conversation
+        // has said since its 50th message. One request for a thread that fits in
+        // a single page; a second only when `totalPages` says there are more.
+        const first = await fetchThreadPage(selectedId, 1)
+        if (cancelled) return
+        let page = 1
+        let items = first.items
+        if (first.totalPages > 1) {
+          const last = await fetchThreadPage(selectedId, first.totalPages)
+          if (cancelled) return
+          page = first.totalPages
+          items = last.items
+        }
+        setMessages(items)
+        setOldestLoadedPage(page)
+        newestPageRef.current = page
         // MR1 — mark the other participant's messages read and clear the badge.
         apiFetch(`/messages/${selectedId}/read`, { method: "PATCH" }).catch(() => {})
         setConversations((prev) =>
           prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)),
         )
-      })
-      .catch(() => setMessages([]))
-      .finally(() => setIsLoadingMsgs(false))
+      } catch {
+        if (!cancelled) setMessages([])
+      } finally {
+        if (!cancelled) setIsLoadingMsgs(false)
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
   }, [selectedId])
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
@@ -271,9 +369,37 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [])
 
+  /**
+   * Follow the newest message. Keyed on the tail rather than on `messages.length`
+   * so prepending an older page doesn't yank the reader back to the bottom.
+   */
+  const newestMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
+
   useEffect(() => {
+    if (newestMessageId === null) return
     scrollToBottom()
-  }, [messages.length, scrollToBottom])
+  }, [newestMessageId, scrollToBottom])
+
+  /**
+   * Keep the reader's place when an older page lands above what they're reading.
+   * Distance from the *bottom* is the invariant here — prepending doesn't change
+   * the content below the viewport. It is re-applied a few times because images
+   * in the older page settle after layout and would otherwise drift the view;
+   * if a new message arrives meanwhile, this effect re-runs, the cleanup cancels
+   * the re-anchors and following the newest message wins.
+   */
+  useEffect(() => {
+    const distance = restoreScrollRef.current
+    if (distance === null) return
+    restoreScrollRef.current = null
+    const apply = () => {
+      const el = threadRef.current
+      if (el) el.scrollTop = el.scrollHeight - distance
+    }
+    apply()
+    const timers = [120, 500, 1200].map((ms) => window.setTimeout(apply, ms))
+    return () => timers.forEach((t) => window.clearTimeout(t))
+  }, [messages])
 
   // ── Poll the open thread ──────────────────────────────────────────────────
 
@@ -281,29 +407,48 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
 
   useEffect(() => {
     if (selectedId === null || selectedId === PENDING_CONVERSATION_ID) return
-    const id = setInterval(() => {
-      apiFetch<BackendDM[] | { items: BackendDM[] }>(`/messages/${selectedId}?page=1&limit=${PAGE_LIMIT}`)
-        .then((r) => {
-          const items = readList(r)
-          // Optimistic bubbles carry negative ids and aren't on the server yet,
-          // so they're re-appended rather than wiped by a poll landing mid-send.
-          // MR2 depends on this poll for the sent -> read transition, so unlike
-          // the old length-only comparison it always adopts the server's rows.
-          setMessages((prev) => [...items, ...prev.filter((m) => m.id < 0)])
 
-          // MR1 — a message that arrives while this thread is open is being
-          // read right now, so mark it read too. Without this, NR1's new list
-          // refresh would put an unread badge on the conversation the user is
-          // actively looking at.
-          if (items.some((m) => m.sender.id !== currentUserId && !m.isRead)) {
-            apiFetch(`/messages/${selectedId}/read`, { method: "PATCH" }).catch(() => {})
-            setConversations((prev) =>
-              prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)),
-            )
-          }
-        })
-        .catch(() => {})
-    }, THREAD_POLL_MS)
+    const tick = async () => {
+      try {
+        // B1 — poll the page the newest messages are actually on, and merge
+        // rather than replace: the old version fetched page 1 and overwrote
+        // state with it, so in a >50-message thread a confirmed send vanished on
+        // the next tick and an incoming message never showed up at all.
+        const from = newestPageRef.current
+        const res = await fetchThreadPage(selectedId, from)
+        let items = res.items
+        let page = from
+        // A thread can cross a page boundary between polls, which moves the
+        // newest messages onto a page we weren't watching. Walk forward (a
+        // bounded step at a time — the next tick continues from wherever this
+        // one stopped) instead of losing them.
+        while (page < res.totalPages && page - from < 3) {
+          page += 1
+          const next = await fetchThreadPage(selectedId, page)
+          items = [...items, ...next.items]
+        }
+        newestPageRef.current = page
+        // Optimistic bubbles carry negative ids and aren't on the server yet, so
+        // `mergeThread` keeps them. MR2 depends on this poll for the sent → read
+        // transition, so the server's copy of a row always wins.
+        setMessages((prev) => mergeThread(prev, items))
+
+        // MR1 — a message that arrives while this thread is open is being
+        // read right now, so mark it read too. Without this, NR1's new list
+        // refresh would put an unread badge on the conversation the user is
+        // actively looking at.
+        if (items.some((m) => m.sender.id !== currentUserId && !m.isRead)) {
+          apiFetch(`/messages/${selectedId}/read`, { method: "PATCH" }).catch(() => {})
+          setConversations((prev) =>
+            prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)),
+          )
+        }
+      } catch {
+        // Keep the thread on screen rather than blanking it on a transient error.
+      }
+    }
+
+    const id = setInterval(() => void tick(), THREAD_POLL_MS)
     return () => clearInterval(id)
   }, [selectedId, currentUserId])
 
@@ -315,6 +460,29 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
     if (!searchQuery) return true
     return contactName(c.contact).toLowerCase().includes(searchQuery.toLowerCase())
   })
+
+  // ── B1 — reach the rest of the thread ─────────────────────────────────────
+
+  const loadOlderMessages = async () => {
+    if (selectedId === null || selectedId === PENDING_CONVERSATION_ID) return
+    if (oldestLoadedPage <= 1 || isLoadingOlder) return
+    setIsLoadingOlder(true)
+    // Measured before the fetch so the message being read stays put once the
+    // older page is prepended.
+    const el = threadRef.current
+    restoreScrollRef.current = el ? el.scrollHeight - el.scrollTop : null
+    try {
+      const page = oldestLoadedPage - 1
+      const { items } = await fetchThreadPage(selectedId, page)
+      setMessages((prev) => mergeThread(prev, items))
+      setOldestLoadedPage(page)
+    } catch {
+      restoreScrollRef.current = null
+      toast.error("Couldn't load older messages.")
+    } finally {
+      setIsLoadingOlder(false)
+    }
+  }
 
   // ── MC4 — attachment picking / upload ─────────────────────────────────────
 
@@ -667,7 +835,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                 })()}
 
                 {/* Message thread */}
-                <div className="flex-1 overflow-y-auto bg-muted/20 px-4 py-4">
+                <div ref={threadRef} className="flex-1 overflow-y-auto bg-muted/20 px-4 py-4">
                   {isLoadingMsgs ? (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -679,6 +847,24 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                     </div>
                   ) : (
                     <div className="mx-auto flex max-w-2xl flex-col gap-1">
+                      {/* B1 — the thread opens on its newest page, so older
+                          history is reached from here instead of being
+                          unreachable. Same "load more" idiom as the
+                          notifications feed (NR4). */}
+                      {oldestLoadedPage > 1 && (
+                        <div className="mb-3 flex justify-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-transparent"
+                            onClick={loadOlderMessages}
+                            disabled={isLoadingOlder}
+                          >
+                            {isLoadingOlder && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Load older messages
+                          </Button>
+                        </div>
+                      )}
                       {messages.map((msg, idx) => {
                         const isOwn = msg.sender.id === Number(user.id)
                         const prev = messages[idx - 1]

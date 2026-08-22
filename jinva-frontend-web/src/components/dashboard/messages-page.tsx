@@ -267,9 +267,13 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
 
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages.length])
+  }, [])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages.length, scrollToBottom])
 
   // ── Poll the open thread ──────────────────────────────────────────────────
 
@@ -724,7 +728,17 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                             >
                               {/* MC4 — an image message, with or without a caption. */}
                               {msg.attachmentUrl && (
-                                <MessageImage url={msg.attachmentUrl} className="mb-1 max-w-[240px]" />
+                                <MessageImage
+                                  url={msg.attachmentUrl}
+                                  className="mb-1 max-w-[240px]"
+                                  // Re-scroll once it has height, so the newest
+                                  // image bubble isn't left half below the fold.
+                                  // Only the newest one — otherwise an older
+                                  // image finishing loading would yank the view
+                                  // away from someone reading back through the
+                                  // thread.
+                                  onLoad={idx === messages.length - 1 ? scrollToBottom : undefined}
+                                />
                               )}
                               {msg.content && (
                                 <p className="break-words text-[14px] leading-relaxed">{msg.content}</p>

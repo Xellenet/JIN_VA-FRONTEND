@@ -213,12 +213,24 @@ export function NotificationsPage() {
                   const config = getNotificationTypeConfig(notification.type)
                   const Icon = config.icon
                   return (
-                    <button
+                    // A row is clickable *and* contains its own "mark read"
+                    // button. A <button> inside a <button> is invalid HTML and
+                    // React reports it as a hydration error, so the row is a
+                    // focusable role="button" element instead — same keyboard
+                    // affordance, valid nesting.
+                    <div
                       key={notification.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleNotificationClick(notification)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          handleNotificationClick(notification)
+                        }
+                      }}
                       className={cn(
-                        "flex w-full items-start gap-4 px-6 py-4 text-left transition-colors hover:bg-muted/50",
+                        "flex w-full cursor-pointer items-start gap-4 px-6 py-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         !notification.isRead && "bg-accent/50",
                       )}
                     >
@@ -244,11 +256,12 @@ export function NotificationsPage() {
                           </Badge>
                         </div>
                       </div>
-                      <div className="flex flex-shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-shrink-0 items-center gap-1">
                         {!notification.isRead && (
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label="Mark read"
                             className="h-8 w-8 text-muted-foreground hover:text-foreground"
                             onClick={(e) => {
                               e.stopPropagation()
@@ -259,7 +272,7 @@ export function NotificationsPage() {
                           </Button>
                         )}
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </div>

@@ -22,7 +22,17 @@ import { cn, resolveMediaUrl } from "@/lib/utils"
 export function MessageImage({
   url,
   className,
-}: Readonly<{ url: string; className?: string }>) {
+  onLoad,
+}: Readonly<{
+  url: string
+  className?: string
+  /**
+   * Fired once the thumbnail has actually painted. The thread auto-scrolls when
+   * the message count changes, which happens *before* an image has height — so
+   * without this the newest image bubble ends up half below the fold.
+   */
+  onLoad?: () => void
+}>) {
   const [isOpen, setIsOpen] = useState(false)
   const src = resolveMediaUrl(url)
 
@@ -52,6 +62,7 @@ export function MessageImage({
           alt="Message attachment"
           className="h-auto w-full max-w-[240px] object-cover"
           loading="lazy"
+          onLoad={onLoad}
         />
       </button>
 

@@ -190,7 +190,7 @@ export interface Notification {
   id: string
   title: string
   message: string
-  type: "booking" | "payment" | "system" | "review" | "assignment" | "message"
+  type: "booking" | "payment" | "system" | "review" | "assignment" | "message" | "dispute"
   isRead: boolean
   time: string
   link?: string

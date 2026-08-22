@@ -13,6 +13,7 @@ import {
   Star,
   Briefcase,
   MessageSquare,
+  Scale,
   Settings,
 } from "lucide-react"
 import type { Notification } from "@/lib/types"
@@ -120,6 +121,11 @@ export interface NotificationTypeConfig {
 export const notificationTypeConfig: Record<Notification["type"], NotificationTypeConfig> = {
   booking:    { icon: Calendar,      color: "text-foreground",       bg: "bg-muted",      label: "Booking" },
   payment:    { icon: CreditCard,    color: "text-primary",          bg: "bg-primary/10", label: "Payment" },
+  // `DISPUTE_FILED`/`DISPUTE_RESOLVED`/`DISPUTE_CLOSED` are real types now
+  // (api-contract.md §5), so a dispute outcome no longer lands in the generic
+  // "System" bucket. Same emphasis tone as money — it matters as much to the
+  // affected user (design-spec.md §2/§6.5).
+  dispute:    { icon: Scale,         color: "text-primary",          bg: "bg-primary/10", label: "Dispute" },
   review:     { icon: Star,          color: "text-foreground",       bg: "bg-muted",      label: "Review" },
   assignment: { icon: Briefcase,     color: "text-foreground",       bg: "bg-muted",      label: "Assignment" },
   message:    { icon: MessageSquare, color: "text-foreground",       bg: "bg-muted",      label: "Message" },

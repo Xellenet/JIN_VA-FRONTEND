@@ -29,7 +29,11 @@ export interface UnreadCountResponse {
 
 export function mapNotificationType(type: string): Notification["type"] {
   const t = type.toUpperCase()
-  if (t.includes("PAYMENT") || t.includes("REFUND")) return "payment"
+  // Checked before PAYMENT so a dispute type is never mistaken for one, and
+  // before the rest so `DISPUTE_*` stops falling through to "system"
+  // (design-spec.md §6.5; the live type list is api-contract.md §5).
+  if (t.includes("DISPUTE")) return "dispute"
+  if (t.includes("PAYMENT") || t.includes("REFUND") || t.includes("PAYOUT")) return "payment"
   if (t.includes("REVIEW")) return "review"
   if (t.includes("MESSAGE")) return "message"
   if (t.includes("BOOKING")) return "booking"

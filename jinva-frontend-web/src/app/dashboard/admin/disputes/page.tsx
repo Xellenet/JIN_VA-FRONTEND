@@ -282,7 +282,7 @@ export default function DisputesPage() {
                             <Badge variant="secondary" className="text-xs">{d.reason}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-medium text-foreground">
-                            {d.booking?.agreedPrice != null ? `GH₵ ${Number(d.booking.agreedPrice).toLocaleString()}` : "—"}
+                            {d.booking?.agreedPrice != null ? formatCurrency(d.booking.agreedPrice) : "—"}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                             {fmtDate(d.createdAt)}
@@ -423,7 +423,7 @@ export default function DisputesPage() {
               {active.booking?.agreedPrice != null && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Amount at dispute:</span>
-                  <span className="font-semibold text-foreground">GH₵ {Number(active.booking.agreedPrice).toLocaleString()}</span>
+                  <span className="font-semibold text-foreground">{formatCurrency(active.booking.agreedPrice)}</span>
                 </div>
               )}
 

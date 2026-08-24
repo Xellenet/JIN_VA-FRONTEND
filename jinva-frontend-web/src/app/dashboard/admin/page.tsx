@@ -1,13 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { StatsCard } from "@/components/dashboard/admin/stats-card"
 import { RevenueChart } from "@/components/dashboard/admin/revenue-chart"
 import { RecentActivities } from "@/components/dashboard/admin/recent-activities"
 import { TopArtisans } from "@/components/dashboard/admin/top-artisans"
 import { OngoingJobs } from "@/components/dashboard/admin/ongoing-jobs"
-import { Users, Clock, CheckCircle2, Briefcase, Loader2 } from "lucide-react"
+import { Users, Clock, CheckCircle2, Briefcase, Loader2, ShieldCheck, ArrowRight } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { mockActivities, mockArtisans, mockOrders } from "@/lib/data/mock-data"
 
@@ -73,6 +76,42 @@ export default function AdminDashboard() {
               subtitle="Service providers"
             />
           </div>
+        )}
+
+        {/*
+          AT1: `/admin/stats` has always returned `verifications.pending` /
+          `.approved` and this page has never rendered either of them, while
+          the queue that acts on them didn't exist. Surfaced here as a work
+          item linking into the new queue rather than as a fifth stat card, so
+          the four-up rhythm above survives and the number comes with the
+          action it implies.
+        */}
+        {!isLoading && stats && (
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+              <div className="flex items-center gap-3">
+                <div className="shrink-0 rounded-full bg-primary/10 p-2">
+                  <ShieldCheck className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">
+                    {stats.verifications.pending === 0
+                      ? "No artisan verifications waiting"
+                      : `${stats.verifications.pending} artisan verification${stats.verifications.pending === 1 ? "" : "s"} waiting for review`}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {stats.verifications.approved} approved to date
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" className="bg-transparent" asChild>
+                <Link href="/dashboard/admin/verifications">
+                  Review queue
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">

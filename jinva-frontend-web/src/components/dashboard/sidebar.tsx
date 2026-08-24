@@ -28,6 +28,7 @@ import {
   MessageSquare,
   Plus,
   Wallet,
+  ShieldCheck,
 } from "lucide-react"
 import type { UserRole } from "@/lib/types"
 
@@ -47,6 +48,8 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     { href: "/dashboard/admin/clients",           label: "Clients",         icon: UserCircle    },
     { href: "/dashboard/admin/orders",            label: "Jobs",            icon: ClipboardList },
     { href: "/dashboard/admin/portfolio-queue",   label: "Portfolio Queue", icon: ImageIcon     },
+    // Placed with the other moderation queue so the two sit together (AT1).
+    { href: "/dashboard/admin/verifications",      label: "Verifications",   icon: ShieldCheck   },
     { href: "/dashboard/admin/reviews",           label: "Reviews",         icon: Star          },
     { href: "/dashboard/admin/transactions",      label: "Transactions",    icon: CreditCard    },
     { href: "/dashboard/admin/disputes",          label: "Disputes",        icon: AlertTriangle },

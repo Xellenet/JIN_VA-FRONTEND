@@ -27,19 +27,16 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatCurrency } from "@/lib/utils"
+import {
+  CHART_TOOLTIP_STYLE,
+  CHART_AXIS_TICK,
+  CHART_GRID_STROKE,
+  CHART_SERIES_COLORS,
+} from "@/lib/charts"
 
 const RANGES = ["7 days", "30 days", "90 days", "All time"] as const
 type Range = (typeof RANGES)[number]
-
-const TOOLTIP_STYLE = {
-  backgroundColor: "hsl(var(--card))",
-  border: "1px solid hsl(var(--border))",
-  borderRadius: "8px",
-  boxShadow: "0 4px 6px -1px rgba(0,0,0,.1)",
-  color: "hsl(var(--foreground))",
-  fontSize: "12px",
-}
 
 const userGrowth = [
   { month: "Jan", users: 120,  artisans: 35 },
@@ -94,13 +91,7 @@ const ratingDist = [
   { name: "1 Star",  value: 4  },
 ]
 
-const COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--primary) / 0.7)",
-  "hsl(var(--primary) / 0.45)",
-  "hsl(var(--primary) / 0.25)",
-  "hsl(var(--primary) / 0.12)",
-]
+const COLORS = CHART_SERIES_COLORS
 
 const topCategories = [
   { name: "Plumbing",    jobs: 312, pct: 92 },
@@ -205,20 +196,23 @@ export default function AdminAnalyticsPage() {
               <AreaChart data={userGrowth}>
                 <defs>
                   <linearGradient id="usersGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    <stop offset="5%"  stopColor="var(--primary)" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="artisansGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.08} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    <stop offset="5%"  stopColor="var(--primary)" stopOpacity={0.08} />
+                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Area type="monotone" dataKey="users"    stroke="hsl(var(--primary))"      strokeWidth={2} fill="url(#usersGrad)"    dot={false} />
-                <Area type="monotone" dataKey="artisans" stroke="hsl(var(--primary) / 0.4)" strokeWidth={1.5} fill="url(#artisansGrad)" dot={false} strokeDasharray="4 2" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} vertical={false} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} />
+                <YAxis axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} />
+                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                <Area type="monotone" dataKey="users"    stroke="var(--primary)" strokeWidth={2} fill="url(#usersGrad)" dot={false} />
+                {/* Second series is the same token at reduced opacity —
+                    `var(--primary) / 0.4` is not valid inside var(), so the
+                    opacity rides on Recharts' own prop (design-spec §0.4). */}
+                <Area type="monotone" dataKey="artisans" stroke="var(--primary)" strokeOpacity={0.4} strokeWidth={1.5} fill="url(#artisansGrad)" dot={false} strokeDasharray="4 2" />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -233,11 +227,11 @@ export default function AdminAnalyticsPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={bookingVolume} barSize={22}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [v, "Jobs"]} />
-                  <Bar dataKey="jobs" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} vertical={false} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} />
+                  <YAxis axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v) => [v, "Jobs"]} />
+                  <Bar dataKey="jobs" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -250,11 +244,11 @@ export default function AdminAnalyticsPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={revenueData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} tickFormatter={(v) => `₵${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`GH₵ ${Number(v).toLocaleString()}`, "Revenue"]} />
-                  <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: "hsl(var(--primary))", r: 3 }} activeDot={{ r: 5 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} vertical={false} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} />
+                  <YAxis axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} tickFormatter={(v) => `₵${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v) => [formatCurrency(Number(v)), "Revenue"]} />
+                  <Line type="monotone" dataKey="revenue" stroke="var(--primary)" strokeWidth={2} dot={{ fill: "var(--primary)", r: 3 }} activeDot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -307,7 +301,7 @@ export default function AdminAnalyticsPage() {
                       <Cell key={index} fill={COLORS[index]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${v}%`, ""]} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v) => [`${v}%`, ""]} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="mt-2 space-y-1.5">

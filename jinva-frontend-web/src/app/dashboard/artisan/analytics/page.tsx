@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import {
   BarChart,
   Bar,
@@ -23,7 +22,8 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatCurrency } from "@/lib/utils"
+import { CHART_TOOLTIP_STYLE, CHART_AXIS_TICK, CHART_GRID_STROKE } from "@/lib/charts"
 
 const RANGES = ["7 days", "30 days", "90 days", "All time"] as const
 type Range = (typeof RANGES)[number]
@@ -82,15 +82,6 @@ const topServices = [
   { name: "Emergency Leak Fix",   jobs: 4,  pct: 20 },
 ]
 
-const TOOLTIP_STYLE = {
-  backgroundColor: "hsl(var(--card))",
-  border: "1px solid hsl(var(--border))",
-  borderRadius: "8px",
-  boxShadow: "0 4px 6px -1px rgba(0,0,0,.1)",
-  color: "hsl(var(--foreground))",
-  fontSize: "12px",
-}
-
 export default function ArtisanAnalyticsPage() {
   const [range, setRange] = useState<Range>("30 days")
 
@@ -99,7 +90,7 @@ export default function ArtisanAnalyticsPage() {
   const stats = [
     {
       label: "Total Earnings",
-      value: `GH₵ ${totalEarnings.toLocaleString()}`,
+      value: formatCurrency(totalEarnings),
       sub: range,
       icon: DollarSign,
       iconBg: "bg-primary/10",
@@ -212,11 +203,11 @@ export default function ArtisanAnalyticsPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={earningsData[range]} barSize={28}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} tickFormatter={(v) => `₵${v}`} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`GH₵ ${v}`, "Earnings"]} />
-                  <Bar dataKey="earnings" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} vertical={false} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" tick={CHART_AXIS_TICK} />
+                  <YAxis axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} tickFormatter={(v) => `₵${v}`} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v) => [formatCurrency(Number(v)), "Earnings"]} />
+                  <Bar dataKey="earnings" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -230,16 +221,16 @@ export default function ArtisanAnalyticsPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={ratingTrend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                  <YAxis domain={[3.5, 5]} axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [v, "Rating"]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} vertical={false} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} />
+                  <YAxis domain={[3.5, 5]} axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v) => [v, "Rating"]} />
                   <Line
                     type="monotone"
                     dataKey="rating"
-                    stroke="hsl(var(--primary))"
+                    stroke="var(--primary)"
                     strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))", r: 3 }}
+                    dot={{ fill: "var(--primary)", r: 3 }}
                     activeDot={{ r: 5 }}
                   />
                 </LineChart>

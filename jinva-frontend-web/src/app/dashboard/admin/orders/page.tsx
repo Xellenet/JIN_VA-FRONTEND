@@ -86,7 +86,8 @@ export default function OrdersPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
   useEffect(() => {
-    apiFetch<BackendJob[] | { items: BackendJob[] }>("/jobs?page=1&limit=100")
+    // `/jobs` caps `limit` at 50 (400 above it), so 100 returned nothing at all.
+    apiFetch<BackendJob[] | { items: BackendJob[] }>("/jobs?page=1&limit=50")
       .then((r) => {
         const items = Array.isArray(r) ? r : (r as { items: BackendJob[] }).items ?? []
         setOrders(items.map(mapJob))

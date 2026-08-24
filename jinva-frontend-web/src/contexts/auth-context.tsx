@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, ty
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 import { clearAuthTokens, mapBackendRole } from "@/lib/auth"
+import { unregisterPushToken } from "@/lib/push-notifications"
 import type { User } from "@/lib/types"
 
 interface BackendUser {
@@ -175,6 +176,11 @@ export function AuthProvider({
   }, [fetchUser, forceFresh])
 
   const logout = useCallback(async () => {
+    // PN1: drop this device's push token BEFORE the session goes away, so the
+    // POST still authenticates. Without this, a shared or public browser keeps
+    // receiving the previous account's pushes after they log out. Never blocks
+    // logout — unregisterPushToken swallows its own failures.
+    await unregisterPushToken()
     try {
       await apiFetch("/auth/logout", { method: "POST" })
     } catch {}

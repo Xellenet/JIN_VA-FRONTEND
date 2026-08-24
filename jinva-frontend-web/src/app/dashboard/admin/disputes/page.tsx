@@ -41,6 +41,7 @@ import { naviiAvatar, cn, formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
 import { getPaymentStatusConfig } from "@/lib/status-badges"
+import { DisputeConversationPanel } from "@/components/admin/dispute-conversation-panel"
 
 // 3.6: GET /admin/disputes/:id (unlike the list endpoint) already returns
 // the dispute↔payment linkage the backend added for Ad3 — `jobId` and
@@ -281,7 +282,7 @@ export default function DisputesPage() {
                             <Badge variant="secondary" className="text-xs">{d.reason}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-medium text-foreground">
-                            {d.booking?.agreedPrice != null ? `GH₵ ${Number(d.booking.agreedPrice).toLocaleString()}` : "—"}
+                            {d.booking?.agreedPrice != null ? formatCurrency(d.booking.agreedPrice) : "—"}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                             {fmtDate(d.createdAt)}
@@ -409,10 +410,20 @@ export default function DisputesPage() {
                 )}
               </div>
 
+              {/* AD1/AD2: read-only, dispute-scoped conversation between the
+                  booking's two parties. Placed after Linked Payment so the
+                  dialog reads context -> evidence -> conversation -> action
+                  (design-spec.md §4). */}
+              <DisputeConversationPanel
+                disputeId={active.id}
+                disputeStatus={active.status}
+                bookingLabel={active.booking?.id ? `Booking #${active.booking.id}` : undefined}
+              />
+
               {active.booking?.agreedPrice != null && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Amount at dispute:</span>
-                  <span className="font-semibold text-foreground">GH₵ {Number(active.booking.agreedPrice).toLocaleString()}</span>
+                  <span className="font-semibold text-foreground">{formatCurrency(active.booking.agreedPrice)}</span>
                 </div>
               )}
 

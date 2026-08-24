@@ -45,6 +45,8 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
+import { applyPushPreference } from "@/lib/push-notifications"
+import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/utils"
 import { getPaymentStatusConfig } from "@/lib/status-badges"
@@ -161,15 +163,22 @@ function UserSettingsContent() {
       .finally(() => setIsLoadingNotifs(false))
   }, [])
 
-  const toggleNotif = (key: keyof CustomerNotifPrefs, val: boolean) =>
+  const toggleNotif = (key: keyof CustomerNotifPrefs, val: boolean) => {
     setNotifPrefs((p) => ({ ...p, [key]: val }))
+    // PN1: the push channel toggle is where browser permission is requested and
+    // this device's FCM token is registered/unregistered.
+    if (key === "pushEnabled") applyPushPreference(val)
+  }
 
   const handleSaveNotifications = async () => {
     setIsSavingNotifs(true)
     try {
       await apiFetch("/notifications/preferences", {
         method: "PATCH",
-        body: JSON.stringify(notifPrefs),
+        // stripPreferenceMetadata drops the row `id` the GET response carries —
+        // PATCH validates against a whitelist DTO and 400s the entire save if
+        // an undeclared property is present. See its doc comment.
+        body: JSON.stringify(stripPreferenceMetadata(notifPrefs)),
       })
       toast.success("Notification preferences saved.")
     } catch {
@@ -541,13 +550,19 @@ function UserSettingsContent() {
                     </div>
                   </div>
                   <CardContent className="p-6 space-y-4">
+                    {/*
+                      PR2: the "Review Requests" row is deliberately absent, not disabled. No
+                      backend trigger sends a post-completion review prompt, so the toggle
+                      controlled nothing. `reviewRequests` stays on the interface and in the save
+                      payload so the stored value round-trips untouched; restore the row here once
+                      a real review-nudge trigger exists.
+                    */}
                     {([
                       { key: "bookingConfirmations", label: "Booking Confirmations",  desc: "Get notified when an artisan applies to your job" },
                       { key: "jobStatusUpdates",     label: "Job Status Updates",      desc: "Receive updates when your job status changes" },
                       { key: "paymentReceipts",      label: "Payment Receipts",        desc: "Receive receipts for completed payments" },
                       { key: "promotionalOffers",    label: "Promotional Offers",      desc: "Get notified about discounts and special offers" },
                       { key: "serviceReminders",     label: "Service Reminders",       desc: "Reminders for upcoming scheduled services" },
-                      { key: "reviewRequests",       label: "Review Requests",         desc: "Get prompted to review artisans after service completion" },
                       { key: "jobExpired",           label: "Job Expired",             desc: "Get notified when your job posting expires without being filled" },
                       { key: "messageReceived",      label: "New Messages",            desc: "Get notified when you receive a direct message" },
                     ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
@@ -569,11 +584,22 @@ function UserSettingsContent() {
                   <div className="border-b p-6">
                     <h3 className="font-semibold">Notification Channels</h3>
                     <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Email and SMS coverage varies by notification type — in-app notifications always
+                      fire when the toggle above is on.
+                    </p>
                   </div>
                   <CardContent className="p-6 space-y-4">
+                    {/*
+                      PR2: the SMS row is deliberately absent, not disabled. There is no SMS
+                      delivery capability anywhere in the platform and SMS is not a PRD-required
+                      channel, so showing the toggle implied a working feature that silently did
+                      nothing. `smsEnabled` stays on the interface and in the save payload so the
+                      stored value round-trips untouched; restore the row here if real SMS
+                      delivery is ever built.
+                    */}
                     {([
                       { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
-                      { key: "smsEnabled",   label: "SMS Notifications",   desc: "Receive notifications via text message" },
                       { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
                     ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
                       <div key={key} className="flex items-center justify-between rounded-lg border p-4">

@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Search,
@@ -12,64 +14,152 @@ import {
   UserRound,
   Loader2,
   MessageSquare,
+  Paperclip,
+  X,
+  AlertTriangle,
+  Clock,
+  Check,
+  CheckCheck,
 } from "lucide-react"
 import { cn, naviiAvatar } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta, ApiError } from "@/lib/api"
 import { toast } from "sonner"
-
-// ── Backend shapes ────────────────────────────────────────────────────────────
-
-interface BackendConversation {
-  contact: {
-    id: number
-    firstname: string
-    lastname: string
-    profilePicture: string | null
-  }
-  lastMessage: string
-  lastMessageTime: string
-  lastSenderId: number
-  unreadCount: number
-}
-
-interface BackendDM {
-  id: number
-  content: string
-  isRead: boolean
-  createdAt: string
-  sender: {
-    id: number
-    firstname: string
-    lastname: string
-    profilePicture: string | null
-  }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmt(iso: string): string {
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  if (diff < 60_000) return "just now"
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86_400_000) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-}
-
-function contactName(c: BackendConversation["contact"]): string {
-  return `${c.firstname} ${c.lastname}`.trim()
-}
+import { MessageImage } from "@/components/messages/message-image"
+import {
+  contactName,
+  conversationTimestamp,
+  formatMessageTime as fmt,
+  lastMessagePreview,
+  validateAttachment,
+  ATTACHMENT_ACCEPTED_TYPES,
+  type BackendConversation,
+  type BackendDM,
+  type SendMessagePayload,
+} from "@/lib/messages"
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface MessagesPageProps {
-  readonly openConversationId?: string // contact user ID to pre-open (e.g. from artisan profile page)
+  /** Contact **user** id to pre-open (`?artisan=`/`?client=` deep link). */
+  readonly openConversationId?: string
+  /** MC2 — job this conversation was opened from (`&job=`). */
+  readonly jobId?: string
+  /** MC2 — booking this conversation was opened from (`&booking=`). */
+  readonly bookingId?: string
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+/**
+ * `GET /messages` and `GET /messages/:id` both cap `limit` at 50
+ * (api-contract.md §3) — asking for more is a 400, not a silent clamp.
+ */
+const PAGE_LIMIT = 50
+
+/** Existing in-open-thread cadence (design-spec.md §8.1). */
+const THREAD_POLL_MS = 8_000
+
+/**
+ * NR1 — the conversation list refreshes while the page is open, so unread
+ * badges there don't go stale until the user navigates away and back.
+ * design-spec.md §6.4 recommends 15–20s: lighter than the open thread's 8s,
+ * tighter than the header dropdown's 30s so the two never visibly disagree.
+ */
+const CONVERSATION_LIST_POLL_MS = 15_000
+
+/**
+ * Sentinel id for a deep-linked pair who have never messaged. No conversation
+ * row exists server-side yet (api-contract.md §2.1 step 3), so there is nothing
+ * to read or mark read — it is created by the first `POST /messages`, after
+ * which the list is re-fetched to pick up its real id.
+ */
+const PENDING_CONVERSATION_ID = -1
+
+// ── Attachment composer state (MC4) ───────────────────────────────────────────
+
+interface PendingAttachment {
+  file: File
+  /** Local object URL so the thumbnail appears instantly, before the upload lands. */
+  previewUrl: string
+  status: "uploading" | "ready" | "error"
+  /** Set once `POST /uploads/message-attachment` returns — this is what gets sent. */
+  url?: string
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function readList<T>(r: T[] | { items?: T[] } | null | undefined): T[] {
+  if (Array.isArray(r)) return r
+  return r?.items ?? []
+}
+
+/**
+ * `meta.pagination.totalPages`, tolerating the flat and nested envelope shapes
+ * the app's paginated endpoints use — same reader as `notifications-page.tsx`.
+ */
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
+
+/**
+ * One page of a thread, with the page count it came back with.
+ *
+ * `GET /messages/:id` is **oldest-first** (api-contract.md §3), so page 1 holds
+ * the *oldest* 50 messages and the newest ones live on the **last** page. Every
+ * thread read therefore goes through `apiFetchWithMeta` and keeps `totalPages`
+ * instead of assuming page 1 is what the user wants to see (qa-report.md B1).
+ */
+function fetchThreadPage(
+  conversationId: number,
+  page: number,
+): Promise<{ items: BackendDM[]; totalPages: number }> {
+  return apiFetchWithMeta<BackendDM[] | { items: BackendDM[] }>(
+    `/messages/${conversationId}?page=${page}&limit=${PAGE_LIMIT}`,
+  ).then(({ data, meta }) => ({ items: readList(data), totalPages: extractTotalPages(meta) }))
+}
+
+/** Thread order: oldest first, with not-yet-confirmed sends pinned to the end. */
+function compareThread(a: BackendDM, b: BackendDM): number {
+  const aPending = a.id < 0
+  const bPending = b.id < 0
+  if (aPending !== bPending) return aPending ? 1 : -1
+  const byTime = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  if (byTime !== 0) return byTime
+  // Optimistic ids are `-Date.now()`, so of two pending sends the earlier one is
+  // the *larger* id; server rows sort by ascending id as usual.
+  return aPending ? b.id - a.id : a.id - b.id
+}
+
+/**
+ * Fold a freshly-fetched page into what's already on screen.
+ *
+ * The poll used to *replace* state with whatever page it fetched, keeping only
+ * optimistic bubbles — so every message living on another page was discarded,
+ * and a send disappeared the moment the server confirmed it and gave it a real
+ * id (qa-report.md B1). Server rows win on an id collision, which is what
+ * carries MR2's `isRead` sent → read transition through.
+ */
+function mergeThread(prev: readonly BackendDM[], incoming: readonly BackendDM[]): BackendDM[] {
+  if (incoming.length === 0) return prev as BackendDM[]
+  const byId = new Map<number, BackendDM>()
+  for (const m of prev) byId.set(m.id, m)
+  for (const m of incoming) byId.set(m.id, m)
+  return [...byId.values()].sort(compareThread)
+}
+
+/** MC2's job-context chip label (design-spec.md §6.3). */
+interface MessageContext {
+  label: string
+  href?: string
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function MessagesPage({ openConversationId }: MessagesPageProps) {
+export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesPageProps) {
   const { user } = useAuth()
   const [conversations, setConversations] = useState<BackendConversation[]>([])
   const [selected, setSelected] = useState<BackendConversation | null>(null)
@@ -79,15 +169,54 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
   const [isLoadingConvs, setIsLoadingConvs] = useState(true)
   const [isLoadingMsgs, setIsLoadingMsgs] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
+  const [context, setContext] = useState<MessageContext | null>(null)
+  /**
+   * B1 — the lowest thread page currently on screen. A thread opens on its
+   * newest page, so anything above `1` means there is older history to reach and
+   * the "Load older messages" control is offered.
+   */
+  const [oldestLoadedPage, setOldestLoadedPage] = useState(1)
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const attachmentToken = useRef(0)
+  /** The page the poll watches — it moves forward as the thread grows. */
+  const newestPageRef = useRef(1)
+  /** Distance from the bottom to restore after an older page is prepended. */
+  const restoreScrollRef = useRef<number | null>(null)
 
-  // ── Load conversations ────────────────────────────────────────────────────
+  const selectedId = selected?.id ?? null
+  const isPending = selectedId === PENDING_CONVERSATION_ID
+
+  /**
+   * MC2 context applies only to the conversation the deep link opened — if the
+   * user switches to another thread in the list, that one is a general inquiry
+   * and must not be tagged with someone else's job.
+   */
+  const contextApplies =
+    !!openConversationId &&
+    !!selected &&
+    String(selected.contact.id) === String(openConversationId) &&
+    (!!jobId || !!bookingId)
+
+  // ── Load conversations (MB1: GET /messages, paginated) ────────────────────
 
   const loadConversations = useCallback(async () => {
     try {
-      const r = await apiFetch<BackendConversation[]>("/direct-messages/conversations")
-      const items = Array.isArray(r) ? r : []
-      setConversations(items)
+      const r = await apiFetch<BackendConversation[] | { items: BackendConversation[] }>(
+        `/messages?page=1&limit=${PAGE_LIMIT}`,
+      )
+      const items = readList(r)
+      setConversations((prev) => {
+        // Keep a not-yet-created deep-link thread pinned while it has no
+        // server-side row to come back in the list.
+        const pending = prev.filter(
+          (c) => c.id === PENDING_CONVERSATION_ID && !items.some((i) => i.contact.id === c.contact.id),
+        )
+        return [...pending, ...items]
+      })
       return items
     } catch {
       return [] as BackendConversation[]
@@ -96,75 +225,232 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
     }
   }, [])
 
+  // Initial load + deep-link resolution.
   useEffect(() => {
     loadConversations().then((items) => {
       if (!openConversationId) return
       const found = items.find((c) => String(c.contact.id) === String(openConversationId))
       if (found) {
         setSelected(found)
-      } else {
-        // New conversation — placeholder until first message is sent
-        const placeholder: BackendConversation = {
-          contact: { id: Number(openConversationId), firstname: "New", lastname: "Conversation", profilePicture: null },
-          lastMessage: "",
-          lastMessageTime: new Date().toISOString(),
-          lastSenderId: 0,
-          unreadCount: 0,
-        }
-        setConversations((prev) => [placeholder, ...prev])
-        setSelected(placeholder)
+        return
       }
+      // No conversation with this contact yet. There is no endpoint that
+      // resolves an arbitrary user id to a name, so the row is labelled
+      // neutrally and the real contact details arrive with the list re-fetch
+      // after the first send. An id that turns out to be unreachable surfaces
+      // as a 404 on that send, which drops back to the list (see handleSend).
+      const placeholder: BackendConversation = {
+        id: PENDING_CONVERSATION_ID,
+        contact: {
+          id: Number(openConversationId),
+          firstname: "New",
+          lastname: "conversation",
+          profilePicture: null,
+        },
+        lastMessage: null,
+        unreadCount: 0,
+      }
+      setConversations((prev) =>
+        prev.some((c) => String(c.contact.id) === String(openConversationId))
+          ? prev
+          : [placeholder, ...prev],
+      )
+      setSelected(placeholder)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openConversationId])
 
-  // ── Load messages when conversation is selected ───────────────────────────
+  // NR1 — keep the list (and its unread badges) fresh while the page is open.
+  useEffect(() => {
+    const id = setInterval(loadConversations, CONVERSATION_LIST_POLL_MS)
+    const onFocus = () => loadConversations()
+    window.addEventListener("focus", onFocus)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [loadConversations])
+
+  // ── MC2 — resolve the job/booking title for the context chip ──────────────
 
   useEffect(() => {
-    if (!selected) return
-    setIsLoadingMsgs(true)
+    if (!jobId && !bookingId) {
+      setContext(null)
+      return
+    }
+    const roleBase = user?.role === "artisan" ? "/dashboard/artisan" : "/dashboard/user"
+    let cancelled = false
+
+    if (jobId) {
+      // Fall back to the bare reference if the title can't be fetched — the
+      // chip's job is to say *which* job, and the number alone still does that.
+      setContext({ label: `Job #${jobId}`, href: `${roleBase}/jobs/${jobId}` })
+      apiFetch<{ title?: string }>(`/jobs/${jobId}`)
+        .then((job) => {
+          if (cancelled || !job?.title) return
+          setContext({ label: `${job.title} · Job #${jobId}`, href: `${roleBase}/jobs/${jobId}` })
+        })
+        .catch(() => {})
+    } else if (bookingId) {
+      // Only the customer dashboard has a booking detail route, so the artisan
+      // side renders the chip without a link rather than a dead one.
+      const href = user?.role === "artisan" ? undefined : `/dashboard/user/bookings/${bookingId}`
+      setContext({ label: `Booking #${bookingId}`, href })
+      apiFetch<{ service?: { name?: string } }>(`/bookings/${bookingId}`)
+        .then((booking) => {
+          if (cancelled || !booking?.service?.name) return
+          setContext({ label: `${booking.service.name} · Booking #${bookingId}`, href })
+        })
+        .catch(() => {})
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [jobId, bookingId, user?.role])
+
+  // ── Load messages when a conversation is selected ──────────────────────────
+
+  useEffect(() => {
+    if (selectedId === null) return
     setMessages([])
-    apiFetch<{ items: BackendDM[] } | BackendDM[]>(
-      `/direct-messages/${selected.contact.id}?page=1&limit=50`
-    )
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: BackendDM[] }).items ?? []
+    setAttachment(null)
+    setOldestLoadedPage(1)
+    newestPageRef.current = 1
+    restoreScrollRef.current = null
+    if (selectedId === PENDING_CONVERSATION_ID) {
+      // Nothing to fetch: this pair has no conversation row yet.
+      setIsLoadingMsgs(false)
+      return
+    }
+    setIsLoadingMsgs(true)
+    let cancelled = false
+
+    const run = async () => {
+      try {
+        // B1 — open on the thread's *newest* page. Page 1 is the oldest 50, so
+        // asking for it (as this used to) hides everything a busy conversation
+        // has said since its 50th message. One request for a thread that fits in
+        // a single page; a second only when `totalPages` says there are more.
+        const first = await fetchThreadPage(selectedId, 1)
+        if (cancelled) return
+        let page = 1
+        let items = first.items
+        if (first.totalPages > 1) {
+          const last = await fetchThreadPage(selectedId, first.totalPages)
+          if (cancelled) return
+          page = first.totalPages
+          items = last.items
+        }
         setMessages(items)
-        // Mark read + clear badge
-        apiFetch(`/direct-messages/${selected.contact.id}/read`, { method: "PATCH" }).catch(() => {})
+        setOldestLoadedPage(page)
+        newestPageRef.current = page
+        // MR1 — mark the other participant's messages read and clear the badge.
+        apiFetch(`/messages/${selectedId}/read`, { method: "PATCH" }).catch(() => {})
         setConversations((prev) =>
-          prev.map((c) =>
-            c.contact.id === selected.contact.id ? { ...c, unreadCount: 0 } : c
-          )
+          prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)),
         )
-      })
-      .catch(() => setMessages([]))
-      .finally(() => setIsLoadingMsgs(false))
-  }, [selected?.contact.id])
+      } catch {
+        if (!cancelled) setMessages([])
+      } finally {
+        if (!cancelled) setIsLoadingMsgs(false)
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
 
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages.length])
+  }, [])
 
-  // ── Poll for new messages every 8 s when a conversation is open ───────────
+  /**
+   * Follow the newest message. Keyed on the tail rather than on `messages.length`
+   * so prepending an older page doesn't yank the reader back to the bottom.
+   */
+  const newestMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
 
   useEffect(() => {
-    if (!selected) return
-    const id = setInterval(() => {
-      apiFetch<{ items: BackendDM[] } | BackendDM[]>(
-        `/direct-messages/${selected.contact.id}?page=1&limit=50`
-      )
-        .then((r) => {
-          const items = Array.isArray(r) ? r : (r as { items: BackendDM[] }).items ?? []
-          // Only update if count changed to avoid wiping an in-flight optimistic message
-          setMessages((prev) => (items.length !== prev.length ? items : prev))
-        })
-        .catch(() => {})
-    }, 8_000)
+    if (newestMessageId === null) return
+    scrollToBottom()
+  }, [newestMessageId, scrollToBottom])
+
+  /**
+   * Keep the reader's place when an older page lands above what they're reading.
+   * Distance from the *bottom* is the invariant here — prepending doesn't change
+   * the content below the viewport. It is re-applied a few times because images
+   * in the older page settle after layout and would otherwise drift the view;
+   * if a new message arrives meanwhile, this effect re-runs, the cleanup cancels
+   * the re-anchors and following the newest message wins.
+   */
+  useEffect(() => {
+    const distance = restoreScrollRef.current
+    if (distance === null) return
+    restoreScrollRef.current = null
+    const apply = () => {
+      const el = threadRef.current
+      if (el) el.scrollTop = el.scrollHeight - distance
+    }
+    apply()
+    const timers = [120, 500, 1200].map((ms) => window.setTimeout(apply, ms))
+    return () => timers.forEach((t) => window.clearTimeout(t))
+  }, [messages])
+
+  // ── Poll the open thread ──────────────────────────────────────────────────
+
+  const currentUserId = Number(user?.id)
+
+  useEffect(() => {
+    if (selectedId === null || selectedId === PENDING_CONVERSATION_ID) return
+
+    const tick = async () => {
+      try {
+        // B1 — poll the page the newest messages are actually on, and merge
+        // rather than replace: the old version fetched page 1 and overwrote
+        // state with it, so in a >50-message thread a confirmed send vanished on
+        // the next tick and an incoming message never showed up at all.
+        const from = newestPageRef.current
+        const res = await fetchThreadPage(selectedId, from)
+        let items = res.items
+        let page = from
+        // A thread can cross a page boundary between polls, which moves the
+        // newest messages onto a page we weren't watching. Walk forward (a
+        // bounded step at a time — the next tick continues from wherever this
+        // one stopped) instead of losing them.
+        while (page < res.totalPages && page - from < 3) {
+          page += 1
+          const next = await fetchThreadPage(selectedId, page)
+          items = [...items, ...next.items]
+        }
+        newestPageRef.current = page
+        // Optimistic bubbles carry negative ids and aren't on the server yet, so
+        // `mergeThread` keeps them. MR2 depends on this poll for the sent → read
+        // transition, so the server's copy of a row always wins.
+        setMessages((prev) => mergeThread(prev, items))
+
+        // MR1 — a message that arrives while this thread is open is being
+        // read right now, so mark it read too. Without this, NR1's new list
+        // refresh would put an unread badge on the conversation the user is
+        // actively looking at.
+        if (items.some((m) => m.sender.id !== currentUserId && !m.isRead)) {
+          apiFetch(`/messages/${selectedId}/read`, { method: "PATCH" }).catch(() => {})
+          setConversations((prev) =>
+            prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)),
+          )
+        }
+      } catch {
+        // Keep the thread on screen rather than blanking it on a transient error.
+      }
+    }
+
+    const id = setInterval(() => void tick(), THREAD_POLL_MS)
     return () => clearInterval(id)
-  }, [selected?.contact.id])
+  }, [selectedId, currentUserId])
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -175,18 +461,107 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
     return contactName(c.contact).toLowerCase().includes(searchQuery.toLowerCase())
   })
 
+  // ── B1 — reach the rest of the thread ─────────────────────────────────────
+
+  const loadOlderMessages = async () => {
+    if (selectedId === null || selectedId === PENDING_CONVERSATION_ID) return
+    if (oldestLoadedPage <= 1 || isLoadingOlder) return
+    setIsLoadingOlder(true)
+    // Measured before the fetch so the message being read stays put once the
+    // older page is prepended.
+    const el = threadRef.current
+    restoreScrollRef.current = el ? el.scrollHeight - el.scrollTop : null
+    try {
+      const page = oldestLoadedPage - 1
+      const { items } = await fetchThreadPage(selectedId, page)
+      setMessages((prev) => mergeThread(prev, items))
+      setOldestLoadedPage(page)
+    } catch {
+      restoreScrollRef.current = null
+      toast.error("Couldn't load older messages.")
+    } finally {
+      setIsLoadingOlder(false)
+    }
+  }
+
+  // ── MC4 — attachment picking / upload ─────────────────────────────────────
+
+  const uploadAttachment = async (file: File, previewUrl: string) => {
+    // Picking a second image while the first is still uploading must not let the
+    // older response land on top of the newer pick.
+    const token = ++attachmentToken.current
+    setAttachment({ file, previewUrl, status: "uploading" })
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await apiFetch<{ url: string }>("/uploads/message-attachment", {
+        method: "POST",
+        body: formData,
+      })
+      if (token !== attachmentToken.current) return
+      setAttachment({ file, previewUrl, status: "ready", url: res.url })
+    } catch {
+      // Never silently send text-only — the chip switches to a retry affordance
+      // and the send is blocked until it succeeds or the image is removed.
+      if (token !== attachmentToken.current) return
+      setAttachment({ file, previewUrl, status: "error" })
+    }
+  }
+
+  const handlePickFile = (files: FileList | null) => {
+    const file = files?.[0]
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (!file) return
+    const error = validateAttachment(file)
+    if (error) {
+      toast.error(error)
+      return
+    }
+    if (attachment) URL.revokeObjectURL(attachment.previewUrl)
+    uploadAttachment(file, URL.createObjectURL(file))
+  }
+
+  const removeAttachment = () => {
+    if (attachment) URL.revokeObjectURL(attachment.previewUrl)
+    setAttachment(null)
+  }
+
+  const retryAttachment = () => {
+    if (!attachment) return
+    uploadAttachment(attachment.file, attachment.previewUrl)
+  }
+
   // ── Send ──────────────────────────────────────────────────────────────────
 
+  const canSend = (!!newMessage.trim() || !!attachment) && !!selected && !isSending
+
   const handleSend = async () => {
-    if (!newMessage.trim() || !selected || isSending) return
+    if (!selected || isSending) return
     const content = newMessage.trim()
+    if (!content && !attachment) return
+
+    if (attachment?.status === "uploading") {
+      toast.info("Still attaching your image — one moment.")
+      return
+    }
+    if (attachment?.status === "error") {
+      toast.error("Couldn't attach — tap the image to retry.")
+      return
+    }
+
+    const outgoing = attachment
     setNewMessage("")
+    setAttachment(null)
     setIsSending(true)
 
-    const tempId = -(Date.now())
+    const tempId = -Date.now()
     const tempMsg: BackendDM = {
       id: tempId,
-      content,
+      content: content || null,
+      attachmentUrl: outgoing?.url ?? null,
+      attachmentType: outgoing?.file.type ?? null,
+      jobId: null,
+      bookingId: null,
       isRead: false,
       createdAt: new Date().toISOString(),
       sender: {
@@ -198,20 +573,68 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
     }
     setMessages((prev) => [...prev, tempMsg])
 
+    const payload: SendMessagePayload = { recipientId: selected.contact.id }
+    if (content) payload.content = content
+    if (outgoing?.url) payload.attachmentUrl = outgoing.url
+    if (contextApplies && jobId) payload.jobId = Number(jobId)
+    else if (contextApplies && bookingId) payload.bookingId = Number(bookingId)
+
     try {
-      const sent = await apiFetch<BackendDM>(
-        `/direct-messages/${selected.contact.id}`,
-        { method: "POST", body: JSON.stringify({ content }) }
-      )
+      let sent: BackendDM
+      try {
+        sent = await apiFetch<BackendDM>("/messages", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        })
+      } catch (err: unknown) {
+        // MC2's job/booking reference is optional metadata, and participation in
+        // it is enforced server-side with a 403 (api-contract.md §3). A stale or
+        // non-participant reference must not stop the message itself going out,
+        // so it is dropped and the send retried once as a general inquiry.
+        const taggedRejected =
+          err instanceof ApiError && err.status === 403 && (payload.jobId != null || payload.bookingId != null)
+        if (!taggedRejected) throw err
+        delete payload.jobId
+        delete payload.bookingId
+        sent = await apiFetch<BackendDM>("/messages", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        })
+      }
       setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)))
-      // Bubble conversation to top with latest message
+      if (outgoing) URL.revokeObjectURL(outgoing.previewUrl)
+
+      if (isPending) {
+        // First contact: the conversation now exists server-side, so pick up
+        // its real id (and the contact's real name) from the list.
+        const items = await loadConversations()
+        const created = items.find((c) => c.contact.id === selected.contact.id)
+        if (created) {
+          setConversations((prev) => prev.filter((c) => c.id !== PENDING_CONVERSATION_ID))
+          setSelected(created)
+        }
+        return
+      }
+
+      // Bubble the conversation to the top with the latest message.
       setConversations((prev) => {
         const list = prev.map((c) =>
-          c.contact.id === selected.contact.id
-            ? { ...c, lastMessage: content, lastMessageTime: sent.createdAt, lastSenderId: Number(user.id) }
-            : c
+          c.id === selected.id
+            ? {
+                ...c,
+                lastMessageAt: sent.createdAt,
+                lastMessage: {
+                  id: sent.id,
+                  content: sent.content,
+                  attachmentUrl: sent.attachmentUrl,
+                  senderId: Number(user.id),
+                  createdAt: sent.createdAt,
+                  isRead: false,
+                },
+              }
+            : c,
         )
-        const idx = list.findIndex((c) => c.contact.id === selected.contact.id)
+        const idx = list.findIndex((c) => c.id === selected.id)
         if (idx > 0) {
           const [item] = list.splice(idx, 1)
           list.unshift(item)
@@ -221,7 +644,35 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
     } catch (err: unknown) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId))
       setNewMessage(content)
-      toast.error(err instanceof Error ? err.message : "Failed to send message.")
+      if (outgoing) setAttachment(outgoing)
+
+      const status = err instanceof ApiError ? err.status : 0
+      const message = err instanceof Error ? err.message : "Failed to send message."
+      // RL1 — matched on the stable code rather than the status alone
+      // (api-contract.md §3.1). The server's copy is already user-facing; the
+      // fallbacks only guard against a bare body so a rate limit is never
+      // surfaced as a raw 429.
+      const isRateLimited =
+        (err instanceof ApiError && err.code === "MESSAGE_RATE_LIMIT_EXCEEDED") || status === 429
+      if (isRateLimited) {
+        const retryIn = err instanceof ApiError ? err.retryAfterSeconds : undefined
+        toast.error(
+          message ||
+            (retryIn
+              ? `You're sending messages too fast. Try again in about ${retryIn} seconds.`
+              : "You're sending messages too fast. Try again shortly."),
+        )
+      } else {
+        toast.error(message)
+      }
+      // A deep link pointing at a user who doesn't exist (or isn't reachable)
+      // only fails at this point — fall back to the conversation list rather
+      // than leaving a thread addressed to nobody on screen.
+      if (status === 404 && isPending) {
+        setConversations((prev) => prev.filter((c) => c.id !== PENDING_CONVERSATION_ID))
+        setSelected(null)
+        setNewMessage("")
+      }
     } finally {
       setIsSending(false)
     }
@@ -279,11 +730,13 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
               ) : (
                 filtered.map((conv) => {
                   const name = contactName(conv.contact)
-                  const isActive = selected?.contact.id === conv.contact.id
-                  const isLastByMe = conv.lastSenderId === Number(user.id)
+                  const isActive = selected?.id === conv.id
+                  const isLastByMe = conv.lastMessage?.senderId === Number(user.id)
+                  const preview = lastMessagePreview(conv.lastMessage)
+                  const timestamp = conversationTimestamp(conv)
                   return (
                     <button
-                      key={conv.contact.id}
+                      key={conv.id}
                       type="button"
                       onClick={() => setSelected(conv)}
                       className={cn(
@@ -310,19 +763,19 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                           )}>
                             {name}
                           </span>
-                          {conv.lastMessageTime && (
+                          {timestamp && (
                             <span className="flex-shrink-0 text-[11px] text-muted-foreground">
-                              {fmt(conv.lastMessageTime)}
+                              {fmt(timestamp)}
                             </span>
                           )}
                         </div>
-                        {conv.lastMessage && (
+                        {preview && (
                           <p className={cn(
                             "mt-0.5 truncate text-xs",
                             conv.unreadCount > 0 ? "font-medium text-foreground/80" : "text-muted-foreground",
                           )}>
                             {isLastByMe && <span>You: </span>}
-                            {conv.lastMessage}
+                            {preview}
                           </p>
                         )}
                       </div>
@@ -359,13 +812,30 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                       </Avatar>
                       <div className="min-w-0 flex-1">
                         <h3 className="text-sm font-semibold text-foreground">{name}</h3>
+                        {/* MC2 — job/booking context chip; absent for a
+                            conversation opened generically (design-spec.md §6.3). */}
+                        {contextApplies && context && (
+                          <Badge
+                            variant="outline"
+                            className="mt-1 max-w-full border-primary/20 bg-primary/5 text-[10px] font-medium text-primary"
+                            asChild={!!context.href}
+                          >
+                            {context.href ? (
+                              <Link href={context.href} className="truncate">
+                                Regarding: {context.label}
+                              </Link>
+                            ) : (
+                              <span className="truncate">Regarding: {context.label}</span>
+                            )}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   )
                 })()}
 
                 {/* Message thread */}
-                <div className="flex-1 overflow-y-auto bg-muted/20 px-4 py-4">
+                <div ref={threadRef} className="flex-1 overflow-y-auto bg-muted/20 px-4 py-4">
                   {isLoadingMsgs ? (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -377,6 +847,24 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                     </div>
                   ) : (
                     <div className="mx-auto flex max-w-2xl flex-col gap-1">
+                      {/* B1 — the thread opens on its newest page, so older
+                          history is reached from here instead of being
+                          unreachable. Same "load more" idiom as the
+                          notifications feed (NR4). */}
+                      {oldestLoadedPage > 1 && (
+                        <div className="mb-3 flex justify-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-transparent"
+                            onClick={loadOlderMessages}
+                            disabled={isLoadingOlder}
+                          >
+                            {isLoadingOlder && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Load older messages
+                          </Button>
+                        </div>
+                      )}
                       {messages.map((msg, idx) => {
                         const isOwn = msg.sender.id === Number(user.id)
                         const prev = messages[idx - 1]
@@ -385,6 +873,10 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                         const isLast = !next || next.sender.id !== msg.sender.id
                         const showAvatar = !isOwn && isLast
                         const senderName = `${msg.sender.firstname} ${msg.sender.lastname}`.trim()
+                        // MR2 — sending -> sent -> read, own messages only.
+                        // A negative id is an optimistic bubble the server
+                        // hasn't confirmed yet.
+                        const isSendingBubble = msg.id < 0
 
                         return (
                           <div
@@ -430,15 +922,42 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                                     ),
                               )}
                             >
-                              <p className="break-words text-[14px] leading-relaxed">{msg.content}</p>
-                              <p
+                              {/* MC4 — an image message, with or without a caption. */}
+                              {msg.attachmentUrl && (
+                                <MessageImage
+                                  url={msg.attachmentUrl}
+                                  className="mb-1 max-w-[240px]"
+                                  // Re-scroll once it has height, so the newest
+                                  // image bubble isn't left half below the fold.
+                                  // Only the newest one — otherwise an older
+                                  // image finishing loading would yank the view
+                                  // away from someone reading back through the
+                                  // thread.
+                                  onLoad={idx === messages.length - 1 ? scrollToBottom : undefined}
+                                />
+                              )}
+                              {msg.content && (
+                                <p className="break-words text-[14px] leading-relaxed">{msg.content}</p>
+                              )}
+                              <div
                                 className={cn(
-                                  "mt-1 text-right text-[10px]",
+                                  "mt-1 flex items-center justify-end gap-1 text-[10px]",
                                   isOwn ? "text-white/60" : "text-muted-foreground",
                                 )}
                               >
-                                {fmt(msg.createdAt)}
-                              </p>
+                                <span>{fmt(msg.createdAt)}</span>
+                                {isOwn && (
+                                  <>
+                                    {isSendingBubble && <Clock className="h-3 w-3" aria-label="Sending" />}
+                                    {!isSendingBubble && !msg.isRead && (
+                                      <Check className="h-3 w-3" aria-label="Sent" />
+                                    )}
+                                    {!isSendingBubble && msg.isRead && (
+                                      <CheckCheck className="h-3 w-3 text-white" aria-label="Read" />
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )
@@ -448,34 +967,101 @@ export function MessagesPage({ openConversationId }: MessagesPageProps) {
                   )}
                 </div>
 
-                {/* Input */}
+                {/* Composer */}
                 <div className="border-t border-border bg-background px-4 py-3">
-                  <div className="mx-auto flex max-w-2xl items-end gap-2">
-                    <Input
-                      placeholder="Message"
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault()
-                          handleSend()
-                        }
-                      }}
-                      className="flex-1 rounded-full border-border bg-muted/40 text-sm focus-visible:ring-1 focus-visible:ring-ring"
-                    />
-                    <Button
-                      size="icon"
-                      className={cn(
-                        "h-9 w-9 flex-shrink-0 rounded-full transition-colors",
-                        newMessage.trim()
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                      onClick={handleSend}
-                      disabled={!newMessage.trim() || isSending}
-                    >
-                      {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    </Button>
+                  <div className="mx-auto max-w-2xl space-y-2">
+                    {/* MC4 — pending attachment chip (design-spec.md §6.1) */}
+                    {attachment && (
+                      <div className="flex items-center gap-2">
+                        <div className="relative h-14 w-14 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={attachment.status === "error" ? retryAttachment : undefined}
+                            className={cn(
+                              "h-14 w-14 overflow-hidden rounded-lg border border-border bg-muted",
+                              attachment.status === "error" && "cursor-pointer border-destructive/40",
+                            )}
+                            aria-label={attachment.status === "error" ? "Retry attaching image" : "Attached image"}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={attachment.previewUrl}
+                              alt="Attachment preview"
+                              className="h-full w-full object-cover"
+                            />
+                          </button>
+                          {attachment.status === "uploading" && (
+                            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-foreground/50">
+                              <Loader2 className="h-4 w-4 animate-spin text-background" />
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={removeAttachment}
+                            aria-label="Remove attachment"
+                            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        {attachment.status === "error" && (
+                          <button
+                            type="button"
+                            onClick={retryAttachment}
+                            className="flex items-center gap-1.5 text-xs font-medium text-destructive"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Couldn&apos;t attach — tap to retry
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-end gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept={ATTACHMENT_ACCEPTED_TYPES.join(",")}
+                        className="hidden"
+                        onChange={(e) => handlePickFile(e.target.files)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 flex-shrink-0 rounded-full text-muted-foreground"
+                        onClick={() => fileInputRef.current?.click()}
+                        aria-label="Attach an image"
+                      >
+                        <Paperclip className="h-4 w-4" />
+                      </Button>
+                      <Input
+                        placeholder="Message"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault()
+                            handleSend()
+                          }
+                        }}
+                        className="flex-1 rounded-full border-border bg-muted/40 text-sm focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                      <Button
+                        size="icon"
+                        className={cn(
+                          "h-9 w-9 flex-shrink-0 rounded-full transition-colors",
+                          canSend
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                        onClick={handleSend}
+                        disabled={!canSend}
+                        aria-label="Send message"
+                      >
+                        {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">JPEG or PNG · max 5MB · one image per message</p>
                   </div>
                 </div>
               </>

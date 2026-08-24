@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
-import { Bell, Mail, UserCircle, Settings, LogOut, Menu, Sun, Moon } from "lucide-react"
+import { UserCircle, Settings, LogOut, Menu, Sun, Moon } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
@@ -16,6 +16,8 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
 import { useState, useEffect } from "react"
+import { MessagesPopover } from "./messages-popover"
+import { NotificationsPopover } from "./notifications-popover"
 
 interface DashboardHeaderProps {
   onMenuToggle?: () => void
@@ -123,21 +125,11 @@ export function DashboardHeader({ onMenuToggle }: Readonly<DashboardHeaderProps>
           )}
         </Button>
 
-        {/* Messages */}
-        <Button variant="ghost" size="icon" className="relative h-8 w-8" asChild>
-          <Link href={`${roleBase}/messages`} aria-label="Messages">
-            <Mail className="h-[1.1rem] w-[1.1rem] text-muted-foreground" />
-            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary ring-1 ring-background" />
-          </Link>
-        </Button>
+        {/* Messages — HB1: real unread badge + preview dropdown */}
+        <MessagesPopover roleBase={roleBase} role={user.role} currentUserId={user.id} />
 
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative h-8 w-8" asChild>
-          <Link href={`${roleBase}/notifications`} aria-label="Notifications">
-            <Bell className="h-[1.1rem] w-[1.1rem] text-muted-foreground" />
-            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary ring-1 ring-background" />
-          </Link>
-        </Button>
+        {/* Notifications — HB1: real unread badge + preview dropdown */}
+        <NotificationsPopover roleBase={roleBase} />
 
         {/* User menu */}
         <DropdownMenu>

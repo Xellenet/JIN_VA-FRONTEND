@@ -8,7 +8,15 @@ import {
   ArrowDownRight,
   XCircle,
   AlertCircle,
+  Calendar,
+  CreditCard,
+  Star,
+  Briefcase,
+  MessageSquare,
+  Scale,
+  Settings,
 } from "lucide-react"
+import type { Notification } from "@/lib/types"
 
 /**
  * Shared status-pill conventions for the Availability/Booking/Job Lifecycle
@@ -82,3 +90,48 @@ export function getPaymentStatusConfig(status: string): StatusBadgeConfig & { ic
  * both on the backend (see `retryPendingTransfer`'s `In([...])` query).
  */
 export const RETRYABLE_PAYOUT_STATUSES = ["PENDING_TRANSFER", "TRANSFER_FAILED"] as const
+
+/**
+ * Notification type-icon chips — Messaging & Notifications (2026-08-21).
+ *
+ * Extracted out of `notifications-page.tsx`'s local `typeConfig` so the same
+ * map drives every surface that renders one of these chips (the Notifications
+ * feed and the header's notification dropdown), matching the
+ * `bookingStatusConfig`/`paymentStatusConfig` pattern above. See
+ * docs/team/messaging-notifications/design-spec.md section 2 and
+ * requirements.md's UI/UX notes.
+ *
+ * `review`, `assignment` and `message` previously used literal light-mode-only
+ * palette colors (`bg-yellow-100 text-yellow-600`, `bg-blue-100
+ * text-blue-600`, `bg-violet-100 text-violet-600`) with no `dark:` variants,
+ * which rendered muddy on the dark theme at the 40px chip scale. They now use
+ * the semantic tokens the other three categories in this map already used, so
+ * the app's real `.dark` theme handles them. This is a deliberate reduction
+ * from six arbitrary hues to two meaningful tones — `bg-primary/10
+ * text-primary` for money (unchanged), `bg-muted` for everything routine —
+ * since the glyph and the text label already carry the category.
+ */
+export interface NotificationTypeConfig {
+  icon: LucideIcon
+  color: string
+  bg: string
+  label: string
+}
+
+export const notificationTypeConfig: Record<Notification["type"], NotificationTypeConfig> = {
+  booking:    { icon: Calendar,      color: "text-foreground",       bg: "bg-muted",      label: "Booking" },
+  payment:    { icon: CreditCard,    color: "text-primary",          bg: "bg-primary/10", label: "Payment" },
+  // `DISPUTE_FILED`/`DISPUTE_RESOLVED`/`DISPUTE_CLOSED` are real types now
+  // (api-contract.md §5), so a dispute outcome no longer lands in the generic
+  // "System" bucket. Same emphasis tone as money — it matters as much to the
+  // affected user (design-spec.md §2/§6.5).
+  dispute:    { icon: Scale,         color: "text-primary",          bg: "bg-primary/10", label: "Dispute" },
+  review:     { icon: Star,          color: "text-foreground",       bg: "bg-muted",      label: "Review" },
+  assignment: { icon: Briefcase,     color: "text-foreground",       bg: "bg-muted",      label: "Assignment" },
+  message:    { icon: MessageSquare, color: "text-foreground",       bg: "bg-muted",      label: "Message" },
+  system:     { icon: Settings,      color: "text-muted-foreground", bg: "bg-muted",      label: "System" },
+}
+
+export function getNotificationTypeConfig(type: string): NotificationTypeConfig {
+  return notificationTypeConfig[type as Notification["type"]] ?? notificationTypeConfig.system
+}

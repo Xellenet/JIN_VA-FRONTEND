@@ -315,7 +315,9 @@ export default function JobDetailPage() {
                     </div>
                     <div className="mt-4 flex gap-2">
                       <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
-                        <Link href={`/dashboard/user/messages?artisan=${job.acceptedArtisan.id}`}>
+                        {/* MC2 — `&job=` rides along so the message carries a
+                            reference to this job (feeds AD1's evidence view). */}
+                        <Link href={`/dashboard/user/messages?artisan=${job.acceptedArtisan.id}&job=${job.id}`}>
                           <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
                           Chat
                         </Link>

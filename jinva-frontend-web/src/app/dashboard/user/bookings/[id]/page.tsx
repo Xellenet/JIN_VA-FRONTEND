@@ -261,7 +261,9 @@ export default function BookingDetailPage() {
                 {booking.artisanProfile?.user && (
                   <div className="mt-4">
                     <Button variant="outline" className="w-full bg-transparent" size="sm" asChild>
-                      <Link href={`/dashboard/user/messages?artisan=${booking.artisanProfile.user.id}`}>
+                      {/* MC2 — `&booking=` rides along so the message carries a
+                          reference to this booking (feeds AD1's evidence view). */}
+                      <Link href={`/dashboard/user/messages?artisan=${booking.artisanProfile.user.id}&booking=${booking.id}`}>
                         <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
                         Message Artisan
                       </Link>

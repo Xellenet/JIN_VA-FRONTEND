@@ -78,7 +78,9 @@ export default function UserJobsPage() {
   const [isCancelling, setIsCancelling] = useState(false)
 
   useEffect(() => {
-    apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs/mine?limit=100")
+    // `/jobs` caps `limit` at 50 and 400s above it — asking for 100 made this
+    // list fail outright and render as "no jobs yet".
+    apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs/mine?page=1&limit=50")
       .then((data) => {
         const items = Array.isArray(data) ? data : (data.items ?? [])
         setJobs(items)

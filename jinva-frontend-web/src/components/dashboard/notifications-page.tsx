@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,92 +11,112 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Calendar,
-  CreditCard,
-  Star,
-  Briefcase,
-  MessageSquare,
-  Settings,
-  Bell,
-  Check,
-  CheckCheck,
-  Loader2,
-} from "lucide-react"
+import { Bell, Check, CheckCheck, Loader2 } from "lucide-react"
 import type { Notification } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
+import { getNotificationTypeConfig } from "@/lib/status-badges"
+import {
+  mapNotification,
+  readNotificationList,
+  type BackendNotification,
+} from "@/lib/notifications"
 
-interface BackendNotification {
-  id: string
-  type: string
-  title: string
-  body: string
-  isRead: boolean
-  payload?: unknown
-  createdAt: string
+/**
+ * NR4 — real pagination instead of a hardcoded `limit=50` with nothing beyond
+ * it reachable. Same "Load more" + `meta.pagination` idiom the reviews lists
+ * already use (see `artisan/reviews/page.tsx`).
+ */
+const PAGE_SIZE = 20
+
+/**
+ * NR2 — the feed refreshes on a cadence and on window focus, so a notification
+ * that arrives while the page is open shows up without a manual reload. Matched
+ * to the header bell's own poll (`header-badge.ts`'s `POPOVER_POLL_MS`) so the
+ * badge above and the list beneath it can't contradict each other.
+ */
+const FEED_POLL_MS = 30_000
+
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
 }
 
-function mapNotificationType(type: string): Notification["type"] {
-  const t = type.toUpperCase()
-  if (t.includes("PAYMENT") || t.includes("REFUND")) return "payment"
-  if (t.includes("REVIEW")) return "review"
-  if (t.includes("MESSAGE")) return "message"
-  if (t.includes("BOOKING")) return "booking"
-  if (t.includes("JOB") || t.includes("ASSIGN")) return "assignment"
-  return "system"
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  if (diff < 60_000) return "just now"
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
-  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-}
-
-function mapNotification(n: BackendNotification): Notification {
-  return {
-    id: n.id,
-    title: n.title,
-    message: n.body,
-    type: mapNotificationType(n.type),
-    isRead: n.isRead,
-    time: formatTime(n.createdAt),
-  }
-}
-
-const typeConfig: Record<
-  Notification["type"],
-  { icon: React.ElementType; color: string; bg: string; label: string }
-> = {
-  booking:    { icon: Calendar,       color: "text-foreground",       bg: "bg-muted",       label: "Booking" },
-  payment:    { icon: CreditCard,     color: "text-primary",          bg: "bg-primary/10",  label: "Payment" },
-  review:     { icon: Star,           color: "text-yellow-600",       bg: "bg-yellow-100",  label: "Review" },
-  assignment: { icon: Briefcase,      color: "text-blue-600",         bg: "bg-blue-100",    label: "Assignment" },
-  message:    { icon: MessageSquare,  color: "text-violet-600",       bg: "bg-violet-100",  label: "Message" },
-  system:     { icon: Settings,       color: "text-muted-foreground", bg: "bg-muted",       label: "System" },
+function fetchPage(page: number): Promise<{ items: Notification[]; totalPages: number }> {
+  return apiFetchWithMeta<BackendNotification[] | { items: BackendNotification[] }>(
+    `/notifications?page=${page}&limit=${PAGE_SIZE}`,
+  ).then(({ data, meta }) => ({
+    items: readNotificationList(data).map(mapNotification),
+    totalPages: extractTotalPages(meta),
+  }))
 }
 
 export function NotificationsPage() {
   const { user } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
   const [filter, setFilter] = useState<"all" | "unread">("all")
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
 
+  /**
+   * Ids read in this session. A refresh that was already in flight when the
+   * user marked something read would otherwise flip it back to unread.
+   */
+  const locallyRead = useRef<Set<string>>(new Set())
+  /** How many pages are currently on screen, so a refresh re-fetches all of them. */
+  const loadedPages = useRef(1)
+
+  const applyLocalReads = useCallback(
+    (items: Notification[]) =>
+      items.map((n) => (locallyRead.current.has(n.id) ? { ...n, isRead: true } : n)),
+    [],
+  )
+
+  // NR2 — refresh every loaded page so "load more" state survives a poll.
+  const refresh = useCallback(async () => {
+    try {
+      const pages = await Promise.all(
+        Array.from({ length: loadedPages.current }, (_, i) => fetchPage(i + 1)),
+      )
+      setNotifications(applyLocalReads(pages.flatMap((p) => p.items)))
+      setTotalPages(pages[pages.length - 1]?.totalPages ?? 1)
+    } catch {
+      // Keep what's on screen rather than blanking the feed on a transient error.
+    }
+  }, [applyLocalReads])
+
   useEffect(() => {
-    apiFetch<BackendNotification[] | { items: BackendNotification[] }>("/notifications?page=1&limit=50")
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: BackendNotification[] }).items ?? []
-        setNotifications(items.map(mapNotification))
-      })
-      .catch(() => {})
-      .finally(() => setIsLoading(false))
-  }, [])
+    refresh().finally(() => setIsLoading(false))
+    const id = setInterval(refresh, FEED_POLL_MS)
+    const onFocus = () => refresh()
+    window.addEventListener("focus", onFocus)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [refresh])
+
+  const loadMore = async () => {
+    setIsLoadingMore(true)
+    try {
+      const next = page + 1
+      const { items, totalPages: total } = await fetchPage(next)
+      setNotifications((prev) => [...prev, ...applyLocalReads(items)])
+      setPage(next)
+      setTotalPages(total)
+      loadedPages.current = next
+    } catch {
+      // Nothing appended; the button stays available for another try.
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
 
   if (!user) return null
 
@@ -104,15 +124,17 @@ export function NotificationsPage() {
   const displayed = filter === "unread" ? notifications.filter((n) => !n.isRead) : notifications
 
   const markAllRead = async () => {
+    notifications.forEach((n) => locallyRead.current.add(n.id))
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
     try {
       await apiFetch("/notifications/read-all", { method: "PATCH" })
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
     } catch {
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+      // optimistic update already applied
     }
   }
 
   const markRead = async (id: string) => {
+    locallyRead.current.add(id)
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
     try {
       await apiFetch(`/notifications/${id}/read`, { method: "PATCH" })
@@ -188,15 +210,27 @@ export function NotificationsPage() {
             ) : (
               <div className="divide-y divide-border">
                 {displayed.map((notification) => {
-                  const config = typeConfig[notification.type]
+                  const config = getNotificationTypeConfig(notification.type)
                   const Icon = config.icon
                   return (
-                    <button
+                    // A row is clickable *and* contains its own "mark read"
+                    // button. A <button> inside a <button> is invalid HTML and
+                    // React reports it as a hydration error, so the row is a
+                    // focusable role="button" element instead — same keyboard
+                    // affordance, valid nesting.
+                    <div
                       key={notification.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleNotificationClick(notification)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          handleNotificationClick(notification)
+                        }
+                      }}
                       className={cn(
-                        "flex w-full items-start gap-4 px-6 py-4 text-left transition-colors hover:bg-muted/50",
+                        "flex w-full cursor-pointer items-start gap-4 px-6 py-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         !notification.isRead && "bg-accent/50",
                       )}
                     >
@@ -222,11 +256,12 @@ export function NotificationsPage() {
                           </Badge>
                         </div>
                       </div>
-                      <div className="flex flex-shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-shrink-0 items-center gap-1">
                         {!notification.isRead && (
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label="Mark read"
                             className="h-8 w-8 text-muted-foreground hover:text-foreground"
                             onClick={(e) => {
                               e.stopPropagation()
@@ -237,19 +272,29 @@ export function NotificationsPage() {
                           </Button>
                         )}
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* NR4 — anything past the first page is reachable rather than lost. */}
+        {!isLoading && page < totalPages && (
+          <div className="flex justify-center">
+            <Button variant="outline" className="bg-transparent" onClick={loadMore} disabled={isLoadingMore}>
+              {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Load more notifications
+            </Button>
+          </div>
+        )}
       </div>
 
       <Dialog open={!!selectedNotification} onOpenChange={(open) => !open && setSelectedNotification(null)}>
         <DialogContent className="sm:max-w-md">
           {selectedNotification && (() => {
-            const config = typeConfig[selectedNotification.type]
+            const config = getNotificationTypeConfig(selectedNotification.type)
             const Icon = config.icon
             return (
               <>

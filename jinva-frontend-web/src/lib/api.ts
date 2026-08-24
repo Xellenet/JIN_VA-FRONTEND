@@ -44,6 +44,41 @@ interface ApiEnvelope<T> {
   meta?: Record<string, unknown>
 }
 
+/**
+ * A failed request, carrying the HTTP status alongside the user-facing message.
+ *
+ * `apiFetch` used to throw a bare `Error`, which meant a caller could only ever
+ * show the message — there was no way to branch on *why* a call failed. Two
+ * surfaces in messaging & notifications need that:
+ *   - the admin dispute-conversation viewer, where a 403 means "access closed
+ *     with this dispute" (api-contract.md §4) rather than a generic failure;
+ *   - a deep-link first send to a recipient who doesn't exist (404), which must
+ *     drop back to the conversation list instead of stranding the user in a
+ *     thread addressed to nobody.
+ *
+ * `code`/`retryAfterSeconds` mirror the machine-readable fields
+ * api-contract.md §3.1 documents on a 429. They are optional because the
+ * server's global exception filter currently strips everything except
+ * `message` from an HttpException body (qa-report.md B1, backend-owned) — so
+ * callers must treat them as a bonus and never depend on them.
+ *
+ * Extends `Error`, so every existing `err instanceof Error ? err.message`
+ * call site keeps working unchanged.
+ */
+export class ApiError extends Error {
+  readonly status: number
+  readonly code?: string
+  readonly retryAfterSeconds?: number
+
+  constructor(message: string, status: number, code?: string, retryAfterSeconds?: number) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.code = code
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
 async function apiFetchEnvelope<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<ApiEnvelope<T>> {
   const { skipAuth, ...init } = options
   const token = skipAuth ? null : getAccessToken()
@@ -83,13 +118,28 @@ async function apiFetchEnvelope<T = unknown>(path: string, options: ApiFetchOpti
           window.location.href = "/login"
         }
       }
-      throw new Error("Session expired. Please log in again.")
+      throw new ApiError("Session expired. Please log in again.", 401)
     }
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: "Request failed" }))
-    throw new Error(err.message ?? `Request failed with status ${res.status}`)
+    const err: {
+      message?: string | string[]
+      error?: string
+      retryAfterSeconds?: number
+      meta?: { error?: string; retryAfterSeconds?: number }
+    } = await res.json().catch(() => ({ message: "Request failed" }))
+    // A ValidationPipe rejection returns `message` as an array of strings.
+    const message = Array.isArray(err.message) ? err.message.join(" ") : err.message
+    // api-contract.md §3.1: the error code and retry hint live in `meta`
+    // (`meta.error`, `meta.retryAfterSeconds`) — the top-level reading was an
+    // earlier, corrected version of that contract, kept only as a fallback.
+    throw new ApiError(
+      message ?? `Request failed with status ${res.status}`,
+      res.status,
+      err.meta?.error ?? err.error,
+      err.meta?.retryAfterSeconds ?? err.retryAfterSeconds,
+    )
   }
 
   if (res.status === 204) return {} as ApiEnvelope<T>

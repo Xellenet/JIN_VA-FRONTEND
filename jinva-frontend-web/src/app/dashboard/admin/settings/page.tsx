@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,13 +28,122 @@ import {
   Search,
   Users,
   Wrench,
+  Loader2,
 } from "lucide-react"
 import { mockProducts } from "@/lib/data/mock-data"
+import { apiFetch } from "@/lib/api"
+import { applyPushPreference } from "@/lib/push-notifications"
+
+/**
+ * PR3 — admin notification preferences (design-spec.md section 5).
+ *
+ * The five event rows below replace eight hardcoded, uncontrolled rows whose
+ * copy described an e-commerce store ("New Order Alerts", "Low Stock
+ * Warnings") on a services marketplace with no orders and no inventory, behind
+ * a Save button that had no onClick at all.
+ *
+ * `GET`/`PATCH /notifications/preferences` now return and accept the
+ * admin-shaped body (api-contract.md §6): the five event keys plus the three
+ * channel flags, all five defaulting to `true` server-side. Every one of them
+ * is hydrated from the GET response and sent on save — nothing on this tab is
+ * a local default, so the screen always shows the state the server holds.
+ *
+ * Writes are role-scoped in both directions server-side (an admin sending a
+ * customer key has it ignored), so the whole id-stripped object is safe to
+ * PATCH, matching what the Customer and Artisan tabs already do.
+ */
+interface AdminNotifPrefs {
+  disputeFiled: boolean
+  paymentTransferFailed: boolean
+  verificationSubmitted: boolean
+  reviewFlagged: boolean
+  artisanRegistered: boolean
+  emailEnabled: boolean
+  smsEnabled: boolean
+  pushEnabled: boolean
+}
+
+/**
+ * Pre-hydration placeholder only — the Notifications tab renders a spinner
+ * until the GET lands, so these values are never shown as if they were real
+ * state. They mirror the server's own defaults (api-contract.md §6: all five
+ * event toggles default to `true`) so a fetch failure can't misreport a toggle
+ * as off when the backend has it on.
+ */
+const ADMIN_NOTIF_FALLBACK: AdminNotifPrefs = {
+  disputeFiled: true,
+  paymentTransferFailed: true,
+  verificationSubmitted: true,
+  reviewFlagged: true,
+  artisanRegistered: true,
+  emailEnabled: true,
+  smsEnabled: false,
+  pushEnabled: true,
+}
+
+const ADMIN_EVENT_ROWS: { key: keyof AdminNotifPrefs; label: string; desc: string }[] = [
+  { key: "disputeFiled", label: "Dispute Filed", desc: "Get notified when a customer or artisan opens a new dispute that needs review" },
+  { key: "paymentTransferFailed", label: "Payment Transfer Failed", desc: "Get notified when an artisan payout fails and needs manual attention" },
+  { key: "verificationSubmitted", label: "Artisan Verification Submitted", desc: "Get notified when a new artisan submits documents for verification" },
+  { key: "reviewFlagged", label: "Review Flagged for Moderation", desc: "Get notified when a review is flagged and enters the moderation queue" },
+  { key: "artisanRegistered", label: "New Artisan Registered", desc: "Get notified when a new artisan creates an account on the platform" },
+]
 
 export default function AdminSettingsPage() {
   const [products, setProducts] = useState(mockProducts)
   const [productSearch, setProductSearch] = useState("")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+
+  // ── Notification preferences (PR3) ──────────────────────────────────────
+  const [notifPrefs, setNotifPrefs] = useState<AdminNotifPrefs>(ADMIN_NOTIF_FALLBACK)
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState(true)
+  const [isSavingNotifs, setIsSavingNotifs] = useState(false)
+
+  useEffect(() => {
+    // Hydrate every toggle from the server, event keys included — a local
+    // default shown as live state is how "artisanRegistered" ended up
+    // displaying as off while the backend had it on.
+    apiFetch<Partial<AdminNotifPrefs>>("/notifications/preferences")
+      .then((r) =>
+        setNotifPrefs((p) => ({
+          disputeFiled: r?.disputeFiled ?? p.disputeFiled,
+          paymentTransferFailed: r?.paymentTransferFailed ?? p.paymentTransferFailed,
+          verificationSubmitted: r?.verificationSubmitted ?? p.verificationSubmitted,
+          reviewFlagged: r?.reviewFlagged ?? p.reviewFlagged,
+          artisanRegistered: r?.artisanRegistered ?? p.artisanRegistered,
+          emailEnabled: r?.emailEnabled ?? p.emailEnabled,
+          smsEnabled: r?.smsEnabled ?? p.smsEnabled,
+          pushEnabled: r?.pushEnabled ?? p.pushEnabled,
+        })),
+      )
+      .catch(() => toast.error("Couldn't load notification preferences."))
+      .finally(() => setIsLoadingNotifs(false))
+  }, [])
+
+  const toggleNotif = (key: keyof AdminNotifPrefs, val: boolean) => {
+    setNotifPrefs((p) => ({ ...p, [key]: val }))
+    // PN1: the push channel toggle is where browser permission is requested and
+    // this device's FCM token is registered/unregistered.
+    if (key === "pushEnabled") applyPushPreference(val)
+  }
+
+  const handleSaveNotifications = async () => {
+    setIsSavingNotifs(true)
+    try {
+      // All eight fields — the five admin event toggles and the three channels.
+      // `stripPreferenceMetadata` is not needed here because this component's
+      // state never holds the preferences row's own `id`.
+      await apiFetch("/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(notifPrefs),
+      })
+      toast.success("Notification preferences saved.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save notification preferences.")
+    } finally {
+      setIsSavingNotifs(false)
+    }
+  }
 
   const filteredProducts = products.filter(
     (p) =>
@@ -262,48 +372,85 @@ export default function AdminSettingsPage() {
             </div>
           </TabsContent>
 
-          {/* Notifications */}
+          {/* Notifications (PR3, design-spec.md section 5) */}
           <TabsContent value="notifications" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Bell className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">System Notification Settings</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Control which notifications are sent system-wide
-                    </p>
-                  </div>
-                </div>
+            {isLoadingNotifs ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-              <CardContent className="p-6 space-y-4">
-                {[
-                  { label: "New Order Alerts", desc: "Notify admins when a new order is placed", on: true },
-                  { label: "Cancellation Alerts", desc: "Notify when an order is cancelled", on: true },
-                  { label: "Payment Received", desc: "Notify when a payment is successfully processed", on: true },
-                  { label: "New User Registration", desc: "Notify when a new user or artisan registers", on: false },
-                  { label: "Low Stock Warnings", desc: "Alert when product stock drops below threshold", on: true },
-                  { label: "Artisan Rating Alerts", desc: "Notify when a artisan receives a low rating", on: true },
-                  { label: "Daily Summary Email", desc: "Send a daily digest of platform activity", on: false },
-                  { label: "Weekly Revenue Report", desc: "Send weekly revenue summaries via email", on: true },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+            ) : (
+              <>
+                <Card>
+                  <div className="border-b p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg bg-muted p-2">
+                        <Bell className="h-5 w-5 text-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Notification Preferences</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Choose which platform events you want to be alerted about
+                        </p>
+                      </div>
                     </div>
-                    <Switch defaultChecked={item.on} />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Notifications
-              </Button>
-            </div>
+                  <CardContent className="p-6 space-y-4">
+                    {ADMIN_EVENT_ROWS.map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key]}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <div className="border-b p-6">
+                    <h3 className="font-semibold">Notification Channels</h3>
+                    <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
+                  </div>
+                  <CardContent className="p-6 space-y-4">
+                    {/*
+                      PR2: the SMS row is deliberately absent, not disabled — no SMS delivery
+                      capability exists anywhere on the platform. Same treatment as the Customer
+                      and Artisan tabs.
+                    */}
+                    {([
+                      { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
+                      { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
+                    ] as { key: keyof AdminNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key]}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end">
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={handleSaveNotifications}
+                    disabled={isSavingNotifs}
+                  >
+                    {isSavingNotifs && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Notifications
+                  </Button>
+                </div>
+              </>
+            )}
           </TabsContent>
 
           {/* Security */}

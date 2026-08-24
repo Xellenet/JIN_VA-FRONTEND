@@ -36,6 +36,8 @@ import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dash
 import { AttachmentGallery, type JobAttachment } from "@/components/dashboard/attachment-gallery"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { getPaymentStatusConfig, RETRYABLE_PAYOUT_STATUSES } from "@/lib/status-badges"
+import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
+import { DisputeEntryPoint } from "@/components/disputes/dispute-entry-point"
 
 // 3.2: no GET /payments/for-job/:jobId exists — match this job's own payout
 // row out of the artisan's own GET /payments/my-earnings list, the same
@@ -372,6 +374,24 @@ export default function ArtisanJobDetailPage() {
                         Contact Client
                       </Link>
                     </Button>
+                  )}
+                  {/* DP1: the backend already allows either party to file, so
+                      this must not be customer-only. Disputes are
+                      booking-scoped, so it needs the job's linked booking. */}
+                  {isMyJob && (
+                    <DisputeEntryPoint
+                      className="w-full sm:w-auto sm:min-w-[220px]"
+                      bookingId={job.bookingId}
+                      isEligible={(DISPUTABLE_BOOKING_STATUSES as readonly string[]).includes(job.status)}
+                      ineligibleReason="You can report a problem once the job is completed or cancelled."
+                      contextTitle={job.title}
+                      counterpartyName={clientName}
+                      counterpartyRole="Client"
+                      counterpartyAvatar={job.customer?.profilePicture}
+                      amount={payment?.artisanAmount}
+                      paymentStatus={payment?.status}
+                      disputeHrefBase="/dashboard/artisan/disputes"
+                    />
                   )}
                 </div>
               </CardContent>

@@ -33,6 +33,8 @@ import { apiFetch } from "@/lib/api"
 import { naviiAvatar, formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import { getBookingStatusConfig } from "@/lib/status-badges"
+import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
+import { DisputeEntryPoint } from "@/components/disputes/dispute-entry-point"
 
 interface BackendBooking {
   id: number
@@ -295,6 +297,20 @@ export default function BookingDetailPage() {
                     Mark Artisan as No-show
                   </Button>
                 )}
+                {/* DP1: last in the constructive group — a report is a real
+                    option, not the first thing on offer. */}
+                <DisputeEntryPoint
+                  bookingId={booking.id}
+                  isEligible={(DISPUTABLE_BOOKING_STATUSES as readonly string[]).includes(booking.status)}
+                  ineligibleReason="You can report a problem once the booking is completed or cancelled."
+                  contextTitle={booking.service?.name ?? `Booking #${booking.id}`}
+                  counterpartyName={artisanName}
+                  counterpartyRole="Artisan"
+                  counterpartyAvatar={booking.artisanProfile?.user?.profilePicture}
+                  contextDate={booking.scheduledDate}
+                  amount={booking.agreedPrice}
+                  disputeHrefBase="/dashboard/user/disputes"
+                />
                 {canCancel && (
                   <Button
                     variant="destructive"

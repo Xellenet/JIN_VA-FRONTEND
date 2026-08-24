@@ -36,3 +36,26 @@ export const DISPUTE_REASON_MAX = 2000
 
 /** Booking statuses the backend accepts a dispute on (`DisputesService.raise`). */
 export const DISPUTABLE_BOOKING_STATUSES = ["COMPLETED", "CANCELLED"] as const
+
+/** The subset of `GET /disputes/my` a job/booking page needs. */
+export interface MyDisputeSummary {
+  id: number
+  status: string
+  booking?: { id: number }
+}
+
+/**
+ * Whether this user has already filed on a given booking. The backend enforces
+ * one dispute per booking *per raiser* and rejects a second attempt with a
+ * message rather than an id, so both the entry point (before offering the
+ * action) and the dialog (recovering from that rejection) have to resolve it
+ * the same way — from the user's own dispute list.
+ */
+export async function findMyDisputeForBooking(
+  fetcher: (path: string) => Promise<unknown>,
+  bookingId: number,
+): Promise<MyDisputeSummary | undefined> {
+  const mine = (await fetcher("/disputes/my")) as MyDisputeSummary[] | undefined
+  if (!Array.isArray(mine)) return undefined
+  return mine.find((d) => Number(d.booking?.id) === Number(bookingId))
+}

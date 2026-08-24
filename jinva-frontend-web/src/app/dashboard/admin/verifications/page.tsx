@@ -285,12 +285,17 @@ export default function AdminVerificationsPage() {
     }
   }
 
-  const approve = async (v: BackendVerification) => {
+  /**
+   * `notes` is passed in rather than read from state: the row-level Approve
+   * button would otherwise send whatever was last typed in the dialog, because
+   * a `setAdminNotes` in the same handler hasn't flushed by the time this runs.
+   */
+  const approve = async (v: BackendVerification, notes: string) => {
     setActioningId(v.id)
     try {
       await apiFetch(`/admin/verifications/${v.id}/approve`, {
         method: "PATCH",
-        body: JSON.stringify(adminNotes.trim() ? { notes: adminNotes.trim() } : {}),
+        body: JSON.stringify(notes.trim() ? { notes: notes.trim() } : {}),
       })
       setItems((prev) => prev.filter((i) => i.id !== v.id))
       setReview(null)
@@ -531,7 +536,7 @@ export default function AdminVerificationsPage() {
                                   size="sm"
                                   className="h-7 bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90"
                                   disabled={actioningId === v.id}
-                                  onClick={() => { setAdminNotes(v.adminNotes ?? ""); approve(v) }}
+                                  onClick={() => approve(v, v.adminNotes ?? "")}
                                 >
                                   {actioningId === v.id
                                     ? <Loader2 className="mr-1 h-3 w-3 animate-spin" />
@@ -719,7 +724,7 @@ export default function AdminVerificationsPage() {
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 disabled={actioningId === review.id}
-                onClick={() => approve(review)}
+                onClick={() => approve(review, adminNotes)}
               >
                 {actioningId === review.id
                   ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />

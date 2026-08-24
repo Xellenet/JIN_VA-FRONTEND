@@ -9,28 +9,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Settings,
   Shield,
   Bell,
   Globe,
-  Trash2,
-  Package,
-  MoreVertical,
-  AlertTriangle,
-  Search,
   Users,
   Wrench,
   Loader2,
 } from "lucide-react"
-import { mockProducts } from "@/lib/data/mock-data"
 import { apiFetch } from "@/lib/api"
 import { applyPushPreference } from "@/lib/push-notifications"
 
@@ -89,10 +76,16 @@ const ADMIN_EVENT_ROWS: { key: keyof AdminNotifPrefs; label: string; desc: strin
   { key: "artisanRegistered", label: "New Artisan Registered", desc: "Get notified when a new artisan creates an account on the platform" },
 ]
 
+/** The one field of `GET /payments/admin/all` this page needs (AT9). */
+interface FeeProbePayment {
+  amount: number | string
+  platformFee: number | string
+}
+
 export default function AdminSettingsPage() {
-  const [products, setProducts] = useState(mockProducts)
-  const [productSearch, setProductSearch] = useState("")
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  // ── Applied platform fee (AT9) ──────────────────────────────────────────
+  const [appliedFeePercent, setAppliedFeePercent] = useState<number | null>(null)
+  const [isLoadingFee, setIsLoadingFee] = useState(true)
 
   // ── Notification preferences (PR3) ──────────────────────────────────────
   const [notifPrefs, setNotifPrefs] = useState<AdminNotifPrefs>(ADMIN_NOTIF_FALLBACK)
@@ -120,6 +113,24 @@ export default function AdminSettingsPage() {
       .finally(() => setIsLoadingNotifs(false))
   }, [])
 
+  useEffect(() => {
+    // The newest payment carries both the amount and the fee taken from it, so
+    // the rate the platform is really applying is arithmetic over real data
+    // rather than a number typed into this file.
+    apiFetch<FeeProbePayment[]>("/payments/admin/all?page=1&limit=1")
+      .then((rows) => {
+        const latest = Array.isArray(rows) ? rows[0] : undefined
+        const amount = Number(latest?.amount)
+        const fee = Number(latest?.platformFee)
+        if (!latest || !Number.isFinite(amount) || !Number.isFinite(fee) || amount <= 0) return
+        setAppliedFeePercent(Math.round((fee / amount) * 10000) / 100)
+      })
+      .catch(() => {
+        // Leave it unknown rather than showing a number we can't stand behind.
+      })
+      .finally(() => setIsLoadingFee(false))
+  }, [])
+
   const toggleNotif = (key: keyof AdminNotifPrefs, val: boolean) => {
     setNotifPrefs((p) => ({ ...p, [key]: val }))
     // PN1: the push channel toggle is where browser permission is requested and
@@ -145,45 +156,23 @@ export default function AdminSettingsPage() {
     }
   }
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.sku.toLowerCase().includes(productSearch.toLowerCase())
-  )
-
-  const handleDeleteProduct = (id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id))
-    setDeleteConfirm(null)
-  }
-
-  const stockBadge = (status: string) => {
-    const map: Record<string, string> = {
-      "in-stock": "border-green-200 bg-green-50 text-green-700",
-      "low-stock": "border-yellow-200 bg-yellow-50 text-yellow-700",
-      "out-of-stock": "border-red-200 bg-red-50 text-red-700",
-    }
-    return map[status] || ""
-  }
-
-  const stockLabel = (status: string) => {
-    const map: Record<string, string> = {
-      "in-stock": "In Stock",
-      "low-stock": "Low Stock",
-      "out-of-stock": "Out of Stock",
-    }
-    return map[status] || status
-  }
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">System Settings</h1>
           <p className="text-muted-foreground">
-            Manage system-wide configurations, notifications, and product inventory
+            Manage system-wide configurations and notifications
           </p>
         </div>
 
+        {/*
+          The "Products" tab and its mock inventory list are gone, along with
+          /dashboard/admin/products (resolved Open Question 15): JinVa is a
+          services marketplace with no product concept in the PRD or the
+          backend — both were template leftovers whose "Delete Product" action
+          only ever mutated a local array.
+        */}
         <Tabs defaultValue="general" className="space-y-6">
           <TabsList className="bg-muted">
             <TabsTrigger value="general" className="gap-2">
@@ -197,10 +186,6 @@ export default function AdminSettingsPage() {
             <TabsTrigger value="security" className="gap-2">
               <Shield className="h-4 w-4" />
               Security
-            </TabsTrigger>
-            <TabsTrigger value="products" className="gap-2">
-              <Package className="h-4 w-4" />
-              Products
             </TabsTrigger>
           </TabsList>
 
@@ -221,14 +206,21 @@ export default function AdminSettingsPage() {
                 </div>
               </div>
               <CardContent className="p-6 space-y-6">
+                {/*
+                  AT9: these four shipped as `Plumbify` / `support@plumbify.com`
+                  / `UTC-5 (Eastern Time)` — a different product in a different
+                  country. Corrected to the real platform and to Ghana's
+                  timezone (GMT, UTC+0, no daylight saving), which is also what
+                  the GH₵ currency below already implied.
+                */}
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="platformName">Platform Name</Label>
-                    <Input id="platformName" defaultValue="Plumbify" />
+                    <Input id="platformName" defaultValue="JinVa" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="supportEmail">Support Email</Label>
-                    <Input id="supportEmail" defaultValue="support@plumbify.com" />
+                    <Input id="supportEmail" defaultValue="support@jinva.com" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="currency">Default Currency</Label>
@@ -236,7 +228,7 @@ export default function AdminSettingsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="timezone">Timezone</Label>
-                    <Input id="timezone" defaultValue="UTC-5 (Eastern Time)" />
+                    <Input id="timezone" defaultValue="GMT (UTC+0) — Accra" />
                   </div>
                 </div>
 
@@ -349,9 +341,37 @@ export default function AdminSettingsPage() {
                     <Label htmlFor="cancellation">Cancellation Window (hours)</Label>
                     <Input id="cancellation" type="number" defaultValue="24" />
                   </div>
+                  {/*
+                    AT9: this shipped as an editable input reading 15 while the
+                    backend's platform fee default is 5 — a 3x disagreement an
+                    admin could reasonably have acted on, behind a Save button
+                    that discarded whatever they typed. The fee is an env var
+                    read at boot, and no endpoint exposes it, so the honest
+                    value available today is the one the ledger actually shows:
+                    platformFee / amount on the most recent real payment. Made
+                    read-only until the backend exposes the configured value
+                    (design-spec.md §11 item I); runtime configuration of the
+                    fee stays out of scope.
+                  */}
                   <div className="space-y-2">
                     <Label htmlFor="commission">Platform Commission (%)</Label>
-                    <Input id="commission" type="number" defaultValue="15" />
+                    <Input
+                      id="commission"
+                      readOnly
+                      disabled
+                      value={
+                        isLoadingFee
+                          ? "Checking…"
+                          : appliedFeePercent != null
+                            ? `${appliedFeePercent}%`
+                            : "Not yet observable"
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {appliedFeePercent != null
+                        ? "The rate the platform actually applied on the most recent payment. Set on the server; not editable here."
+                        : "No payments have been taken yet, so there is no applied rate to read. Set on the server; not editable here."}
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="maxBookings">Max Concurrent Bookings per Client</Label>
@@ -529,172 +549,6 @@ export default function AdminSettingsPage() {
                 Save Security Settings
               </Button>
             </div>
-          </TabsContent>
-
-          {/* Product Management */}
-          <TabsContent value="products" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-muted p-2">
-                      <Package className="h-5 w-5 text-foreground" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">Product Management</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Delete or manage products from the system inventory
-                      </p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="border-foreground/20">
-                    {products.length} products
-                  </Badge>
-                </div>
-              </div>
-              <CardContent className="p-6">
-                <div className="mb-4 relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search products by name or SKU..."
-                    className="pl-10"
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  {filteredProducts.length === 0 ? (
-                    <div className="py-12 text-center text-muted-foreground">
-                      <Package className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                      <p>No products found</p>
-                    </div>
-                  ) : (
-                    filteredProducts.map((product) => (
-                      <div
-                        key={product.id}
-                        className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/30"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                            <Package className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{product.name}</p>
-                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                              <span className="font-mono">{product.sku}</span>
-                              <span>{'|'}</span>
-                              <span>{product.category}</span>
-                              <span>{'|'}</span>
-                              <span className="font-semibold text-foreground">
-                                GH₵ {product.price.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className={stockBadge(product.status)}>
-                            {stockLabel(product.status)}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">
-                            Stock: {product.stock}
-                          </span>
-
-                          {deleteConfirm === product.id ? (
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDeleteProduct(product.id)}
-                              >
-                                Confirm
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setDeleteConfirm(null)}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => setDeleteConfirm(product.id)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete Product
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Danger Zone */}
-            <Card className="border-red-200">
-              <div className="border-b border-red-200 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-red-50 p-2">
-                    <AlertTriangle className="h-5 w-5 text-red-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-red-700">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Irreversible system-wide actions. Proceed with caution.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border border-red-100 p-4">
-                  <div>
-                    <p className="font-medium">Purge All Cancelled Orders</p>
-                    <p className="text-sm text-muted-foreground">
-                      Permanently remove all cancelled order records from the system
-                    </p>
-                  </div>
-                  <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 bg-transparent">
-                    Purge Orders
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-red-100 p-4">
-                  <div>
-                    <p className="font-medium">Deactivate All Inactive Artisans</p>
-                    <p className="text-sm text-muted-foreground">
-                      Mark all artisans with no jobs in 60+ days as inactive
-                    </p>
-                  </div>
-                  <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 bg-transparent">
-                    Deactivate
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-red-100 p-4">
-                  <div>
-                    <p className="font-medium">Reset System Data</p>
-                    <p className="text-sm text-muted-foreground">
-                      Clear all data and reset the platform to its default state
-                    </p>
-                  </div>
-                  <Button variant="destructive">
-                    Reset System
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
       </div>

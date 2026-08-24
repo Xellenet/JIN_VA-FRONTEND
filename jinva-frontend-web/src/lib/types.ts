@@ -77,18 +77,6 @@ export interface Client {
   joinedDate: string
 }
 
-export interface Product {
-  id: string
-  name: string
-  category: string
-  description: string
-  price: number
-  stock: number
-  sku: string
-  status: "in-stock" | "low-stock" | "out-of-stock"
-  image?: string
-}
-
 export type PortfolioStatus = "PENDING" | "APPROVED" | "REJECTED"
 
 // Matches api-contract.md §8 `PortfolioItem` — the real, backend-backed

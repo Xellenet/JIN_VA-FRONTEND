@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { SignupForm } from "@/components/auth/signup-form"
 import type { Metadata } from "next"
 
@@ -7,5 +8,12 @@ export const metadata: Metadata = {
 }
 
 export default function SignupPage() {
-  return <SignupForm />
+  // The form reads `?role=` (LP13), and `useSearchParams()` needs a Suspense
+  // boundary on a statically-rendered route. Same shape as /login,
+  // /reset-password, /verify-email and /auth/callback already use.
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
+  )
 }

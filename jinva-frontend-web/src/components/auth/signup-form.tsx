@@ -1,8 +1,9 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +11,13 @@ import { AuthSplitLayout } from "./auth-split-layout"
 import { Eye, EyeOff } from "lucide-react"
 import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+/**
+ * The only two roles a visitor may self-select. ADMIN is deliberately absent:
+ * PRD §5.1 makes admin accounts seed-only and not publicly registerable, so
+ * `?role=ADMIN` must be treated exactly like any other junk value — ignored.
+ */
+const PREFILLABLE_ROLES = ["CUSTOMER", "ARTISAN"] as const
 
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false)
@@ -26,6 +34,27 @@ export function SignupForm() {
     gender: "",
     role: "",
   })
+
+  /**
+   * LP13 — prefill the role selector from `?role=`, so the landing page's
+   * artisan CTA (`/signup?role=ARTISAN`) and client CTA
+   * (`/signup?role=CUSTOMER`) land on a form that already knows which one the
+   * visitor picked.
+   *
+   * Anything that is not exactly CUSTOMER or ARTISAN — absent, misspelled,
+   * lowercase, ADMIN, an injected value — leaves the selector empty and the
+   * existing validation untouched. It never crashes and it never silently
+   * selects the wrong role, which is the actual acceptance criterion here. The
+   * param is a convenience only: the real role still travels in the submitted
+   * payload and is validated by the backend.
+   */
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const requested = searchParams.get("role")
+    if (!requested) return
+    if (!(PREFILLABLE_ROLES as readonly string[]).includes(requested)) return
+    setFormData((previous) => (previous.role ? previous : { ...previous, role: requested }))
+  }, [searchParams])
 
   const validatePassword = (password: string): boolean => {
     if (password.length < 8) {

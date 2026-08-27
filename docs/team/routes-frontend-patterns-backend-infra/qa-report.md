@@ -49,6 +49,15 @@ Two of my own early results were harness artifacts and are recorded here so nobo
   check look like a BI2 regression when it is not — worth fixing so the next QA pass isn't misled.
 - **Likely location**: `JIN_VA-BACKEND/src/database/seeds/seed.ts` (the `profilePicture` assignments around
   lines 240–430).
+- **FIX (backend-engineer, 2026-08-27, commit `e054ebc`)**: took the null option, not the write-a-file option.
+  All nine `profilePicture: '/uploads/profiles/…'` literals removed from `customerSeeds`/`artisanSeeds`, and the
+  field dropped from both `userRepo.create({…})` calls, so the column is left null and the initials fallback is
+  the *deliberate* seeded state. Writing five real avatar files would have meant the seed shipping binary
+  fixtures for cosmetic value, and would have put them in `uploads/avatars/`, not the `profiles/` directory the
+  URLs named — so the URLs were wrong twice over. A comment above `customerSeeds` records why, and says that if
+  a seeded avatar is ever wanted the seed must write the file too.
+  **Re-run note:** an already-seeded DB keeps its stale values — `npm run seed:force` (or a fresh seed) is
+  needed to observe the change, so if you re-test against the current DB you'll still see the 404s.
 - **Status**: Open
 
 ### [OBSERVATION — no action required, for the security reviewer] BI1's 5xx body names internal environment variables
@@ -275,7 +284,13 @@ Tests:       7 failed, 118 passed, 125 total
 - **Likely location**: `jinva-frontend-web/src/components/public/landing/hero.tsx`.
 - **DECISION (user, 2026-08-27): add a small sample marker**, matching the testimonials section's treatment,
   rather than leaving it unlabelled or dropping the numbers.
-- **Status**: Open — fix assigned to frontend-engineer
+- **FIX (frontend-engineer, 2026-08-27)**: implemented as decided — the mock profile card now carries the
+  identical marker the testimonials section uses: `<Badge variant="outline">` + `<Info className="h-3 w-3">`
+  + the words **"Sample content"**. No new component, no new pattern; the numbers and the name are unchanged.
+  Placed on its own row **above** the avatar, not beside the existing "Verified" pill — in that row it read as
+  another artisan attribute, which is the opposite of the point. `hero.tsx`'s header comment, which previously
+  argued the number needed no label, is updated to record the decision and to say the badge must be removed if
+  the card is ever wired to a real artisan record.
 
 ### [MINOR] `formatCurrency()` has no fixed fraction digits, so amounts render with inconsistent decimals
 - **Repro**: log in as `admin@jinva.com`, open `/dashboard/admin/transactions`. In one table:
@@ -339,6 +354,11 @@ with colours resolved via canvas (the tokens compute to `oklab()`):
 - **Scope honesty**: pre-existing; LP13 only required the `?role=` prefill, which works. Filed because
   LP13 put this file in scope and it is a two-attribute fix.
 - **Likely location**: `jinva-frontend-web/src/components/auth/signup-form.tsx` (~lines 300–340).
+- **FIX (frontend-engineer, 2026-08-27)**: `id="gender"` and `id="role"` added to the two `SelectTrigger`s,
+  matching the existing `htmlFor` values. Radix forwards `id` to the underlying trigger `button`, so
+  `document.querySelector('#role')` now resolves and clicking either label opens its own dropdown.
+  Incidental benefit for your harness: the two triggers are no longer distinguishable only by DOM order, so a
+  future LP13 re-test can target `#role` directly.
 - **Status**: Open
 
 ### [OBSERVATION] Every authenticated page load burns a 401 round-trip before refreshing
@@ -503,6 +523,20 @@ avatar-origin bug filed above, which is a frontend URL-resolution defect, not a 
 *Caveat:* **verification documents could not be exercised** — `uploads/documents/` and `uploads/selfies/`
 contain **0 files** in this environment, so no historical document exists to load. The code path
 (`admin/verifications/page.tsx`) does use `resolveMediaUrl()`, so it is expected to behave like portfolio.
+
+> **Heads-up for the next QA pass — backend-engineer, 2026-08-27 (commit `350dc0b`).** This expectation is now
+> **deliberately false**, so please don't file the change as a BI2 regression. Fixing the security round's HIGH
+> finding means `documents`/`selfies` are no longer served by the `/uploads` static mount in *any* mode:
+> `GET /uploads/documents/<file>` is now a clean JSON **404 even when the file exists on disk**, which is the
+> intended behaviour and is asserted in `test/legacy-media-serving.e2e-spec.ts`. The five public folders
+> (`avatars`, `portfolio`, `reviews`, `messages`, `job-attachments`) are completely unchanged, headers included.
+>
+> KYC media is now read through `GET /api/v1/uploads/kyc/:folder/:filename` — bearer token + `ADMIN` role,
+> streams bytes, `Cache-Control: private, no-store`. Contract in
+> `docs/team/routes-frontend-patterns-backend-infra/api-contract.md`; the admin verification screen's image
+> source is a separate frontend-engineer handoff, so until that lands the tiles are *expected* not to render.
+> To reproduce the backend half without a real submission: drop any PNG into `uploads/documents/` and hit the
+> endpoint with an admin token (401 anonymous, 403 as artisan/customer, 200 as admin).
 
 **Standard checks**
 

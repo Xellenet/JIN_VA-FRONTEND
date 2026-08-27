@@ -26,6 +26,48 @@
 - **Owner**: backend-engineer (frontend-engineer for the admin tile source, once the endpoint exists)
 - **Status**: Open
 
+> **Fix note — backend-engineer, 2026-08-27 (commit `350dc0b`).** The sensitivity split now lives in one
+> place, `src/uploads/upload-folders.ts`, and is applied to both providers and to the static mount.
+>
+> - **S3.** `upload()` keys through `buildS3ObjectKey()`: public folders keep their exact existing key, while
+>   `documents`/`selfies` go under a `private/` prefix. `buildPublicUrl` is no longer reachable for a private
+>   folder at all — `upload()` returns `buildPrivateMediaReference()` instead, so **no public URL for a KYC
+>   object is ever minted or persisted**, not even an unreadable one (a stored public URL is what turns a
+>   later bucket-policy mistake into a breach). `delete()` targets the same prefixed key.
+> - **Local.** `applyLegacyMediaServing` is now an **allow-list**: one static handler per public folder at
+>   `/uploads/<folder>`, rather than one for the whole tree. `documents`/`selfies` match no handler and fall
+>   through to Nest's clean JSON 404 — even when the file exists on disk, which the e2e now asserts. On-disk
+>   layout is deliberately unchanged (`uploads/documents/…`), because moving the files would break every
+>   historical row.
+> - **Both.** One reader: `GET /api/v1/uploads/kyc/:folder/:filename` — `JwtAuthGuard` + `RolesGuard`
+>   `@Roles(ADMIN)`, streams the bytes with `Cache-Control: private, no-store`, `nosniff`, and a log line
+>   naming the acting admin and the object key (your "no access audit trail" point). It reads local disk
+>   **first**, then the active provider, so the whole pre-cutover verification backlog still resolves after
+>   the cutover — the same legacy problem BI2 solved for public media, but behind an admin guard instead of a
+>   public URL. `folder` is restricted to the two KYC values (a public folder is a 400, so it can't become a
+>   general file proxy) and `filename` must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` with no `..`.
+>
+> **Chose streaming over a presigned GET, deliberately** (your remediation allowed either): a presigned URL
+> is a bearer credential in a query string — copyable from devtools, forwardable, loggable by an
+> intermediary, leakable via referrer — and the failure being fixed *is* "an anonymously-readable URL to an
+> identity document", so not minting one is the stronger answer. It also gives local and S3 mode one
+> identical code path, and needs no new dependency (`@aws-sdk/s3-request-presigner` isn't installed) or
+> signing secret. **Accepted cost, please weigh it:** these bytes pass through the app server, contrary to
+> PRD §9 — scoped to this one prefix, admin-only, low-volume, ≤10MB per object.
+>
+> New tests: `src/uploads/upload-folders.spec.ts`, `src/uploads/kyc-media.service.spec.ts`, a
+> `KYC key separation` block in `s3-storage.provider.spec.ts` (asserts no CDN host, no bucket name and no
+> `https:` in a private upload's returned URL even with `AWS_S3_PUBLIC_URL_BASE` set, and that all five
+> public folders still get the identical CDN URL they got before), and e2e coverage of the 401 / 403 / 200
+> boundary plus the "public mount does not serve KYC" case in `test/legacy-media-serving.e2e-spec.ts`.
+>
+> `docs/team/routes-frontend-patterns-backend-infra/api-contract.md` is written and documents the endpoint,
+> the stored-reference → request-path mapping, and the blob-fetch consequence for the admin tiles.
+>
+> **Not covered, flagged rather than widened:** an artisan viewing their own submitted document.
+> `GET /verification/me` returns references an artisan cannot resolve, because the guard is ADMIN-only per
+> your remediation. If that screen needs a thumbnail, it's a product-manager scope call.
+
 ### [MEDIUM] Legacy media handler applies year-long public immutable caching to KYC documents
 - **Category**: CWE-524 Use of Cache Containing Sensitive Information
 - **Location**: `JIN_VA-BACKEND/src/uploads/legacy-media.config.ts:87` and `:161-163`; asserted at `JIN_VA-BACKEND/test/legacy-media-serving.e2e-spec.ts:98-104`
@@ -33,6 +75,24 @@
 - **Remediation**: Make the cache policy folder-aware in the `setHeaders` callback that already exists at `:164-169` — keep `public, max-age=31536000, immutable` for `avatars`/`portfolio`/`reviews`/`messages`/`job-attachments`, and emit `Cache-Control: private, no-store` for `documents`/`selfies`. Better still, exclude those two folders from the static mount entirely and gate them behind the authenticated endpoint from the HIGH finding above.
 - **Owner**: backend-engineer
 - **Status**: Open
+
+> **Fix note — backend-engineer, 2026-08-27 (commit `350dc0b`).** Took your "better still" option rather than
+> the `setHeaders` one, because it is strictly stronger: a cache header only helps if the response happens at
+> all, and now it doesn't. The mount is an allow-list of the five public folders (one static handler each at
+> `/uploads/<folder>`), so `documents`/`selfies` are not part of this tree in **any** mode — including
+> `STORAGE_PROVIDER=local`, where they were previously served as the active store. There is therefore no
+> response left to attach `immutable` to: a request for `/uploads/documents/<file>` is Nest's clean JSON 404
+> even with the file present on disk.
+>
+> The KYC reader added for the HIGH above sends `Cache-Control: private, no-store` (plus `nosniff` and
+> `Content-Disposition: inline`), so the folder-aware policy you asked for exists — it just lives on the
+> authenticated endpoint instead of on a public mount.
+>
+> `LEGACY_MEDIA_MAX_AGE_MS` / `immutable` are untouched for the five public folders, whose UUID filenames make
+> them genuinely immutable; the existing e2e assertion on `max-age=31536000, immutable` for `/uploads/avatars/…`
+> still passes. `resolveLegacyMediaPlan` now returns `servedFolders`/`withheldFolders` and says so in the boot
+> log line, and `legacy-media.config.spec.ts` asserts the KYC folders are absent from `servedFolders` in all
+> four env combinations — an allow-list rather than a filter, so there's no predicate to invert by accident.
 
 ### [MEDIUM] The Resend SDK logs the full provider error payload to `console.error`, defeating the provider's sanitisation
 - **Category**: CWE-532 Insertion of Sensitive Information into Log File
@@ -49,6 +109,41 @@
 - **Owner**: backend-engineer
 - **Status**: Open
 
+> **Fix note — backend-engineer, 2026-08-27 (commit `b5d696c`).** Took option **(b)**, the actual fix, rather
+> than (a)'s documentation-only route — reasoning below, since you asked for it either way.
+>
+> **Why (b) and not (a).** (a) would have been honest but would have left a real disclosure standing on a path
+> the operator is expected to flip on (`MAIL_PROVIDER=resend`), in every environment that isn't
+> `NODE_ENV=production` — which in practice means staging, where real recipient addresses do appear. The
+> leaking value is recipient PII in `validation_error` payloads, and PII disclosure to a log sink outside the
+> app's redaction policy isn't something to write down and keep. It was also cheap to close properly, and the
+> interception is verifiable, which (a) is not.
+>
+> **What it does.** `send()` now runs the SDK call inside `withSdkErrorLoggingSuppressed()`, which for the
+> duration of that one call replaces `console.error` with a wrapper that drops calls whose **first argument is
+> exactly** `'[Resend API Error]:'` — a strict `===` on the SDK's own sentinel, not a substring or regex match.
+> Everything else written to `console.error` by anything, at any time, is forwarded verbatim. A depth counter
+> (not a bare save/restore) handles concurrent sends, since mail is dispatched from event listeners, and the
+> restore is in a `finally` so a throw can't leave the patch installed. The diagnostic isn't lost, only
+> redirected: the provider still throws `error.name` + HTTP status, which `MailService` logs through winston.
+>
+> **And your separate ask, which is the part I'd re-verify first:** new
+> `src/mail/providers/resend-mail.provider.sdk.spec.ts` loads the **real** `resend` package (no
+> `jest.mock('resend')`) and stubs `global.fetch`. It asserts, in the exact condition the leak occurs in
+> (`NODE_ENV=test`, which it also asserts explicitly so the test can't silently stop proving anything): a
+> planted sentinel in the payload's free-text `message` reaches neither `console.error`/`log`/`warn` nor the
+> thrown message; `console.error` is not called at all on an SDK error; an *unrelated* `console.error` raised
+> during a send **does** get through; and `console.error` is restored afterwards, proven by re-emitting the SDK's
+> own sentinel and observing it pass. 7 tests, all green.
+>
+> **DoD line.** Even so, I'd narrow the wording rather than leave it absolute — it now holds for the SDK's
+> `logError` sink specifically, which is the one that existed; it is not a general guarantee about every future
+> dependency's internal logging. Recorded here rather than edited into `requirements.md`, since the DoD is the
+> product-manager's document.
+>
+> Also worth noting for your re-test: your judgement that the API key never appears in an SDK error string
+> matched what I found — this closes provider-detail and recipient-PII disclosure, not a credential leak.
+
 ### [MEDIUM] SMTP auth failures put the `MAIL_USER` value into application logs — and SMTP is the default provider
 - **Category**: CWE-532 Insertion of Sensitive Information into Log File
 - **Location**: `JIN_VA-BACKEND/src/mail/providers/smtp-mail.provider.ts:29-37`; log sink at `JIN_VA-BACKEND/src/mail/mail.service.ts:45-50`
@@ -56,6 +151,29 @@
 - **Remediation**: Give `SmtpMailProvider.send()` the same discipline as `ResendMailProvider`: catch, log and re-throw using nodemailer's `err.code` / `err.responseCode` only, and never `err.message` or `err.response`. Then either correct or re-qualify the DoD line.
 - **Owner**: backend-engineer
 - **Status**: Open
+
+> **Fix note — backend-engineer, 2026-08-27 (commit `b5d696c`).** Done as specified. `SmtpMailProvider.send()`
+> now wraps `sendMail()` in a try/catch and re-throws through a new `describeSmtpFailure()` helper that reads
+> **only** `err.code` (nodemailer's own classification — `EAUTH`, `ECONNECTION`, `ETIMEDOUT`, `EENVELOPE`, …)
+> and `err.responseCode` (the SMTP status number), producing e.g. `EAUTH / SMTP 535`. `err.message` and
+> `err.response` are never read. When nodemailer classified nothing at all, it falls back to the error *name* —
+> a class name, not text built from the server's reply.
+>
+> There is no separate log call in the provider, on purpose: `MailService`'s existing catch logs the thrown
+> message, so adding one would double-log the same line. The sanitisation is on the thrown string, which is
+> what makes that existing log line clean — the mirror of how `ResendMailProvider` already worked. So
+> `MailService` is untouched, and "log and re-throw" is unchanged.
+>
+> Five new assertions in `smtp-mail.provider.spec.ts`, built on a fixture shaped like what nodemailer actually
+> produces for a 535 (`Invalid login: 535 5.7.8 … for user <sentinel>`, plus `code`, `responseCode`, `response`,
+> `command`): the thrown message contains `EAUTH / SMTP 535`, and contains none of the sentinel, `Invalid login`,
+> `5.7.8`, the configured `MAIL_USER`, or the configured `MAIL_PASS`. Plus: it still throws (a sanitised failure
+> is not a swallowed one), the no-classification fallback, and that a connection failure stays distinguishable
+> from an auth failure.
+>
+> On the DoD claim: I'd re-qualify rather than delete it. It is now accurate for both mail paths and for the S3
+> path, which is what it was written about; what it can't be is a blanket guarantee about a dependency's internal
+> logging (see the Resend note above). Left for the product-manager to word.
 
 ### [MEDIUM] Known-vulnerable dependencies in both repos
 - **Category**: CWE-1035 / OWASP A06 Vulnerable and Outdated Components
@@ -68,6 +186,34 @@
 - **Owner**: backend-engineer / frontend-engineer
 - **Status**: Open
 
+> **Fix note — backend-engineer, 2026-08-27 (commit `ac050a9`), backend repo only.** `npm audit fix` (no
+> `--force`) run to a fixed point, plus `handlebars` raised from `^4.7.8` to `^4.7.9` in `package.json` so the
+> vulnerable version can no longer be resolved on a fresh install. Before/after, both counts you asked for:
+>
+> | | before | after |
+> |---|---|---|
+> | all deps | **70** — 2 critical, 24 high, 38 moderate, 6 low | **9** — 4 high, 5 moderate |
+> | `--omit=dev` | **30** — 1 critical, 14 high, 14 moderate, 1 low | **7** — 2 high, 5 moderate |
+>
+> Cleared: `handlebars` (the critical), `validator`, `form-data`, `jws`, `lodash`, `path-to-regexp`, `glob`,
+> `minimatch`, `brace-expansion`, `adm-zip`, `webpack`, `@nestjs/core`, `@nestjs/platform-express`,
+> `@nestjs/swagger`. Both criticals are gone.
+>
+> **One correction to the finding, please re-check this rather than take my word:** `npm audit fix` does **not**
+> clear `nodemailer`. It bumped 7.0.7 → 7.0.13, but the advisory range is `<=9.0.0`, so it stays flagged as
+> high; clearing it needs `--force` and a breaking major bump on the live mail path, which I did not take
+> unilaterally in a fix round. The remaining high is
+> "SMTP command injection via unsanitized `envelope.size`" — `envelope` is never set anywhere in this codebase
+> (`MailService` passes only `from`/`to`/`subject`/`html`/`text`), so I read the injection vector as
+> unreachable, but that's your call to confirm.
+>
+> Also still open, both needing breaking majors and left for a tracked ticket as you suggested for
+> `firebase-admin`: `axios` (high, via `@nestjs/axios`), and `uuid`/`teeny-request`/`retry-request`/
+> `@google-cloud/storage` (moderate, all under `firebase-admin`).
+>
+> Full unit suite green after the upgrade: **363/363, 40 suites** (was 319/319 in 37; the delta is this round's
+> three new spec files). The frontend half of this finding is the frontend-engineer's.
+
 ### [LOW] The documented rationale for `dotfiles: 'ignore'` does not hold, and the option is a no-op
 - **Category**: CWE-1078 (inconsistent/incorrect rationale) — no exploitable condition
 - **Location**: `JIN_VA-BACKEND/src/uploads/legacy-media.config.ts:153-161`
@@ -76,6 +222,29 @@
 - **Remediation**: Correct the comment to describe the actual mechanism. If the `finalhandler` concern is to be closed properly, register an Express error handler in front of the static mount so no `send` error can reach `finalhandler`. Also add a dotfile request to `test/legacy-media-serving.e2e-spec.ts` — it currently covers traversal, directory listing and clean-404, but never asserts the dotfile behaviour the comment is entirely about.
 - **Owner**: backend-engineer
 - **Status**: Open
+
+> **Fix note — backend-engineer, 2026-08-27 (commit `350dc0b`).** Comment rewritten to your behavioural
+> analysis, which I re-checked against the installed libraries rather than transcribing. It now records that
+> (i) `'ignore'` is already `send`'s default so the option changes no behaviour, and (ii) `'deny'` would resolve
+> to the *same* clean JSON 404 — `fallthrough` unset → defaults `true`, `forwardError` starts `false` and is
+> only flipped by the `file` event, and `send`'s dotfile check runs in `pipe()` before that event, so a 403 has
+> `statusCode < 500` with `forwardError === false` and serve-static takes the plain `next()` branch.
+>
+> It also keeps the two reasons `'ignore'` is still the right value, which are the ones that actually hold: a
+> 404 discloses strictly less than a 403, and it stays correct if someone later adds `fallthrough: false` —
+> under which a `'deny'` 403 *would* be forwarded. And it records that the HTML-stack-trace path is real but
+> reachable only for 5xx-class `send` errors.
+>
+> **I did not add the Express error handler.** With the mount now split per folder there are five handlers to
+> front, the 5xx-`send`-error case has no known trigger here (the tree is UUID-named files on the app's own
+> disk), and inserting middleware ahead of Nest's router is a change with more blast radius than the residual
+> risk. Flagging it as a deliberate non-fix rather than an oversight — say if you'd rather it were closed.
+>
+> Dotfile e2e case added (`answers a dotfile request with a clean JSON 404, not a 403 and not an HTML stack
+> trace`): four paths — a dotfile that genuinely **exists on disk** and is written for the test, plus
+> `.env` inside a folder, `/uploads/.env` and `/uploads/.git/config`. Each asserted `404`, JSON content-type,
+> no `<pre>`, no `at SendStream`, no `process.cwd()` in the body, and not the file's bytes. The existing
+> traversal / directory-listing / clean-404 cases still pass unchanged after the per-folder remount.
 
 ### [LOW — accepted] Missing-configuration errors return `AWS_S3_*` variable names to the client outside production
 - **Category**: CWE-209 Generation of Error Message Containing Sensitive Information
@@ -100,6 +269,17 @@
 - **Location**: `JIN_VA-FRONTEND/jinva-frontend-web/src/components/public/public-link.tsx:32-39`
 - **How found / exploit path**: When `href.includes("#")` the component bypasses `next/link` and emits `<a href={href}>` directly. Every current caller passes a module-level constant from `public-nav.ts`, so **nothing is exploitable today**. Flagging only because the prop type accepts any string, and a future caller passing user-derived or CMS-derived data would get an unguarded `javascript:` / `data:` sink in a component whose name invites reuse.
 - **Remediation**: Guard the raw-anchor branch on `href.startsWith("/")` (all real callers are root-relative by design, per the component's own comment) and fall through to `next/link` or render nothing otherwise.
+- **FIX (frontend-engineer, 2026-08-27)**: guarded as recommended, with one addition. The condition is now
+  `href.startsWith("/") && !href.startsWith("//") && href.includes("#")`; anything else falls through to
+  `next/link`.
+  The `!href.startsWith("//")` half is not in your remediation text but is needed: a protocol-relative
+  `//evil.example/#x` satisfies `startsWith("/")` and would still have reached the raw anchor, giving an
+  off-site navigation from a component whose whole contract is "same-site fragment". Not the `javascript:`/`data:`
+  XSS class you filed, but it is the same latent-untrusted-input shape, and it costs one clause. (I wrote the
+  narrower guard first and caught this reviewing my own comment, so noting it explicitly.)
+  No behaviour change for any current caller — all are `/#…` or `/about#…` constants. Re-verified in a browser
+  on the production build: all 5 header nav anchors and all 14 footer links still navigate and land on-section;
+  see the fix note on the QA report's LP3/LP9 items for the click evidence.
 - **Owner**: frontend-engineer
 - **Status**: Open
 

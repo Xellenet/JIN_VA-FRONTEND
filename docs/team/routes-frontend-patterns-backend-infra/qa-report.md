@@ -1,5 +1,38 @@
 # QA Report: Routes, Frontend Patterns & Backend Infra (marketing landing page)
 
+**QA pass 2 — 2026-08-27 (re-verification).** Both engineers appended fix notes under every open item.
+Every one of those items has been re-tested from scratch below; **no item is marked fixed on the strength of
+a fix note.** Each carries a `RE-VERIFIED (pass 2)` block with fresh evidence and a `Status` of
+**Verified fixed** or **Still failing**. **Four new defects** were confirmed along the way (one major, three
+minors — all pre-existing, none introduced by the fixes), plus one informational note. The e2e totals moved
+since pass 1 and the change is fully accounted for below; **the 7-failure baseline itself is unchanged.**
+
+### How pass 2 was run
+
+- **Frontend: a from-scratch production build** — `rm -rf .next && npm run build && npx next start`.
+- **Browser: a brand-new Chrome profile directory** (`chrome-rv`, created for this pass and never reused),
+  driven over the DevTools Protocol with real `Input.dispatchMouseEvent` / `dispatchKeyEvent`. This matters
+  for the avatar item: a reused profile could have carried a stale `jinva:user:v3` sessionStorage entry and
+  masked the fix. I went further and **planted** a fake `v3` entry before each login to see what the app does
+  with it (see that item).
+- **Port note that cost me a run, worth recording:** the backend's CORS allow-list (`ALLOWED_ORIGINS`, not
+  read — probed black-box with `OPTIONS` + `Origin:` headers) admits **only `http://localhost:3000` and
+  `http://localhost:4200`**. My first attempt served the production build on `:4400`; every login failed with
+  `No 'Access-Control-Allow-Origin' header`, which looks exactly like a broken login. **Anyone re-testing this
+  app in a browser must serve the frontend on 3000 or 4200.** Pass 2's browser work ran on
+  `http://localhost:3000` against the API on `:8000` (default local storage provider).
+- `.env` / `.env.*` were not read, opened or grepped at any point in this pass, and the narrow DB-credential
+  exception was **not** needed — every fact below came from the app's own HTTP surface.
+- Seeded accounts as before (`SEED_PASSWORD` is a constant in `seed.ts`, not an environment secret):
+  `admin@jinva.com`, `yaw.osei@jinva.com`, `ama.mensah@gmail.com`, plus `adwoa.ansah@jinva.com` for the PDF path.
+
+**Two deliberate data changes I made through the app's own API** (no direct DB writes, no `.env`), recorded
+so nobody is surprised by them: artisan `adwoa.ansah@jinva.com` now has a **new PENDING verification
+(record #11)** whose `documentFrontUrl` is a real PDF and whose selfie is the first object ever written to
+`uploads/selfies/` — that is how the untested PDF branch got tested. Nothing else was created or deleted.
+
+---
+
 **QA pass 1 — 2026-08-27.** First independent pass on this round. Nothing below is taken from either
 engineer's handback; every claim was re-measured.
 
@@ -58,7 +91,119 @@ Two of my own early results were harness artifacts and are recorded here so nobo
   a seeded avatar is ever wanted the seed must write the file too.
   **Re-run note:** an already-seeded DB keeps its stale values — `npm run seed:force` (or a fresh seed) is
   needed to observe the change, so if you re-test against the current DB you'll still see the 404s.
-- **Status**: Open
+- **RE-VERIFIED (QA pass 2)**: **fixed in the source, not observable at runtime — and the prescribed way to
+  observe it does not work.**
+  1. Source confirmed: `rg "profilePicture|uploads/profiles" src/database/seeds/seed.ts` returns **only the
+     two explanatory comments**, no assignments. `uploads/profiles/` still does not exist on disk. Good.
+  2. I followed the re-run note and ran **`npm run seed:force`. It crashes before touching any data**:
+     `Seed failed: TypeORMError: Entity metadata for Review#photos was not found.` Filed as a separate new
+     item below — it is **not** caused by this fix (`git show e054ebc -- src/database/seeds/seed.ts` touches
+     only `profilePicture` lines and comments; the seed's hand-written `entities: [...]` array has never
+     listed `ReviewPhoto`, which arrived in `2e7df42`).
+  3. So the live DB still holds the old values, and the original symptom still reproduces end to end. Via
+     `GET /admin/users` as admin (no DB credentials needed, no `.env` touched), **8 seeded users still carry
+     `/uploads/profiles/<name>.jpg`**: `yaw.osei`, `akua.frimpong`, `efua.agyeman`, `kweku.amoah`,
+     `adwoa.ansah`, `kofi.asante`, `abena.boateng`, `kwame.darko`. In the browser each of those is now
+     requested from **`http://localhost:8000/uploads/profiles/…`** (correctly resolved — see the avatar item)
+     and fails, e.g. on `/dashboard/user/search`: five `net::ERR_BLOCKED_BY_ORB` avatar requests in one page
+     load. (`ERR_BLOCKED_BY_ORB` rather than a plain 404 because Chrome's Opaque Response Blocking rejects a
+     JSON 404 body delivered to an `<img>`.)
+  4. `ama.mensah@gmail.com` is the one seeded user whose avatar renders, and only because a **real upload**
+     replaced her seeded value at some point: `/uploads/avatars/91964fab-….jpg`, which serves `200` and
+     decodes at 200×200 on every screen she appears on.
+- **Status**: **Verified fixed at source · Still failing at runtime** — nothing more for the backend-engineer
+  to do on *this* item, but it cannot be closed until `npm run seed` works again, and any environment seeded
+  before `e054ebc` keeps 404ing until then. Blocked by the seed crash below.
+
+### [MAJOR — NEW in pass 2] `npm run seed` and `npm run seed:force` both crash on startup: `Entity metadata for Review#photos was not found`
+- **Repro** (100% reproducible — 4 runs: 2× `npm run seed`, 2× `npm run seed:force`, identical output every
+  time):
+  1. `cd JIN_VA-BACKEND && npm run seed:force`
+  2. Output:
+     ```
+     Seed failed: TypeORMError: Entity metadata for Review#photos was not found.
+     Check if you specified a correct entity object and if it's connected in the connection options.
+         at EntityMetadataBuilder.computeInverseProperties (...)
+         at async DataSource.initialize (...)
+     ```
+  3. It fails inside `dataSource.initialize()` — **before** the `--force` check, before any read or write. So
+     `npm run seed` on an **empty** database fails identically. No partial data is written; nothing is
+     corrupted.
+- **Expected**: the seed populates (or re-populates) a development database. It is the only documented way to
+  get a working dataset, and the only login credentials a new developer has.
+- **Actual**: seeding is impossible. A fresh clone cannot be brought up at all; an existing dev DB cannot be
+  refreshed.
+- **Root cause**: `src/database/seeds/seed.ts` builds its own `DataSource` with a **hand-maintained
+  `entities: [...]` array** (25 entries). `Review` declares `@OneToMany(() => ReviewPhoto, p => p.review)
+  photos`, but **`ReviewPhoto` is not in that array**, so TypeORM cannot resolve the inverse side. The same
+  applies to any other entity added since the array was last updated —
+  `src/reviews/entities/review-moderation-action.entity.ts` is also absent, and would be the next failure.
+- **Scope honesty**: **pre-existing, and not this round's.** `ReviewPhoto` landed in `2e7df42`
+  ("feat(reviews): add moderation status, photos, moderation-log, and weighted-rating schema"), several rounds
+  ago; `grep -c ReviewPhoto src/database/seeds/seed.ts` → **0** at every commit since. It is reported now
+  because it is what **blocks re-verification of this round's own seed fix** (`e054ebc`), whose fix note
+  explicitly prescribes `npm run seed:force` as the way to observe it.
+- **Suggested direction (backend-engineer's call)**: point the seed's `DataSource` at the same entity glob the
+  app uses (or import the app's `TypeOrmModule` options) so the list cannot drift again, rather than adding
+  two more imports and leaving the next entity to break it.
+- **Severity note**: major on the dev/QA workflow, **zero product-runtime impact** — seeds do not run in a
+  deployed environment. Flagged separately in the verdict for that reason.
+- **Status**: Open — new, needs the backend-engineer.
+
+### [MINOR — NEW in pass 2] The seeded verification rows reference 13 KYC files the seed never writes; 8 of the 13 are 404
+- **Repro**:
+  1. As admin: `GET /api/v1/verification?limit=50` → 5 rows, 13 non-null
+     `documentFrontUrl`/`documentBackUrl`/`selfieUrl` references.
+  2. Resolve each through the new endpoint, `GET /api/v1/uploads/kyc/{folder}/{file}` with an admin token:
+     ```
+     #10 REJECTED     Adwoa Akos Ansah    front:404 back:404 selfie:404
+     #9  PENDING      (no legal name)     front:200 selfie:200
+     #8  UNDER_REVIEW Efua Abena Agyeman  front:200 back:200 selfie:200
+     #7  APPROVED     Akua Adwoa Frimpong front:404 selfie:404
+     #6  APPROVED     Yaw Kofi Osei       front:404 back:404 selfie:404
+     ```
+     **5 refs resolve, 8 do not.** The 5 that resolve do so only because the frontend-engineer placed local
+     fixture files (disclosed, gitignored, expected). Nothing in the repo writes them.
+  3. In the UI (admin → Verifications → review any of rows #6/#7/#10) all tiles read **"This file is no
+     longer available."** — three whole records look like data loss when they are simply seeded fiction.
+- **Expected**: same principle the backend-engineer applied to the avatar seed in `e054ebc` — a seeded media
+  reference either points at a file the seed writes, or is left null.
+- **Actual**: `seed.ts` writes 13 literal paths and no files. This is the **same class of bug as the avatar
+  seed**, one folder over.
+- **Second, smaller defect in the same data**: every seeded `selfieUrl` points into
+  **`/uploads/documents/`**, not `/uploads/selfies/` (`seed.ts:730, 746, 764, 775, 790`). It "works" because
+  the KYC endpoint accepts `documents` as a folder, but it means the `selfies` folder was **never exercised by
+  any seeded row** — I had to submit a real verification to get the first object into `uploads/selfies/` at
+  all (see the PDF item).
+- **Likely location**: `JIN_VA-BACKEND/src/database/seeds/seed.ts:720–798`.
+- **Status**: Open — new, backend-engineer. Cosmetic/dev-data only; blocks nothing.
+
+### [MINOR — NEW in pass 2] `booking-concurrency` A4 e2e test is timing-dependent: asserts `[201, 409]`, sometimes gets `[201, 400]`
+- **Repro** (5 observed runs: **1 fail, 4 pass**):
+  - Full suite, `npm run test:e2e -- --runInBand`, run 1 → **FAIL**:
+    ```
+    ● Bookings — A4 real concurrent-request race (e2e) › never lets two concurrent requests … both succeed
+      expect(received).toEqual(expected)
+        Array [ 201, -409, +400 ]
+      at booking-concurrency.e2e-spec.ts:179:22
+    ```
+  - Full suite, run 2 → **PASS**. Suite alone (`… --runInBand test/booking-concurrency.e2e-spec.ts`),
+    3 consecutive runs → **PASS, PASS, PASS**. It only failed under the load of the full in-band run.
+- **Expected**: a stable assertion.
+- **Actual**: `BookingsService.create` has **two** guards, and which one rejects the loser depends on
+  interleaving: a fast-fail pre-check (`computeBookableWindows` → `BadRequestException`, **400**,
+  `bookings.service.ts:187`) and the authoritative transactional overlap check (`ConflictException`, **409**,
+  `:243`). If the winner commits before the loser's pre-check runs, the loser gets 400. The spec pins the
+  exact pair `[201, 409]`.
+- **Why this is a test defect and not a product defect**: the invariant A4 exists for — *never two
+  successes* — **held in every run, including the failing one** (exactly one `201`). Both statuses are
+  correct refusals.
+- **Suggested direction**: assert one `201` and one refusal in `{400, 409}` (and keep the "exactly one row"
+  assertion, which is the real guard), rather than pinning which guard won the race.
+- **Scope**: pre-existing spec (`ce50f35`, untouched since 21 Aug). **Not part of the 7-failure baseline** —
+  it passed in pass 1 and in the confirming run here, so treat it as a flake to fix, not a new regression.
+- **Likely location**: `JIN_VA-BACKEND/test/booking-concurrency.e2e-spec.ts:179`.
+- **Status**: Open — new, backend-engineer (test-only change).
 
 ### [OBSERVATION — no action required, for the security reviewer] BI1's 5xx body names internal environment variables
 - With `STORAGE_PROVIDER=s3` and the bucket/region unset, `POST /api/v1/uploads/avatar` returns
@@ -88,6 +233,31 @@ Tests:       7 failed, 118 passed, 125 total
   `src/uploads/*` and `src/mail/*`; no failing test is in either area.
 - **BI2's new regression guard `test/legacy-media-serving.e2e-spec.ts` PASSES.**
 - **Status**: Confirmed pre-existing — flagged to the analytics/admin/disputes owner, not a gate here.
+
+#### RE-CONFIRMED (QA pass 2) — same 7 failures, same 2 suites; the *total* moved and here is why
+Re-run twice on the current tree (several commits have landed since pass 1):
+
+```
+Test Suites: 2 failed, 8 passed, 10 total
+Tests:       7 failed, 126 passed, 133 total          ← pass 1 was 7 failed / 118 passed / 125 total
+```
+
+- **The 7 failing test names are byte-for-byte the pass-1 set**, extracted from the full log rather than a
+  summary line: analytics — `GET /admin/analytics returns the platform rollup for an admin`, `AP4`, `AN3`,
+  `AT3`; messaging — `AD2`, `PD4`, `PR3`. Same two suites. Same `syntax error at or near "."` analytics
+  rollup cause in the boot log.
+- **The +8 total is fully accounted for and is a *good* change**: `test/legacy-media-serving.e2e-spec.ts` grew
+  **6 → 14 tests** in `350dc0b` (the KYC hardening). `git show aac19e0:test/legacy-media-serving.e2e-spec.ts
+  | grep -c "^\s*it("` → 6; current → 14; 125 + 8 = 133. **All 14 pass.** No other suite changed size.
+- **One extra failure appeared in the first of the two runs and is a flake, not a regression** — the
+  `booking-concurrency` A4 status-pair assertion, filed as its own minor item above (4 of 5 runs pass; the
+  invariant it guards never broke).
+- Unit suite also moved and is green: **363/363 in 40 suites** (pass 1: 319/319 in 37). The three new suites
+  all arrived with `350dc0b`, the KYC hardening: `src/uploads/kyc-media.service.spec.ts`,
+  `src/uploads/upload-folders.spec.ts`, `src/uploads/legacy-media.config.spec.ts` (`git log -1 --` on each
+  confirms the commit). Nothing was removed.
+- **Status**: Baseline confirmed unchanged at 7 failures in the same two suites. Still the analytics/admin/
+  disputes owner's, still not a gate here.
 
 ---
 
@@ -126,7 +296,24 @@ Tests:       7 failed, 118 passed, 125 total
   Verified on `rm -rf .next && npm run build && next start` (port 4310 — something already holds 4200 in this
   environment): `/` now emits `og:image`, `og:image:width/height/alt/type` and `twitter:image`, and the same
   full set is still present on `/about`, `/terms`, `/privacy`, `/contact`, `/login`, `/signup`.
-- **Status**: Open
+- **RE-VERIFIED (QA pass 2)**: **fixed.** Re-ran my own pass-1 repro against a from-scratch production build
+  (`rm -rf .next && npm run build && npx next start`), curling the served HTML rather than reading source:
+
+  | page | `og:image` | `twitter:image` | w×h | `og:image:alt` |
+  |---|---|---|---|---|
+  | **`/`** | **present** | **present** | 1200×630 | yes |
+  | `/about` | present | present | 1200×630 | yes |
+  | `/contact` | present | present | 1200×630 | yes |
+  | `/terms` | present | present | 1200×630 | yes |
+  | `/privacy` | present | present | 1200×630 | yes |
+  | `/login` | present | present | 1200×630 | yes |
+  | `/signup` | present | present | 1200×630 | yes |
+
+  `/`'s `<title>` is `Find verified artisans — book, pay and rate in one place · JinVa` (the template suffix
+  the fix note predicted), and `GET /opengraph-image` still returns `200 image/png`. `rg "openGraph|twitter:"
+  src/app/\(public\)/page.tsx` → no matches, i.e. the replacing block is genuinely gone rather than patched
+  with an `images` key.
+- **Status**: **Verified fixed** (LP11 image half).
 
 ### [MAJOR] `metadataBase` is unset, so every OG/Twitter image URL resolves to `http://localhost:3000`
 - **Repro**:
@@ -161,7 +348,24 @@ Tests:       7 failed, 118 passed, 125 total
   written) produced `og:image content="https://og-wiring-check.invalid/opengraph-image?…"` on both
   `/` and `/about`. Note this is a `NEXT_PUBLIC_*` value, so it is **inlined at build time** — changing it
   requires a rebuild, not just a restart. Worth knowing for the deploy pipeline.
-- **Status**: Open
+- **RE-VERIFIED (QA pass 2)**: **fixed, with one caveat that belongs to the operator, not the code.**
+  1. `grep -ci "metadataBase.*is not set" rv-fe-build.log` on a clean `rm -rf .next && npm run build` →
+     **0 occurrences** (pass 1: 3). The build's only remaining output is the 5 pre-existing lint warnings.
+  2. `rg -n "metadataBase" src/` now matches `src/app/layout.tsx:49` — `metadataBase: new URL(SITE_URL)`,
+     `SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:4200"`, with the variable documented in
+     a comment block at the point of use. I did **not** open any `.env` to check whether the variable is set
+     anywhere; I only observed what the built HTML emits.
+  3. Rendered value in this environment: `og:image content="http://localhost:4200/opengraph-image?84c56…"` on
+     **all seven** public pages — i.e. the documented fallback, which tells me `NEXT_PUBLIC_SITE_URL` is not
+     set here. The value now comes from the app's own configuration rather than from whichever port ran the
+     build (my build ran on neither 4200 nor 3000, and the emitted host was still 4200 — that is the proof
+     that it is configuration-driven now).
+  4. **Caveat for release, not a code bug**: until an operator sets `NEXT_PUBLIC_SITE_URL` in the deployed
+     environment, unfurls will still point at `localhost:4200`. QA cannot close that half — please confirm it
+     is set in the deploy pipeline. Since it is a `NEXT_PUBLIC_*` value it is **inlined at build time**, so it
+     must be present *when the image is built*, not merely at runtime.
+- **Status**: **Verified fixed** in code (LP11). Operator action outstanding: set `NEXT_PUBLIC_SITE_URL` at
+  build time in each deployed environment.
 
 ### [MAJOR] Avatar URLs bypass `resolveMediaUrl()`, so legacy relative `/uploads/...` avatars are fetched from the frontend origin and 404
 - **Repro**:
@@ -214,7 +418,36 @@ Tests:       7 failed, 118 passed, 125 total
   asset, not backend media, and resolving it would point it at the API origin and break it.
   `admin/verifications/page.tsx`'s document/selfie tiles are untouched, pending the authenticated endpoint the
   security report's HIGH finding calls for.
-- **Status**: Open
+- **RE-VERIFIED (QA pass 2)**: **fixed**, and I re-tested it the way the wider fix demands — **a brand-new
+  Chrome profile directory** (created for this pass, never reused, so no `v3`-keyed sessionStorage could be
+  carrying an old resolved value), production build, all three roles, **33 dashboard screens**.
+
+  | role | screens | requests for `/uploads/…` hitting the **frontend** origin | `/uploads/…` images rendered | broken |
+  |---|---|---|---|---|
+  | artisan (`yaw.osei`) | 12 | **0** | 4 | 0 |
+  | customer (`ama.mensah`) | 9 | **0** | 28 | 0 |
+  | admin (`admin@jinva.com`) | 12 | **0** | 19 | 0 |
+
+  - **My original repro page passes.** `/dashboard/artisan/messages` (which, as the fix note correctly points
+    out, was not one of the six files I listed) now requests
+    `http://localhost:8000/uploads/avatars/91964fab-….jpg` — **port 8000, the API origin** — and the `<img>`
+    decodes at **200×200**. Pass 1's signature (`http://localhost:4200/uploads/…` → 404) does not occur once
+    in 33 page loads.
+  - **The source-side value is resolved too.** After login the `jinva:user:v4` cache entry reads
+    `"avatar":"http://localhost:8000/uploads/profiles/yaw-osei.jpg"` — absolute, API origin. (That file does
+    not exist, which is the seed item above, not this one. The *resolution* is what this item is about and it
+    is correct.)
+  - **Precision correction to the fix note, not a defect**: the note says v3 was "added to the cleanup list".
+    I planted `sessionStorage["jinva:user:v3"]` before each login; after a successful login **both `v3` and
+    `v4` are present** — `clearCache()` (which does the removal) only runs on logout / auth failure, not on a
+    successful fetch. This has **zero impact**: nothing reads `v3` any more, so a stale entry cannot be
+    served. The fix's effective mechanism is the key rename, not the cleanup. Worth recording so nobody
+    relies on the cleanup claim later. (Verified the other direction too: after a real logout, cookies are
+    cleared and the cache is emptied.)
+  - Sweep also confirmed, on the same 33 screens: **zero raw `$` amounts** anywhere (GH₵ counts non-zero on
+    every money screen — artisan earnings 8, admin transactions 24, user report 7), and **no console errors**
+    beyond the two known pre-existing ones (`_vercel/insights` 404 and the 401-then-refresh round-trip).
+- **Status**: **Verified fixed.**
 
 ### [MINOR] The public 404 has no `<h1>`, so the document's heading order starts at `<h2>`
 - **Repro**: open `/this-does-not-exist` and run
@@ -241,7 +474,17 @@ Tests:       7 failed, 118 passed, 125 total
 - **Note**: everything else about this page is correct — it returns a real **HTTP 404**, renders the shared
   header and footer, is not a raw Next.js error page, and **all five of its links work** (I clicked each:
   `Back to home`→`/`, `About`→`/about`, `FAQ`→`/#faq`, `Contact`→`/contact`, `Log in`→`/login`).
-- **Status**: Open
+- **RE-VERIFIED (QA pass 2)**: **fixed.** Re-ran my exact pass-1 repro in the browser on
+  `/this-does-not-exist`:
+  - `[...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(h=>h.tagName+': '+h.innerText)` →
+    `["H1: We couldn’t find that page", "H2: Product", "H2: Company", "H2: Support", "H2: Legal"]` — the
+    outline now starts at `h1` and descends without skipping. `document.querySelectorAll('h1').length === 1`.
+  - `document.title` → **`Page not found · JinVa`** (pass 1: the generic default).
+  - HTTP status still a real **404**; exactly **one** `robots` meta (no duplicate, as the note claims).
+  - The h1's computed style is `font-size: 18px; font-weight: 500` — identical type to the `EmptyTitle` div it
+    replaced, so the claim of a pixel-identical render holds.
+  - All five links still present with the same hrefs (`/`, `/about`, `/#faq`, `/contact`, `/login`).
+- **Status**: **Verified fixed** (LP10).
 
 ### [MINOR] `_vercel/insights/script.js` 404s on every public page, so LP2's "no console error" is literally not met
 - **Repro**: open `/` with a clean profile and read the console →
@@ -291,6 +534,13 @@ Tests:       7 failed, 118 passed, 125 total
   another artisan attribute, which is the opposite of the point. `hero.tsx`'s header comment, which previously
   argued the number needed no label, is updated to record the decision and to say the badge must be removed if
   the card is ever wired to a real artisan record.
+- **RE-VERIFIED (QA pass 2)**: **fixed as decided.** On `/` in the browser, the mock card's own text now reads
+  `Sample content | Kwame Asante | Plumbing · Accra | Verified | 4.8 | (37)` — the marker is **inside the
+  card**, first in reading order, above the avatar row and not adjacent to the "Verified" pill. It is a
+  `[data-slot="badge"]` containing an `svg` (the `Info` icon), i.e. structurally the same treatment as the
+  testimonials marker; the page now carries exactly **two** "Sample content" badges (hero + testimonials).
+  Numbers and the name are unchanged, as claimed. Screenshot retained (`rv/hero-card.png`).
+- **Status**: **Verified fixed** (LP8, per the recorded decision).
 
 ### [MINOR] `formatCurrency()` has no fixed fraction digits, so amounts render with inconsistent decimals
 - **Repro**: log in as `admin@jinva.com`, open `/dashboard/admin/transactions`. In one table:
@@ -359,7 +609,130 @@ with colours resolved via canvas (the tokens compute to `oklab()`):
   `document.querySelector('#role')` now resolves and clicking either label opens its own dropdown.
   Incidental benefit for your harness: the two triggers are no longer distinguishable only by DOM order, so a
   future LP13 re-test can target `#role` directly.
-- **Status**: Open
+- **RE-VERIFIED (QA pass 2)**: **fixed**, tested by real clicks on the label text, not by reading attributes.
+  - `document.querySelector('#gender')` and `#role` both resolve, both to a `BUTTON` (Radix forwards the id to
+    the trigger, as claimed).
+  - Real mouse click on the **"Role"** label → `#role[aria-expanded]` flips to `true`, a `[role="listbox"]`
+    opens, and its options are exactly `["Customer", "Artisan"]` (no ADMIN — PRD §5.1 still holds).
+    `#gender` stays `aria-expanded="false"`, i.e. the right control opened.
+  - Real mouse click on the **"Gender"** label → `#gender` expands with `["Male", "Female", "Other"]`, and
+    `#role` stays collapsed.
+  - Every one of the 9 labels on the form now points at a control that exists.
+  - **LP13 regression re-run while I was there** (this file was the LP13 file): `?role=ARTISAN` → "Artisan",
+    `?role=CUSTOMER` → "Customer", `?role=ADMIN` → "Select role", no query → "Select role". Zero console errors.
+- **Status**: **Verified fixed.**
+
+### [VERIFIED FIXED — NEW in pass 2] Admin KYC media now loads through the authenticated endpoint (backend `350dc0b` + frontend `287ebe8`)
+This landed after pass 1 was written, so it had no item of its own — only the backend-engineer's heads-up at
+the bottom of this report. Tested end to end in pass 2, both halves.
+
+**(a) The tiles genuinely render for an admin.** Admin → Verifications → open each of the 5 records:
+
+| record | tiles | rendered from | pixels |
+|---|---|---|---|
+| #8 `UNDER_REVIEW` Efua | front, back, selfie | `blob:` object URL | 1024×1024 each |
+| #9 `PENDING` (profile #14) | front, selfie | `blob:` object URL | 1024×1024 each |
+| #6 / #7 / #10 | all tiles | — | "This file is no longer available.", **no Retry offered** (contract says 404 is not retryable) — those are the seeded rows with no file behind them, filed as its own minor above |
+
+- Every byte came from `GET /api/v1/uploads/kyc/{folder}/{file}` returning `200`. **Zero requests to
+  `/uploads/documents/…` or `/uploads/selfies/…` across all five records** — the old public path is not being
+  hit anywhere, by anything.
+- Opening the full-size lightbox **re-uses the already-fetched blob**: KYC request count before opening = 4,
+  after = 4. So a second admin-audited read is not triggered for the same object, as the fix note claims.
+- `Escape` closes the lightbox and leaves the review dialog open (the capture-phase handler works).
+- Screenshot: `rv/kyc-dialog.png`, `rv/kyc-lightbox.png`.
+
+**(b) A non-admin is refused, tested by attempting it.** Real bearer tokens, real requests:
+
+| caller | result |
+|---|---|
+| anonymous (no header) | **401** `Unauthorized` |
+| `ama.mensah@gmail.com` (CUSTOMER) | **403** `Access denied. Required role(s): ADMIN.` |
+| `yaw.osei@jinva.com` (ARTISAN) | **403** same |
+| `admin@jinva.com` (ADMIN) | **200**, `image/jpeg`, 123 363 B, real JPEG magic bytes |
+
+Also confirmed from inside the browser: navigating a logged-in tab straight to
+`http://localhost:8000/api/v1/uploads/kyc/documents/efua-ghana-card-front.jpg` renders the **401** JSON
+envelope — an `<img>`/address-bar request carries no `Authorization` header, which is the whole point.
+Response headers on the 200 are exactly as contracted: `Cache-Control: private, no-store`,
+`X-Content-Type-Options: nosniff`, `Content-Disposition: inline; filename="…"`, raw bytes (not the JSON
+envelope). Path validation: `avatars/…` and `portfolio/…` → **400** (`Unknown KYC media folder`),
+`documents/.env` → **400** (`Invalid KYC media filename`), `documents/..%2f..%2fpackage.json` → **400**,
+a well-formed but absent filename → **404** with the same message as a wrong-folder object, so existence is
+never confirmed. *(One expectation of mine was wrong, not the code: raw `documents/../../package.json` is
+path-normalised by Express **before** routing, so it becomes `GET /api/v1/uploads/package.json` → 404
+`Cannot GET`, not a 400. Nothing traverses, nothing leaks.)*
+
+**(c) The old direct path truly 404s, in the storage mode actually running here** (default local provider —
+confirmed by the upload endpoint returning relative `/uploads/...` URLs):
+
+- `GET /uploads/documents/efua-ghana-card-front.jpg` → **404**, **even though that exact file is sitting on
+  disk** (`ls uploads/documents/` lists it at 123 363 B). Same for `efua-selfie.jpg`, also on disk. A
+  non-existent path (`/uploads/selfies/anything.jpg`) and the bare directory (`/uploads/documents/`) also 404,
+  so the two cases are indistinguishable from outside — which is the point.
+- **And still 404 when sent with a valid admin bearer token** — there is no back door through the static
+  mount; the guarded endpoint is the only door.
+- The five public folders are untouched: `avatars`, `portfolio`, `reviews`, `messages`, `job-attachments` all
+  still serve `200` anonymously with `Cache-Control: public, max-age=31536000, immutable`.
+
+**(d) The PDF branch — no longer untested.** Every seeded reference is a `.jpg`, so I created a real one
+through the app's own API rather than reporting the path as unverified: artisan `adwoa.ansah@jinva.com`
+(previously REJECTED, so re-submission is allowed) `POST /uploads/document` with a 593-byte valid
+`%PDF-1.4` file → `200`, stored as `/uploads/documents/25e6a10c-….pdf`; `POST /uploads/selfie` → stored in
+`/uploads/selfies/` (**the first object ever written to that folder** — see the seed minor above);
+`POST /verification` → `201`, record **#11 PENDING**. Then as admin:
+
+- `GET /uploads/kyc/documents/25e6a10c-….pdf` → `200`, **`Content-Type: application/pdf`**, 593 B, `%PDF-`
+  magic bytes. `GET /uploads/kyc/selfies/b4c5127b-….jpg` → `200 image/jpeg` — the `selfies` folder branch
+  works.
+- In the UI, the front tile renders the **labelled "PDF document" file affordance** (no `<img>`, no broken
+  image icon) and stays clickable with `aria-label="Open Ghana Card — front full size"`; the selfie tile next
+  to it renders as an image at 1024×1024.
+- Clicking the PDF tile opens the lightbox with an **`<iframe src="blob:…">`** at 768×840, and Chrome's PDF
+  viewer renders page 1/1 with the fixture's text visible. Screenshots: `rv/kyc-pdf-dialog.png`,
+  `rv/kyc-pdf-lightbox.png`.
+- **Status**: **Verified fixed / verified working**, including the PDF and `selfies` branches that had never
+  been exercised. One defect surfaced while doing it — the z-index item immediately below.
+
+### [MINOR — NEW in pass 2] The full-size KYC lightbox paints *behind* the review dialog, so the enlarged document is half-covered
+- **Repro**:
+  1. Log in as `admin@jinva.com` → `/dashboard/admin/verifications`.
+  2. Open the review dialog for a record whose files exist (#8 Efua or #9, profile #14).
+  3. Click any document tile ("Tap any document to open it full-size").
+  4. The lightbox opens **underneath the review dialog**. The document is there and correct — the middle
+     ~55% of it is simply covered by the dialog panel.
+- **Expected**: clicking a tile shows the document full-size, unobstructed. That is the entire purpose of the
+  affordance, and the instruction on screen says so.
+- **Actual**, measured rather than eyeballed, with the lightbox open:
+  ```
+  lightbox z-index: 50      dialog-content z-index: 50      dialog-overlay z-index: 50
+  DOM order:                lightbox BEFORE dialog
+  document.elementFromPoint(viewport centre)        → DIV.grid grid-cols-2 gap-3 text-sm  (inside the DIALOG)
+  document.elementFromPoint(centre of the lightbox image) → the same dialog DIV
+  lightbox <img>: 1024×1024 natural, 768×768 on screen, src = blob:…  (it IS rendered, just covered)
+  ```
+  Equal `z-index: 50` on both layers, so paint order falls back to DOM order — and Radix portals
+  `DialogContent` to the **end of `<body>`**, while the lightbox is rendered inline in the page tree. The
+  later element wins. Screenshots make it unambiguous: `rv/kyc-lightbox.png` (image) and
+  `rv/kyc-pdf-lightbox.png` (PDF, where the viewer's toolbar is visible above the dialog and the page area is
+  covered).
+- **Pre-existence confirmed independently** (the frontend-engineer's claim checked, not taken):
+  `git show 287ebe8^:…/admin/verifications/page.tsx` renders `<Lightbox>` at the **same place** — a sibling
+  after `</Dialog>`, lines 739–743 — and `git log --oneline -- src/components/ui/lightbox.tsx` shows one
+  commit, `ab2f7c1`, which predates this round. `287ebe8` changed only what goes *inside* the lightbox. So the
+  defect is **pre-existing and out of this round's scope**; it was invisible before only because the tiles it
+  enlarged were themselves broken (`<img src>` on a now-404 path), so nobody got as far as looking at the
+  enlargement.
+- **Impact**: an admin cannot examine an ID document at full size — the one thing this screen exists for.
+  Worth prioritising despite being out of scope. Workaround while it is open: the tile thumbnails are
+  legible-ish at 1024×1024 natural resolution but displayed tiny.
+- **Likely location**: `jinva-frontend-web/src/components/ui/lightbox.tsx:60` (`z-50` on the overlay root) or
+  the call site in `src/app/dashboard/admin/verifications/page.tsx:754`. Raising the lightbox above Radix's
+  layer (e.g. `z-[60]`) fixes the paint order; note the shared `Lightbox` is used by four callers
+  (portfolio gallery, review photos, message images, this screen), so a blanket bump should be checked against
+  the admin dispute conversation viewer, which opens it from **inside** a Sheet.
+- **Status**: Open — new, frontend-engineer. **Pre-existing / out-of-scope for this round**, same treatment as
+  the other pre-existing findings here.
 
 ### [OBSERVATION] Every authenticated page load burns a 401 round-trip before refreshing
 - On each dashboard navigation the pattern is: preflight `204` → data requests `401` → `POST /auth/refresh-token`
@@ -369,7 +742,21 @@ with colours resolved via canvas (the tokens compute to `oklab()`):
 - Functionally correct — the refresh path in `lib/api.ts` does its job and the user sees nothing. Noted
   because it triples the request count on every page and fills the console and the backend error log with
   noise that masks real 401s. Out of this round's scope; no criterion covers it.
+- **Pass 2**: unchanged — reproduces on **every one of the 33 dashboard screens** swept, for all three roles.
+  It is the sole source of console noise on authenticated pages, and it is now the thing most likely to hide a
+  real 401 during the next round's QA. Still informational, still nobody's item this round.
 - **Status**: Informational
+
+### [OBSERVATION — NEW in pass 2] The dev database is accumulating e2e fixture users: 239 of 254
+- `GET /admin/users` (paginated, as admin) reports **254 users, of which 239 are `*@test.jinva.local`** —
+  `a4-customer-a-…`, `cron-artisan-…` and friends, created by `booking-concurrency` and `cron-idempotency`
+  on every e2e run and never cleaned up. 12 are the seeded accounts; the rest are real signups.
+- Nothing is broken by it, and no criterion covers it, but it has two side effects worth knowing: the admin
+  **Clients** screen renders a 13.5 KB wall of test users (I saw it in the sweep), and `/admin/users`
+  pagination now reports **127 pages** at `limit=2`. Any future "does this list look right" check will be
+  fighting it. A cleanup in the specs' `afterAll`, or a periodic `seed:force`, would fix it — the latter
+  needs the seed crash fixed first.
+- **Status**: Informational — backend-engineer's call whether to act.
 
 ---
 
@@ -524,6 +911,11 @@ avatar-origin bug filed above, which is a frontend URL-resolution defect, not a 
 contain **0 files** in this environment, so no historical document exists to load. The code path
 (`admin/verifications/page.tsx`) does use `resolveMediaUrl()`, so it is expected to behave like portfolio.
 
+> **Pass-2 update:** this caveat is now discharged, and the expectation in its last sentence is deliberately
+> obsolete. KYC media no longer goes through `resolveMediaUrl()` at all; both folders were exercised for real
+> in pass 2 (5 fixture files in `documents/`, plus the first-ever object in `selfies/` from a live submission).
+> See "[VERIFIED FIXED — NEW in pass 2] Admin KYC media …" in the frontend section.
+
 > **Heads-up for the next QA pass — backend-engineer, 2026-08-27 (commit `350dc0b`).** This expectation is now
 > **deliberately false**, so please don't file the change as a BI2 regression. Fixing the security round's HIGH
 > finding means `documents`/`selfies` are no longer served by the `/uploads` static mount in *any* mode:
@@ -538,6 +930,33 @@ contain **0 files** in this environment, so no historical document exists to loa
 > To reproduce the backend half without a real submission: drop any PNG into `uploads/documents/` and hit the
 > endpoint with an admin token (401 anonymous, 403 as artisan/customer, 200 as admin).
 
+**Pass-2 regression pass on adjacent features** (the avatar fix touched 33 call sites in 31 files, so the
+blast radius is the whole authenticated app — this is the sweep that covers it):
+
+- **33 dashboard screens across all three roles** loaded on a production build with a fresh browser profile.
+  Every screen rendered its own `h1`, no blank sections, no stuck spinners, no unhandled errors. Full
+  per-screen output (images, origins, GH₵/`$` counts, console) retained.
+- **Role boundaries, re-attempted not re-read**: artisan → 5 forbidden paths, all bounce to
+  `/dashboard/artisan`; customer → 4, all bounce to `/dashboard/user`; admin → 2, both bounce to
+  `/dashboard/admin`. Admin-only KYC bytes refused for both non-admin roles at the API (403) as well as at the
+  route level.
+- **Auth session, end to end, per role**: login through the real form → `jinva_session` + `refresh_token` both
+  `httpOnly`, `SameSite=Lax`, `Path=/`; access token **not** in a readable cookie and the refresh token
+  **not** in the JSON body; the in-tab `jinva:user:v4` cache is written; **logout via the real user menu**
+  ("Profile / Settings / Log out") clears **all** cookies, and a protected route then redirects to
+  `/login?redirect=%2Fdashboard%2F…` with the param preserved. **Verified separately for all three roles**;
+  on the artisan run I also confirmed `sessionStorage` comes back **completely empty** after logout (so
+  `clearCache()` does run on that path — it is only a *successful login* that leaves a stale `v3` key alone,
+  which is harmless).
+- **Money**: GH₵ present and no raw `$` on every money-bearing screen (artisan earnings, artisan/admin
+  analytics, admin transactions ×24 amounts, user report, admin disputes). Decimal inconsistency is the
+  separate deferred ticket, untouched here.
+- **Paginated list shapes**: `/admin/verifications`, `/admin/reviews`, `/payments/admin/all` and `/admin/users`
+  all answer `data: [...]` + `meta.pagination {total,page,limit,totalPages}`; `/verification` the same. Each
+  backing screen rendered its rows (admin verifications 5–6 rows, transactions 10 avatars, orders 6). No
+  shape mismatch seen this pass.
+- **`_vercel/insights` 404** still the only console error on public pages (unchanged, deferred by decision).
+
 **Standard checks**
 
 | Check | Result |
@@ -550,6 +969,28 @@ contain **0 files** in this environment, so no historical document exists to loa
 | BE `npm run test` | **319/319 pass, 37 suites** |
 | BE `npm run test:e2e` | 118/125; **7 failures = the documented pre-existing baseline, confirmed** |
 
+**Standard checks — QA pass 2, re-run in full on the current tree**
+
+| Check | Result | vs pass 1 |
+|---|---|---|
+| FE `npm run check:colors` | pass — **243** files, 0 hardcoded palette classes or hex literals, 4 allowlisted | +1 file (`components/admin/kyc-media.tsx`), still clean |
+| FE `npm run lint` | **0 errors**, 5 warnings | identical set, all pre-existing |
+| FE `npm run build` | pass (after `rm -rf .next`) — `/` still `○` prerendered static; **0 `metadataBase` warnings** | was 3 `metadataBase` warnings |
+| BE `npm run lint` | **0 errors**, 25 warnings | unchanged |
+| BE `npm run build` | pass | unchanged |
+| BE `npm run test` | **363/363 pass, 40 suites** | +44 tests, +3 suites, all green |
+| BE `npm run test:e2e` | 126/133; **the same 7 failures in the same 2 suites** | +8 tests (all pass), baseline unchanged |
+| BE `npm run seed` / `seed:force` | **CRASHES** — `Entity metadata for Review#photos was not found` | not run in pass 1; new major above |
+
+> **Two process notes from pass 2, neither a code defect.**
+> 1. `npm run lint` in the backend is `eslint --fix`, so it **rewrites files in place**. On Windows it left
+>    three files (`seed.ts`, `main.ts`, `app.e2e-spec.ts`) showing as modified in `git status` with an
+>    **empty `git diff`** — line-ending churn only. I restored them with `git checkout --` so the tree is
+>    clean; worth knowing before anyone chases a phantom diff after a lint run.
+> 2. The backend's CORS allow-list admits only `localhost:3000` and `localhost:4200`. A browser pass served
+>    from any other port fails every login with a CORS error that looks exactly like broken auth. See the
+>    pass-2 header.
+
 > **Build note, not a bug:** my first `npm run build` failed with
 > `EINVAL: invalid argument, readlink '.next/postcss.js.map'`. That was a stale `.next` left by a dev
 > server running concurrently on port 4200. `rm -rf .next` then `npm run build` succeeds every time. Not a
@@ -557,7 +998,69 @@ contain **0 files** in this environment, so no historical document exists to loa
 
 ---
 
-## Summary
+## Summary — QA pass 2 (re-verification), 2026-08-27
+
+### Every item that carried a fix note, re-tested
+
+| # | Item | Owner | Pass-2 verdict |
+|---|---|---|---|
+| 1 | `/` has no `og:image` (MAJOR, LP11) | frontend | **Verified fixed** — all 7 public pages emit `og:image` + `twitter:image` 1200×630 with alt |
+| 2 | `metadataBase` unset (MAJOR, LP11) | frontend | **Verified fixed** in code — 0 build warnings (was 3), value now config-driven. Operator must set `NEXT_PUBLIC_SITE_URL` **at build time** |
+| 3 | Avatar URLs bypass `resolveMediaUrl()` (MAJOR) | frontend | **Verified fixed** — 33 screens, 3 roles, fresh profile: **0** `/uploads/` requests to the frontend origin, 51 media images decoded, 0 broken |
+| 4 | Public 404 has no `<h1>` (MINOR, LP10) | frontend | **Verified fixed** — outline `h1 → h2×4`, `<title> Page not found · JinVa`, still a real 404, 1 robots tag |
+| 5 | Hero's unlabelled 4.8/37 (MINOR, LP8) | frontend | **Verified fixed** per the recorded decision — "Sample content" badge + `Info` icon inside the card |
+| 6 | Signup label `htmlFor` ids (MINOR) | frontend | **Verified fixed** — real clicks on both labels open the *correct* dropdown; LP13 prefill still green |
+| 7 | Seeded `profile_picture` 404s (MINOR) | backend | **Fixed at source · still failing at runtime** — the DB still holds 8 stale `/uploads/profiles/…` values and the prescribed `seed:force` **crashes** (new major #8) |
+| 8 | KYC media via the authenticated endpoint (landed post-pass-1) | backend + frontend | **Verified working** — admin tiles render from `blob:` at 1024×1024; 401 anon / 403 customer / 403 artisan / 200 admin; old public path 404s even with an admin token; **PDF and `selfies` branches now exercised for the first time** |
+
+### New in pass 2
+
+| Severity | Item | Owner | Scope |
+|---|---|---|---|
+| **MAJOR** | `npm run seed` / `seed:force` crash: `Entity metadata for Review#photos was not found` | backend | **pre-existing** (since `2e7df42`), zero product-runtime impact, but blocks item 7's runtime verification and blocks any fresh environment |
+| MINOR | Seeded verification rows reference 13 KYC files the seed never writes (8 of 13 → 404); seeded selfies stored under `documents/` | backend | pre-existing, dev-data only |
+| MINOR | Full-size KYC lightbox paints **behind** the review dialog (both `z-50`, Radix portal DOM order) | frontend | **pre-existing** — confirmed against `287ebe8^`; only the lightbox's *contents* changed this round |
+| MINOR | `booking-concurrency` A4 e2e pins `[201, 409]`, intermittently gets `[201, 400]` (1 fail / 5 runs) | backend | pre-existing test defect; the invariant it guards never broke |
+| — | Dev DB accumulating e2e fixture users (239 of 254) | backend | informational |
+
+Untouched by request, exactly as instructed: DT2's two sub-AA colour tokens (**Closed — accepted**),
+`formatCurrency()` decimals (pre-existing, separate ticket), `_vercel/insights` console 404 (pre-existing).
+
+### Release readiness
+
+**This round's own scope is release-ready: zero open blockers and zero open majors attributable to it.**
+All six frontend fix items are verified fixed by re-running my own repros, and the KYC media path — the one
+piece of new behaviour that landed after pass 1 — is verified on all four axes I was asked to check, including
+the PDF branch that had never been exercised by any stored reference.
+
+**One open major stands outside that scope and should not be swept up in the verdict silently: the seed
+crash.** Applying the "zero open blocker/major" bar literally, it is the single item between this report and a
+clean sheet. My reading: it does not gate *shipping* this round (seeds never run in a deployed environment,
+and nothing in the product path depends on them), but it does gate two things that matter right now — the
+final closure of item 7, and any developer or QA pass starting from a fresh database. It is a small, contained
+fix (point the seed's `DataSource` at the app's entity glob instead of a hand-maintained array). **Recommend:
+ship the round, fix the seed immediately after, then item 7 closes on the next `seed:force`.**
+
+**Open minors: 6** (none blocking):
+1. `_vercel/insights` console 404 — pre-existing, deferred by decision.
+2. `formatCurrency()` decimal inconsistency — pre-existing, separate ticket.
+3. Seeded `profile_picture` values still 404 in this DB — code fixed, runtime blocked on the seed crash.
+4. Seeded verification rows reference 13 KYC files that are never written — new, dev-data only.
+5. `booking-concurrency` A4 status-pair flake — new, test-only.
+6. **KYC lightbox paints behind the review dialog** — new, pre-existing, and the one I would pull forward
+   despite being out of scope: an admin currently cannot view an identity document full-size, which is the
+   entire purpose of the screen this round just rewired.
+
+(DT2's two sub-AA tokens remain **Closed — accepted**, not counted. The e2e fixture-user build-up is
+informational, not counted.)
+
+Still not closeable by QA alone, unchanged from pass 1: **BI1/BI2's live S3 cutover** and **BI4's
+`MAIL_PROVIDER=resend`** (user action — code paths verified ready), plus the new **`NEXT_PUBLIC_SITE_URL`**
+build-time variable, which must be set in each deployed environment before any link preview resolves.
+
+---
+
+## Summary — QA pass 1 (superseded by the table above; kept for the audit trail)
 
 - **Open blockers: 0**
 - **Open majors: 3** — all frontend:
@@ -583,6 +1086,16 @@ Of the criteria QA can't close alone: **BI1/BI2's live cutover** (real AWS value
 `MAIL_PROVIDER=resend`** remain the user's action — the code paths are verified ready. **DT1's two sub-AA
 pre-existing tokens** and **LP8's hero-number ruling** need the ux-designer/PM.
 
-<!-- Engineers: append fix notes under the relevant item. I will re-run the specific repro above and mark each
-     "Verified fixed" or "Still failing" with fresh evidence — including a fresh `npm run build` for the two
-     metadata items, since both are only observable in built output. -->
+<!-- Pass 2 is complete: every item that carried a fix note has a RE-VERIFIED block with fresh evidence.
+     Five items remain open and need a fix note appended under them, after which I will re-run only those:
+       backend  — [MAJOR] seed crash (Review#photos); seeded KYC document refs; A4 e2e status-pair flake
+       frontend — [MINOR] KYC lightbox z-index vs the review dialog
+       (item 7, seeded profile_picture, needs no code change — it re-verifies itself once the seed runs)
+     Re-test notes for whoever picks these up:
+       * serve the frontend on port 3000 or 4200, or every login fails on CORS;
+       * for the seed fix I will run `npm run seed:force` and then re-check `GET /admin/users` for null
+         profilePicture plus a browser pass for zero `/uploads/profiles/` requests;
+       * for the z-index fix I will re-measure `document.elementFromPoint()` at the centre of the lightbox
+         image with the review dialog open, and re-check the other three Lightbox callers (portfolio gallery,
+         review photos, message images) plus the admin dispute conversation viewer, which opens it inside a
+         Sheet. -->

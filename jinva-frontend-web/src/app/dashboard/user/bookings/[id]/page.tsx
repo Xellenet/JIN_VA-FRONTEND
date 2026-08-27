@@ -30,7 +30,7 @@ import {
   AlertOctagon,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { getBookingStatusConfig } from "@/lib/status-badges"
 import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
@@ -250,7 +250,7 @@ export default function BookingDetailPage() {
               <CardContent className="p-5">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-14 w-14">
-                    <AvatarImage src={booking.artisanProfile?.user?.profilePicture || naviiAvatar(artisanName)} />
+                    <AvatarImage src={resolveAvatarUrl(booking.artisanProfile?.user?.profilePicture, artisanName)} />
                     <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                   <div>

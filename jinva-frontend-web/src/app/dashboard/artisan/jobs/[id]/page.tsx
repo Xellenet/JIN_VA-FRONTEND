@@ -31,7 +31,7 @@ import {
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dashboard/job-status-timeline"
 import { AttachmentGallery, type JobAttachment } from "@/components/dashboard/attachment-gallery"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
@@ -417,7 +417,7 @@ export default function ArtisanJobDetailPage() {
                 {job.customer ? (
                   <div className="flex items-start gap-3">
                     <Avatar className="h-11 w-11 shrink-0">
-                      <AvatarImage src={job.customer.profilePicture || naviiAvatar(clientName)} />
+                      <AvatarImage src={resolveAvatarUrl(job.customer.profilePicture, clientName)} />
                       <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 space-y-0.5">

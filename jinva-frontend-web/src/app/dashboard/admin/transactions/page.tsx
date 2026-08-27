@@ -49,7 +49,7 @@ import {
   Eye,
   Loader2,
 } from "lucide-react"
-import { naviiAvatar, cn, formatCurrency } from "@/lib/utils"
+import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { getPaymentStatusConfig, paymentStatusConfig } from "@/lib/status-badges"
@@ -337,7 +337,7 @@ export default function TransactionsPage() {
                             <TableCell>
                               <div className="flex items-center gap-1.5">
                                 <Avatar className="h-6 w-6 shrink-0">
-                                  <AvatarImage src={p.customer?.profilePicture || naviiAvatar(customerName, 24)} />
+                                  <AvatarImage src={resolveAvatarUrl(p.customer?.profilePicture, customerName, 24)} />
                                   <AvatarFallback className="text-xs">{customerName[0]}</AvatarFallback>
                                 </Avatar>
                                 <span className="text-sm text-foreground">{customerName}</span>
@@ -403,7 +403,7 @@ export default function TransactionsPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-1.5">
                             <Avatar className="h-6 w-6 shrink-0">
-                              <AvatarImage src={p.customer?.profilePicture || naviiAvatar(customerName, 24)} />
+                              <AvatarImage src={resolveAvatarUrl(p.customer?.profilePicture, customerName, 24)} />
                               <AvatarFallback className="text-xs">{customerName[0]}</AvatarFallback>
                             </Avatar>
                             <span className="text-sm text-foreground">{customerName}</span>

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiFetch } from "@/lib/api"
-import { cn, naviiAvatar } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 import {
   contactName,
   conversationHref,
@@ -155,7 +155,7 @@ export function MessagesPopover({
                   >
                     <div className="relative mt-0.5 flex-shrink-0">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={conv.contact.profilePicture || naviiAvatar(name)} alt={name} />
+                        <AvatarImage src={resolveAvatarUrl(conv.contact.profilePicture, name)} alt={name} />
                         <AvatarFallback>
                           <UserRound className="h-3.5 w-3.5" />
                         </AvatarFallback>

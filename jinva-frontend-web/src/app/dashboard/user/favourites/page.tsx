@@ -31,7 +31,7 @@ import {
   ChevronDown,
   AlertTriangle,
 } from "lucide-react"
-import { naviiAvatar, cn } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 
@@ -307,7 +307,7 @@ export default function FavouritesPage() {
                         <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
                           <div className="relative">
                             <Avatar className="h-20 w-20 border-4 border-background shadow-md">
-                              <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                              <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
                               <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
                             </Avatar>
                             <button

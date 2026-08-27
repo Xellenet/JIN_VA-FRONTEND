@@ -35,7 +35,7 @@ import {
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
-import { naviiAvatar, cn } from "@/lib/utils"
+import { naviiAvatar, cn, resolveAvatarUrl } from "@/lib/utils"
 
 interface BackendJob {
   id: string | number
@@ -427,7 +427,7 @@ export default function ArtisanJobsPage() {
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex items-start gap-4">
                           <Avatar className="h-12 w-12 shrink-0">
-                            <AvatarImage src={job.customer?.profilePicture || naviiAvatar(clientName)} alt={clientName} />
+                            <AvatarImage src={resolveAvatarUrl(job.customer?.profilePicture, clientName)} alt={clientName} />
                             <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">

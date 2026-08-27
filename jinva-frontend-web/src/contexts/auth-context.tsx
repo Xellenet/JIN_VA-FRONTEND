@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 import { clearAuthTokens, mapBackendRole } from "@/lib/auth"
 import { unregisterPushToken } from "@/lib/push-notifications"
+import { resolveAvatarUrl } from "@/lib/utils"
 import type { User } from "@/lib/types"
 
 interface BackendUser {
@@ -40,7 +41,11 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
     address: data.addresses?.[0],
     nationalId: data.nationalId,
     role: mapBackendRole(data.role),
-    avatar: data.profilePicture ?? `https://api.navii.dev/avatar/${encodeURIComponent(data.email)}?size=128&packs=command-center&style=neutral&mood=serious&tileBg=auto`,
+    // Resolved here, once, because `user.avatar` is read straight into
+    // `<AvatarImage src>` by the dashboard header, sidebar, profile and settings
+    // screens. A `profilePicture` stored as a relative `/uploads/avatars/…` path
+    // was previously requested from the frontend's own origin and 404'd.
+    avatar: resolveAvatarUrl(data.profilePicture, data.email, 128),
     rating: artisanProfile?.averageRating != null ? Number(artisanProfile.averageRating) : undefined,
     reviews: artisanProfile?.totalReviews != null ? Number(artisanProfile.totalReviews) : undefined,
   }
@@ -51,7 +56,10 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
 // No TTL: data lives for the full browser session and is only invalidated
 // on logout or an explicit refreshUser() call.
 // ---------------------------------------------------------------------------
-const CACHE_KEY = "jinva:user:v3"
+// Bumped v3 → v4 when `avatar` started being resolved through
+// `resolveAvatarUrl()`. A cached v3 user carries the old unresolved relative
+// path, which would keep 404ing for the rest of the browser session.
+const CACHE_KEY = "jinva:user:v4"
 
 function readCache(): User | null {
   if (typeof window === "undefined") return null
@@ -75,7 +83,8 @@ function clearCache() {
   if (typeof window === "undefined") return
   try {
     sessionStorage.removeItem(CACHE_KEY)
-    sessionStorage.removeItem("jinva:user:v2") // clean up old key
+    sessionStorage.removeItem("jinva:user:v2") // clean up old keys
+    sessionStorage.removeItem("jinva:user:v3")
   } catch {}
 }
 

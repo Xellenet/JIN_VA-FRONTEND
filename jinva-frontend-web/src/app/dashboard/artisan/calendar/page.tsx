@@ -44,7 +44,7 @@ import {
   AlertOctagon,
   Briefcase,
 } from "lucide-react"
-import { cn, naviiAvatar, formatCurrency } from "@/lib/utils"
+import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
 import { getBookingStatusConfig } from "@/lib/status-badges"
@@ -694,7 +694,7 @@ export default function ArtisanCalendarPage() {
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="flex items-start gap-3">
                               <Avatar className="h-10 w-10 shrink-0">
-                                <AvatarImage src={booking.customer?.profilePicture || naviiAvatar(customerName)} />
+                                <AvatarImage src={resolveAvatarUrl(booking.customer?.profilePicture, customerName)} />
                                 <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                               </Avatar>
                               <div>

@@ -39,7 +39,7 @@ import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbna
 import { ReviewReasonDialog } from "@/components/reviews/review-reason-dialog"
 import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
 import { Flag, Trash2, Eye, Search, MessageSquare, History, AlertTriangle, Loader2, BadgeCheck } from "lucide-react"
-import { naviiAvatar, cn } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { toast } from "sonner"
 import type { AdminApiReview, ReviewModerationLogEntry, ReviewStatus } from "@/lib/types"
@@ -303,7 +303,7 @@ export default function AdminReviewsPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="h-7 w-7 shrink-0">
-                              <AvatarImage src={r.reviewerUser?.profilePicture || naviiAvatar(reviewerName, 28)} />
+                              <AvatarImage src={resolveAvatarUrl(r.reviewerUser?.profilePicture, reviewerName, 28)} />
                               <AvatarFallback className="text-xs">{reviewerName[0]}</AvatarFallback>
                             </Avatar>
                             <p className="truncate text-sm font-medium text-foreground">{reviewerName}</p>

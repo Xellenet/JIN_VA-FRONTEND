@@ -32,7 +32,7 @@ import {
   CreditCard,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dashboard/job-status-timeline"
 import { AttachmentGallery, type JobAttachment } from "@/components/dashboard/attachment-gallery"
@@ -304,7 +304,7 @@ export default function JobDetailPage() {
                   <>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-14 w-14">
-                        <AvatarImage src={job.acceptedArtisan.profilePicture || naviiAvatar(artisanName)} />
+                        <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture, artisanName)} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div>

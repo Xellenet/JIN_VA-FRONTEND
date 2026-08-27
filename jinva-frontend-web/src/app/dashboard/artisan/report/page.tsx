@@ -29,7 +29,7 @@ import {
   UserRound,
 } from "lucide-react"
 import { mockArtisans, mockOrders } from "@/lib/data/mock-data"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 
 const monthlyEarnings = [
   { month: "Jul", earnings: 1800 },
@@ -334,7 +334,7 @@ export default function ArtisanReportPage() {
                       <td className="py-4">
                         <div className="flex items-center gap-2">
                           <Avatar className="h-7 w-7">
-                            <AvatarImage src={job.clientAvatar || naviiAvatar(job.clientName)} />
+                            <AvatarImage src={resolveAvatarUrl(job.clientAvatar, job.clientName)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <span className="text-sm font-medium">{job.clientName}</span>

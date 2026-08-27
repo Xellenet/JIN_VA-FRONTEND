@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Calendar, Clock, Search, ChevronDown, Loader2, UserRound, Wrench } from "lucide-react"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
 import { getBookingStatusConfig } from "@/lib/status-badges"
@@ -203,7 +203,7 @@ export default function UserBookingsPage() {
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                           <div className="flex items-start gap-4">
                             <Avatar className="h-14 w-14">
-                              <AvatarImage src={booking.artisanProfile?.user?.profilePicture || naviiAvatar(artisanName)} />
+                              <AvatarImage src={resolveAvatarUrl(booking.artisanProfile?.user?.profilePicture, artisanName)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div className="flex-1">

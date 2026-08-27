@@ -36,7 +36,7 @@ import {
   UserRound,
 } from "lucide-react"
 import { mockOrders, mockArtisans, mockClients } from "@/lib/data/mock-data"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 
 const revenueData = [
   { month: "Jan", revenue: 12400, orders: 18 },
@@ -395,7 +395,7 @@ export default function AdminReportPage() {
                         <td className="py-4">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-9 w-9">
-                              <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                              <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>

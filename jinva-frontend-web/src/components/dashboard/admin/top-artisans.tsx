@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { ChevronRight, UserRound } from "lucide-react"
 import type { ArtisanProfile } from "@/lib/types"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 
 interface TopArtisansProps {
   artisans: ArtisanProfile[]
@@ -27,7 +27,7 @@ export function TopArtisans({ artisans }: TopArtisansProps) {
             <div key={artisan.id} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10">
-                  <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                  <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
                   <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                 </Avatar>
                 <div>

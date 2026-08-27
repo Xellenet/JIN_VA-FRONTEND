@@ -35,7 +35,7 @@ import {
   ArrowRight,
 } from "lucide-react"
 import Link from "next/link"
-import { naviiAvatar, cn, formatCurrency } from "@/lib/utils"
+import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
 import { getPaymentStatusConfig, getDisputeStatusConfig } from "@/lib/status-badges"
@@ -255,7 +255,7 @@ export default function DisputesPage() {
                           <TableCell>
                             <div className="flex items-center gap-1.5">
                               <Avatar className="h-6 w-6 shrink-0">
-                                <AvatarImage src={d.raisedBy?.profilePicture || naviiAvatar(raiserName, 24)} />
+                                <AvatarImage src={resolveAvatarUrl(d.raisedBy?.profilePicture, raiserName, 24)} />
                                 <AvatarFallback className="text-xs">{raiserName[0]}</AvatarFallback>
                               </Avatar>
                               <span className="text-sm text-foreground">{raiserName}</span>
@@ -347,7 +347,7 @@ export default function DisputesPage() {
                 {active.raisedBy ? (
                   <div className="mt-1 flex items-center gap-2">
                     <Avatar className="h-6 w-6">
-                      <AvatarImage src={active.raisedBy.profilePicture || naviiAvatar(`${active.raisedBy.firstname} ${active.raisedBy.lastname}`, 24)} />
+                      <AvatarImage src={resolveAvatarUrl(active.raisedBy.profilePicture, `${active.raisedBy.firstname} ${active.raisedBy.lastname}`, 24)} />
                       <AvatarFallback className="text-xs">{active.raisedBy.firstname[0]}</AvatarFallback>
                     </Avatar>
                     <p className="text-sm font-medium text-foreground">

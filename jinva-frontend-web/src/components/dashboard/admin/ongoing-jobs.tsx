@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, UserRound } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 import type { Order } from "@/lib/types"
 
 interface OngoingJobsProps {
@@ -47,7 +47,7 @@ export function OngoingJobs({ jobs }: OngoingJobsProps) {
                   <td className="py-4">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={job.clientAvatar || naviiAvatar(job.clientName)} />
+                        <AvatarImage src={resolveAvatarUrl(job.clientAvatar, job.clientName)} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <span className="text-sm font-medium">{job.clientName}</span>

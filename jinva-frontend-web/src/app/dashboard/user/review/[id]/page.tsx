@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ArrowLeft, Star, CheckCircle2, Loader2, UserRound, Clock, AlertTriangle } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { ReviewPhotoPicker } from "@/components/reviews/review-photo-picker"
 import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbnails"
@@ -319,7 +319,7 @@ function ReviewPageContent() {
                 <CardContent className="p-5">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-14 w-14">
-                      <AvatarImage src={job.acceptedArtisan.profilePicture || naviiAvatar(artisanName)} />
+                      <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture, artisanName)} />
                       <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                     <div>

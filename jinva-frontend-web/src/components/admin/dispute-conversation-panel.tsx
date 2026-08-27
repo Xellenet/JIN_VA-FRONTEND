@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiFetch, ApiError } from "@/lib/api"
-import { cn, naviiAvatar } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 import { MessageImage } from "@/components/messages/message-image"
 import {
   contactName,
@@ -250,7 +250,7 @@ function ReadyPanel({
                     <div className="flex items-center gap-1.5">
                       <Avatar className="h-6 w-6">
                         <AvatarImage
-                          src={msg.sender.profilePicture || naviiAvatar(senderName, 24)}
+                          src={resolveAvatarUrl(msg.sender.profilePicture, senderName, 24)}
                           alt={senderName}
                         />
                         <AvatarFallback className="text-[10px]">{senderName[0]}</AvatarFallback>

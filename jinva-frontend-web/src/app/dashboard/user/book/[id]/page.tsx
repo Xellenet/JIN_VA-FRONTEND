@@ -29,7 +29,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { ArrowLeft, CalendarDays, CreditCard, CheckCircle, Loader2, UserRound, AlertTriangle } from "lucide-react"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { toast } from "sonner"
@@ -558,7 +558,7 @@ export default function BookArtisanPage() {
                   <>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-16 w-16">
-                        <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                        <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div>

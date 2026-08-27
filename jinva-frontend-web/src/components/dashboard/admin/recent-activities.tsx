@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ChevronRight, Clock, ArrowUpRight, UserRound } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 import type { Activity } from "@/lib/types"
 
 interface RecentActivitiesProps {
@@ -92,7 +92,7 @@ export function RecentActivities({ activities }: RecentActivitiesProps) {
                 {/* Avatar with status indicator */}
                 <div className="relative flex-shrink-0">
                   <Avatar className="h-9 w-9 border-2 border-background shadow-sm">
-                    <AvatarImage src={activity.clientAvatar || naviiAvatar(activity.clientName)} />
+                    <AvatarImage src={resolveAvatarUrl(activity.clientAvatar, activity.clientName)} />
                     <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                   <span 

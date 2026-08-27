@@ -21,7 +21,7 @@ import {
   Check,
   CheckCheck,
 } from "lucide-react"
-import { cn, naviiAvatar } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch, apiFetchWithMeta, ApiError } from "@/lib/api"
 import { toast } from "sonner"
@@ -746,7 +746,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                     >
                       <div className="relative flex-shrink-0 mt-0.5">
                         <Avatar className="h-11 w-11">
-                          <AvatarImage src={conv.contact.profilePicture || naviiAvatar(name)} alt={name} />
+                          <AvatarImage src={resolveAvatarUrl(conv.contact.profilePicture, name)} alt={name} />
                           <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                         </Avatar>
                         {conv.unreadCount > 0 && (
@@ -807,7 +807,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                         <ArrowLeft className="h-5 w-5 text-primary" />
                       </Button>
                       <Avatar className="h-10 w-10 flex-shrink-0">
-                        <AvatarImage src={selected.contact.profilePicture || naviiAvatar(name)} alt={name} />
+                        <AvatarImage src={resolveAvatarUrl(selected.contact.profilePicture, name)} alt={name} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
@@ -891,7 +891,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                               {!isOwn && showAvatar && (
                                 <Avatar className="h-7 w-7">
                                   <AvatarImage
-                                    src={msg.sender.profilePicture || naviiAvatar(senderName)}
+                                    src={resolveAvatarUrl(msg.sender.profilePicture, senderName)}
                                     alt={senderName}
                                   />
                                   <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>

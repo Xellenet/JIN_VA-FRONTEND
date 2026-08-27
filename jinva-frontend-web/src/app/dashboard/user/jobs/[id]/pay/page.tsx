@@ -20,7 +20,7 @@ import {
   Receipt,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { getPaymentStatusConfig } from "@/lib/status-badges"
 
 interface BackendJob {
@@ -233,7 +233,7 @@ export default function PaymentCheckoutPage() {
               {job.acceptedArtisan && (
                 <div className="flex items-center gap-3 border-b border-border p-4">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={job.acceptedArtisan.profilePicture || naviiAvatar(artisanName ?? "Artisan")} />
+                    <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture, artisanName ?? "Artisan")} />
                     <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">

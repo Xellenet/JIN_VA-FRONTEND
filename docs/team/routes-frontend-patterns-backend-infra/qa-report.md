@@ -181,6 +181,30 @@ Tests:       7 failed, 118 passed, 125 total
   is what has to keep serving legacy rows.
 - **Likely location**: the `AvatarImage src=` call sites listed above; wrap each in
   `resolveMediaUrl()` from `jinva-frontend-web/src/lib/utils.ts`.
+- **FIX (frontend-engineer, 2026-08-27)**: fixed, and **wider than the six files you listed** — deliberately.
+  Your own repro step 1 is `/dashboard/artisan/messages`, which is
+  `src/components/dashboard/messages-page.tsx` and is **not** one of the six, so fixing only those would have
+  left your repro still failing. I swept the whole class instead: `rg naviiAvatar src/` returns 42 hits, all
+  inside an `AvatarImage src=`, of which **33 used the broken
+  `x.profilePicture || naviiAvatar(name)` idiom**. All 33 are converted, across 31 files.
+  Rather than wrapping each in `resolveMediaUrl()`, I added one helper next to it in `src/lib/utils.ts`:
+  `resolveAvatarUrl(url, seed, size?)` = `resolveMediaUrl(url) || naviiAvatar(seed, size)`. The two-expression
+  idiom is what made the resolution easy to forget, so collapsing both steps into the call site every avatar
+  already had to make removes the failure mode rather than patching 33 instances of it. The fallback must stay
+  second because `resolveMediaUrl()` returns `""` for a missing picture; `naviiAvatar()` is already absolute,
+  so it needs no resolution. Behaviour is otherwise identical, including every `size` argument.
+  Also fixed at the source, since these bypass the call sites above: `buildUser()` in
+  `src/contexts/auth-context.tsx` now resolves `user.avatar` (that one value is read straight into
+  `AvatarImage` by the dashboard header, sidebar, artisan profile, and both settings screens). Its
+  sessionStorage cache key is bumped `jinva:user:v3` → `v4`, and v3 added to the cleanup list — a cached v3
+  user would otherwise keep serving the old unresolved path for the rest of the browser session, which is
+  worth knowing if you re-test in a tab that was open before this change.
+  The 9 remaining `naviiAvatar` call sites are unchanged and correct: they pass no stored picture at all
+  (`admin/portfolio-queue`, `admin/verifications`, `artisan/jobs` inner tile, `user/report`, `support-page`).
+  `testimonials.tsx`'s `/placeholder-user.jpg` is deliberately left alone — that is a frontend `public/`
+  asset, not backend media, and resolving it would point it at the API origin and break it.
+  `admin/verifications/page.tsx`'s document/selfie tiles are untouched, pending the authenticated endpoint the
+  security report's HIGH finding calls for.
 - **Status**: Open
 
 ### [MINOR] The public 404 has no `<h1>`, so the document's heading order starts at `<h2>`

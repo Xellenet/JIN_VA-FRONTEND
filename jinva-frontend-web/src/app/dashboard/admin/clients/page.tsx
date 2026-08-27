@@ -25,7 +25,7 @@ import {
   UserRound,
   Loader2,
 } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 
@@ -207,7 +207,7 @@ export default function ClientsPage() {
                           <td className="py-4">
                             <div className="flex items-center gap-3">
                               <Avatar className="h-9 w-9">
-                                <AvatarImage src={client.avatar || naviiAvatar(client.name)} />
+                                <AvatarImage src={resolveAvatarUrl(client.avatar, client.name)} />
                                 <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                               </Avatar>
                               <div>

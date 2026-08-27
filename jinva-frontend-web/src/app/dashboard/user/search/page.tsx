@@ -40,7 +40,7 @@ import {
   ArrowUpDown,
   Wallet,
 } from "lucide-react"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { RatingStars } from "@/components/ui/rating-stars"
@@ -527,7 +527,7 @@ export default function SearchArtisansPage() {
                       <CardContent className="p-0">
                         <div className="relative h-32 bg-gradient-to-br from-primary to-primary/80">
                           <Avatar className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 border-4 border-background shadow-lg">
-                            <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                            <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           {artisan.totalReviews > 0 && (

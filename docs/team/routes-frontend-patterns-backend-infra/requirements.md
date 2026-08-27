@@ -380,6 +380,10 @@ Each of these is a **NEW screen → ux-designer**, but deliberately minimal: a s
   as an accepted deviation with BI1/BI2 delivering the CDN-delivery half.
 - **This is the one BI item with a frontend consequence** (upload components would change), which is
   exactly why it needs an explicit decision before anyone starts.
+- **DEFERRED — recorded 2026-08-27 (backend-engineer).** Per Open Question 9, BI3 was not built. No
+  presigned-URL endpoint exists and uploads still arrive as multipart through the API, so PRD §6's exact
+  upload shape is an **accepted deviation**; BI1/BI2 deliver the CDN-*delivery* half only. Nothing in the
+  frontend's upload components needs to change, and `api-contract.md` is deliberately untouched.
 
 **BI4 — Transactional email provider (blocked on an answer).**
 - Given `src/mail/mail.config.ts` builds a generic nodemailer SMTP transport, and given PRD §7 names
@@ -743,15 +747,90 @@ Ranked by how much they change scope. 1, 3, 4, 8 and 9 should be answered before
 - [ ] This file's "Re-verification results" table is the record of what was dropped and why — the audit's
       items 2c, 3 and 4 are **not** re-scoped here.
 
-**Backend (BI items only — no UI)**
-- [ ] BI1/BI2: S3 provider active in deployed environments, media served from the CDN domain, `/uploads/*`
-      no longer served by the NestJS process, and **existing historical media still resolves**.
-- [ ] BI3: built or explicitly deferred per Open Question 9, with the deferral recorded.
-- [ ] BI4: closed as already-compliant or scoped as a migration, per Open Question 8.
-- [ ] No `.env` file was read, opened, grepped or modified by any agent at any point.
-- [ ] No credential value appears in any log, error, report, commit or agent output.
-- [ ] `api-contract.md` updated only if BI3 was approved (nothing else changes the API surface).
-- [ ] Backend lint / build / test green.
+**Backend (BI items only — no UI)** — *backend-engineer, 2026-08-27*
+
+- [x] **BI1 — the S3 cutover path is production-ready.** The code half is done; **activating it is not an
+      engineer action and was not performed** (see the open item below). What changed in
+      `src/uploads/providers/`:
+      - Every AWS SDK failure on upload is now translated into a fixed generic 5xx
+        (`"File storage is temporarily unavailable. Please try again later."`). Previously they propagated
+        raw, and `AllExceptionsFilter` returns an exception's own message to the client whenever
+        `NODE_ENV !== 'production'` — S3 error payloads can carry access-key identifiers and bucket ARNs.
+      - `AWS_S3_REGION` is now validated, not just documented. Left unset, the SDK could still pick a
+        region up from an ambient `AWS_REGION` and upload *successfully* while the URL written to the
+        database embedded `undefined` as the host segment — a silently-wrong success that breaks the asset
+        permanently.
+      - The bucket check is now a deliberate `InternalServerErrorException` rather than a bare `Error` that
+        only became a 500 by accident of the global filter, and a whitespace-only value counts as unset.
+      - New `IStorageProvider.missingConfiguration()` (names, never values) lets
+        `StorageProviderFactory` log a misconfigured cutover **at boot**. Non-fatal on purpose, because
+        BI1's own criterion requires the failure to surface as a 5xx at the point of upload.
+      - Logs record the AWS error *name* and HTTP status only — never the SDK message or stack.
+- [x] **BI2 — media is no longer unconditionally served by the app process.** `main.ts`'s blanket
+      `useStaticAssets` is replaced by `applyLegacyMediaServing()` in `src/uploads/legacy-media.config.ts`,
+      whose header comment carries the full reasoning. **Chose "keep the static handler for legacy paths
+      only" over "migrate the stored URLs"**: the legacy files live on the app server's disk and *not* in
+      the bucket, so a migration could rewrite the URL columns but could not copy the bytes — every
+      rewritten row would 404, irreversibly. The two URL shapes already self-distinguish (local = relative
+      `/uploads/...`, S3 = absolute), so once `STORAGE_PROVIDER=s3` nothing new can be written under
+      `/uploads` and that prefix becomes a closed, read-only set that only shrinks. **No schema change, no
+      row touched, so no historical media can break.** The handler is also hardened (no directory index,
+      no redirects, `nosniff`, year-long immutable caching since filenames are UUIDs).
+      `test/legacy-media-serving.e2e-spec.ts` is the regression guard for the blocker: it boots the real
+      app with `STORAGE_PROVIDER=s3` and proves a pre-cutover file still returns 200.
+- [x] **BI3 — deferred, per Open Question 9's recorded decision.** Not built. No presigned-URL endpoint
+      exists; uploads still arrive as multipart through the API. Recorded here and in this file's BI3
+      criterion as an accepted deviation from PRD §6's exact upload shape.
+- [x] **BI4 — scoped and built as a real migration**, per Open Question 8's recorded decision (the current
+      SMTP host is not already SendGrid or Resend). `src/mail/providers/` now mirrors the storage
+      abstraction exactly: `IMailProvider` + `MailProviderFactory` selecting on `MAIL_PROVIDER`, the same
+      shape as `IStorageProvider` + `StorageProviderFactory` selecting on `STORAGE_PROVIDER`.
+      `SmtpMailProvider` wraps the existing untouched `createTransporter` and remains the **default**, so
+      an environment that has not set the new variable is unaffected. `ResendMailProvider` is the new
+      option, on Resend's official Node SDK (`resend`, added to `package.json`).
+      - The trap worth knowing: `resend`'s `emails.send()` does **not** throw on an API-level rejection, it
+        resolves with `{ data: null, error }`. The provider inspects `error` and throws, so
+        `MailService`'s log-and-re-throw is preserved rather than silently reporting phantom successes for
+        every unsent verification email.
+      - Unchanged on purpose and covered by `src/mail/mail.service.spec.ts`: every template and subject,
+        the plain-text derivation, template rendering staying outside the try block, and the
+        `RESEND_VERIFICATION_COOLDOWN_SECONDS` cooldown (a constant in `variables.constants.ts`, not
+        configuration). Forgot-password anti-enumeration is untouched — mail is still dispatched through
+        the event emitter, so no send outcome can change an auth response.
+- [x] No `.env` file was read, opened, grepped or modified. Not for BI1, BI2 or BI4 — none of them needs a
+      live DB or a real credential.
+- [x] No credential value appears in any log, error, report, commit or agent output. Every new diagnostic
+      names variables only, and the new specs assert this (a fake key planted in a simulated AWS/Resend
+      error must not appear in either the thrown message or the log line).
+- [x] `api-contract.md` **not** created/updated — correct, since BI3 was not approved and nothing in
+      BI1/BI2/BI4 changes any request or response shape.
+- [x] Backend `npm run lint` (0 errors; 25 pre-existing warnings in untouched spec files), `npm run build`
+      and `npm run test` (**319/319 pass, 37 suites**) all green.
+- [x] `npm run test:e2e` — **this round introduced zero new failures**, verified by running the suite on
+      the pre-round commit (`41815ba`) and getting the *identical* result: 7 failures in
+      `messaging-notifications` (AD2 / PD4 / PR3 — dispute resolve returns 400) and
+      `analytics-admin-disputes` (AN1 / AP4 / AN3 / AT3 — `GET /admin/analytics` 500s on a
+      `PlatformAnalyticsCacheService` SQL error, *"syntax error at or near `.`"*, logged on every boot).
+      **Both belong to the analytics/admin/disputes round, not this one** — flagged for that owner rather
+      than fixed here. New `test/legacy-media-serving.e2e-spec.ts` passes (6/6).
+      - Note for whoever runs the suite next: it must be run via `npm run test:e2e`, not a bare
+        `npx jest --config test/jest-e2e.json`. The script's `--experimental-vm-modules` flag is required
+        for `loadEsm('file-type')`, and without it every upload endpoint 500s and ~14 tests fail for a
+        reason that has nothing to do with the code under test. Running it with `--runInBand` also avoids
+        cross-suite DB contention (10 suites each booting the whole app against one Postgres).
+
+**Still open — operator actions, deliberately not taken by an engineer:**
+- [ ] Set `STORAGE_PROVIDER=s3` (plus `AWS_S3_BUCKET`, `AWS_S3_REGION`, optionally
+      `AWS_S3_PUBLIC_URL_BASE` and the access key/secret pair) in the deployed environments. Until this
+      happens, BI1's *"deployed environments run on the S3 provider"* and BI2's *"media responses come
+      from the CDN/bucket domain"* remain unmet — by design; the values and the cutover are the user's.
+- [ ] Optional, after the cutover: copy the existing on-disk `uploads/` tree into the bucket and set
+      `SERVE_LEGACY_UPLOADS=false` to reach BI2's literal *"no media request is served by the NestJS
+      process"*. Defaults to **on** so flipping `STORAGE_PROVIDER` alone can never break existing media.
+- [ ] Set `MAIL_PROVIDER=resend` + `RESEND_API_KEY` (and keep `MAIL_FROM` on a domain verified in Resend)
+      to complete BI4's migration. Leaving `MAIL_PROVIDER` unset keeps the current SMTP transport.
+- [ ] **New environment variable names introduced this round** — names only, no values anywhere:
+      `SERVE_LEGACY_UPLOADS`, `MAIL_PROVIDER`, `RESEND_API_KEY`.
 
 **Design (ux-designer)**
 - [ ] Landing page design covering all ten sections in the UI/UX notes, in **both light and dark**, at

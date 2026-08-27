@@ -68,6 +68,68 @@
 > `GET /verification/me` returns references an artisan cannot resolve, because the guard is ADMIN-only per
 > your remediation. If that screen needs a thumbnail, it's a product-manager scope call.
 
+> **Fix note — frontend-engineer, 2026-08-27.** The delivery-leg consumer is now wired to the authenticated
+> endpoint, so no part of the app asks for a KYC object over an anonymous URL any more.
+>
+> - **`src/app/dashboard/admin/verifications/page.tsx`** no longer puts `documentFrontUrl` /
+>   `documentBackUrl` / `selfieUrl` into `<img src>`, and **no longer imports `resolveMediaUrl` at all** —
+>   that helper would rebuild exactly the dead-and-now-404 `/uploads/documents/…` path this change closes.
+>   Those three fields are treated as stored references and used only as map keys.
+> - **New `src/components/admin/kyc-media.tsx`** owns the whole mechanism: `kycMediaPath()` does the
+>   contract's §1.2 mapping (`/uploads/{folder}/{file}` → `/uploads/kyc/{folder}/{file}`, rejecting anything
+>   that isn't that exact shape), `useKycMedia()` fetches each reference once as a blob and hands the DOM an
+>   object URL, and `KycMediaTile` / `KycMediaFull` render it. Object URLs are revoked when the reviewed
+>   record changes and on unmount, in a separate effect from the fetch so a retry can't revoke a URL the DOM
+>   is still displaying.
+> - **`src/lib/api.ts`**: added `apiFetchBlob()`. The bearer header, the one-shot 401 refresh-and-retry and
+>   the `ApiError` mapping were extracted into a shared `authedRequest()` so the raw-bytes endpoint gets
+>   identical auth handling to every other call rather than a second hand-rolled fetch. `apiFetch` and
+>   `apiFetchWithMeta` are unchanged in behaviour.
+> - All three tiles and the lightbox read from **one** fetch per object, so opening a document full-size does
+>   not hit your admin-audited endpoint a second time for bytes already in memory (measured: 6 KYC requests
+>   before opening the lightbox, 6 after).
+> - Error states follow §1's table: 404 and 400 render "This file is no longer available." with **no** retry
+>   affordance (400 additionally `console.error`s, since it means the caller built the path wrong); 403
+>   renders "You do not have access to this file."; 5xx/network renders "Couldn't load this file." **with** a
+>   Retry button. `contentType` is branched on rather than assumed, so `application/pdf` gets a labelled file
+>   affordance in the tile and an embedded viewer in the lightbox.
+>
+> **Verified in Chrome (CDP, real clicks) against a production build** — `npm run build` + `next start`, and a
+> real login as the seeded `admin@jinva.com`, not a code read:
+>
+> | Assertion | Result |
+> |---|---|
+> | Tiles render from `blob:` object URLs, never a remote URL | **PASS** — 3/3 tiles, `blob=true` |
+> | Images decode to real pixels | **PASS** — 1024×1024 on all three |
+> | Bytes arrive via `GET /uploads/kyc/…` | **PASS** — `200` per object (plus the CORS `204` preflight) |
+> | Direct requests to `/uploads/documents|selfies` | **PASS — 0**, across all 5 verification records opened |
+> | Missing object | **PASS** — `404` → "This file is no longer available.", no retry button |
+> | Lightbox re-uses the cached blob | **PASS** — no refetch |
+> | Anonymous fetch of the same path | **401** (checked directly with `curl`, outside the browser) |
+> | Legacy public path for the same file | **404** (as designed) |
+>
+> Test fixtures: the seeded verification rows point at filenames that were never written to disk (the same
+> class as the seeded-avatar issue in the QA report), so every record rendered the 404 tile and the success
+> path was untestable as shipped. I placed local fixture files in the backend's **gitignored** `uploads/`
+> directory for two records (profiles #13 and #14) and left #12/#15 without files, which is why both states
+> above are evidenced. **No backend source was modified**, and one verification submission was exercised
+> through the real `POST /uploads/document` + `/uploads/selfie` endpoints to confirm the upload→reference→read
+> round trip. To reach the screen at all I ran my local backend instance with `ALLOWED_ORIGINS` including my
+> test port in the **process environment only** — no `.env` file was read or written at any point.
+>
+> **Two things I did not close, flagged rather than papered over:**
+> 1. **The PDF branch is coded but NOT exercised.** `POST /uploads/document` accepts `application/pdf`, and
+>    the tile/lightbox branch on `Content-Type` for it, but every stored reference I could reach ends `.jpg`
+>    and I can't attach a new reference to an existing verification row without DB access. Worth a targeted
+>    re-test when a PDF submission exists.
+> 2. **Pre-existing, and NOT introduced by this change:** the full-size lightbox paints *behind* the review
+>    dialog, because `Lightbox`'s backdrop and Radix's `DialogContent` are both `z-50` and the dialog is in a
+>    body-appended portal, so it wins on DOM order. My diff changed only the lightbox's *contents*, not its
+>    placement, so this behaved identically before. It makes "Tap any document to open it full-size" much less
+>    useful on this screen. Left alone because it is out of this round's scope and the real fix touches the
+>    shared `Lightbox` primitive used by four other screens (portfolio gallery, review photos, message images,
+>    dispute conversation panel) — worth its own ticket.
+
 ### [MEDIUM] Legacy media handler applies year-long public immutable caching to KYC documents
 - **Category**: CWE-524 Use of Cache Containing Sensitive Information
 - **Location**: `JIN_VA-BACKEND/src/uploads/legacy-media.config.ts:87` and `:161-163`; asserted at `JIN_VA-BACKEND/test/legacy-media-serving.e2e-spec.ts:98-104`

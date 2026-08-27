@@ -62,9 +62,10 @@ import {
   ShieldCheck,
   XCircle,
 } from "lucide-react"
-import { naviiAvatar, cn, resolveMediaUrl } from "@/lib/utils"
+import { naviiAvatar, cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
+import { KycMediaFull, KycMediaTile, useKycMedia } from "@/components/admin/kyc-media"
 
 /**
  * AT1 / design-spec.md §9 — the artisan verification queue.
@@ -82,6 +83,15 @@ import { apiFetch, apiFetchWithMeta } from "@/lib/api"
  * "Show ID number" text-button (the same progressive-disclosure idiom the
  * Transactions detail dialog uses for "Show technical details"). Date of birth
  * never appears in a list view.
+ *
+ * SECOND DEPARTURE, and the reason this file is not a straight clone any more:
+ * the three document tiles do NOT put a URL in `<img src>`. Per api-contract.md
+ * §1, `documentFrontUrl`/`documentBackUrl`/`selfieUrl` are stored REFERENCES
+ * that nothing serves; the bytes come from the ADMIN-guarded
+ * `GET /uploads/kyc/:folder/:filename`, fetched as a blob and rendered as an
+ * object URL. `resolveMediaUrl()` is deliberately no longer imported here — it
+ * would rebuild the old anonymously-readable path this change exists to close.
+ * All of that lives in `components/admin/kyc-media.tsx`.
  */
 
 type VerificationStatus = "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED"
@@ -202,7 +212,10 @@ export default function AdminVerificationsPage() {
   const [review, setReview] = useState<BackendVerification | null>(null)
   const [revealId, setRevealId] = useState(false)
   const [adminNotes, setAdminNotes] = useState("")
-  const [lightbox, setLightbox] = useState<{ url: string; label: string } | null>(null)
+  // Holds the STORED REFERENCE, not a URL — the bytes live in the `kycMedia`
+  // map keyed by that reference, so opening the lightbox re-uses what the tile
+  // already fetched instead of hitting an admin-audited endpoint twice.
+  const [lightbox, setLightbox] = useState<{ ref: string; label: string } | null>(null)
   const [rejectTarget, setRejectTarget] = useState<BackendVerification | null>(null)
   const [actioningId, setActioningId] = useState<number | null>(null)
 
@@ -345,12 +358,23 @@ export default function AdminVerificationsPage() {
 
   const canAct = (v: BackendVerification) => v.status === "PENDING" || v.status === "UNDER_REVIEW"
 
+  /**
+   * `url` here is the STORED REFERENCE the API returns
+   * (`/uploads/documents/<file>`), not something a browser can fetch — see
+   * `components/admin/kyc-media.tsx`. It is the key into `kycMedia`.
+   */
   const documentTiles = (v: BackendVerification) =>
     [
       { url: v.documentFrontUrl, label: `${DOCUMENT_TYPE_LABELS[v.documentType] ?? v.documentType} — front` },
       { url: v.documentBackUrl, label: `${DOCUMENT_TYPE_LABELS[v.documentType] ?? v.documentType} — back` },
       { url: v.selfieUrl, label: "Selfie" },
     ].filter((t): t is { url: string; label: string } => Boolean(t.url))
+
+  const reviewTiles = review ? documentTiles(review) : []
+  // Unconditional (an empty list while the dialog is closed) so the hook order
+  // never changes. Fetches the open record's documents once, for both the tiles
+  // and the lightbox, and revokes the object URLs when the record changes.
+  const { media: kycMedia, retry: retryKycMedia } = useKycMedia(reviewTiles.map((t) => t.url))
 
   return (
     <DashboardLayout>
@@ -616,23 +640,14 @@ export default function AdminVerificationsPage() {
           {review && (
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-2">
-                {documentTiles(review).map((tile) => (
-                  <button
+                {reviewTiles.map((tile) => (
+                  <KycMediaTile
                     key={tile.label}
-                    type="button"
-                    className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-black"
-                    onClick={() => setLightbox({ url: resolveMediaUrl(tile.url), label: tile.label })}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={resolveMediaUrl(tile.url)}
-                      alt={tile.label}
-                      className="h-full w-full object-contain"
-                    />
-                    <span className="absolute inset-x-0 bottom-0 bg-black/60 px-1 py-0.5 text-[10px] text-white">
-                      {tile.label}
-                    </span>
-                  </button>
+                    state={kycMedia[tile.url]}
+                    label={tile.label}
+                    onOpen={() => setLightbox({ ref: tile.url, label: tile.label })}
+                    onRetry={retryKycMedia}
+                  />
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">Tap any document to open it full-size.</p>
@@ -736,10 +751,9 @@ export default function AdminVerificationsPage() {
         </DialogContent>
       </Dialog>
 
-      {lightbox && (
+      {lightbox && kycMedia[lightbox.ref] && (
         <Lightbox label={lightbox.label} onClose={() => setLightbox(null)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightbox.url} alt={lightbox.label} className="max-h-[80vh] w-full object-contain" />
+          <KycMediaFull state={kycMedia[lightbox.ref]} label={lightbox.label} />
         </Lightbox>
       )}
 

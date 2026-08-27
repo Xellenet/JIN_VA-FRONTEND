@@ -79,7 +79,18 @@ export class ApiError extends Error {
   }
 }
 
-async function apiFetchEnvelope<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<ApiEnvelope<T>> {
+/**
+ * The authenticated request itself: bearer header, the one-shot
+ * refresh-and-retry on a 401, and `ApiError` for any non-ok response. Returns
+ * the raw `Response` so the caller decides how to read the body.
+ *
+ * Split out of `apiFetchEnvelope` for `apiFetchBlob` below — the KYC media
+ * endpoint (api-contract.md §1) is the one endpoint that returns raw bytes
+ * rather than the JSON envelope, and it still needs every bit of this auth
+ * handling. The error body on a failure IS the normal JSON envelope, so that
+ * part is shared unchanged.
+ */
+async function authedRequest(path: string, options: ApiFetchOptions = {}): Promise<Response> {
   const { skipAuth, ...init } = options
   const token = skipAuth ? null : getAccessToken()
 
@@ -142,9 +153,38 @@ async function apiFetchEnvelope<T = unknown>(path: string, options: ApiFetchOpti
     )
   }
 
+  return res
+}
+
+async function apiFetchEnvelope<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<ApiEnvelope<T>> {
+  const res = await authedRequest(path, options)
+
   if (res.status === 204) return {} as ApiEnvelope<T>
 
   return await res.json().catch(() => ({}) as ApiEnvelope<T>)
+}
+
+/**
+ * Fetches a raw-bytes response through the authenticated request path.
+ *
+ * Exists for `GET /uploads/kyc/:folder/:filename` (api-contract.md §1), which
+ * streams a KYC document or selfie instead of returning the JSON envelope, and
+ * is `ADMIN`-guarded — so a browser `<img src>` can never fetch it (an image
+ * request carries no `Authorization` header, which is exactly why those objects
+ * are no longer anonymously readable). The caller turns the blob into an object
+ * URL and is responsible for revoking it.
+ *
+ * `contentType` is returned because the document upload accepts
+ * `application/pdf` as well as images, so the caller has to branch on it rather
+ * than assume an image.
+ */
+export async function apiFetchBlob(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<{ blob: Blob; contentType: string }> {
+  const res = await authedRequest(path, options)
+  const blob = await res.blob()
+  return { blob, contentType: res.headers.get("Content-Type") ?? blob.type ?? "" }
 }
 
 export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {

@@ -30,7 +30,17 @@ import Link from "next/link"
 type PublicLinkProps = Omit<React.ComponentProps<"a">, "href"> & { href: string }
 
 export function PublicLink({ href, children, ...props }: Readonly<PublicLinkProps>) {
-  if (href.includes("#")) {
+  // The raw-anchor branch is gated on a root-relative href, which every real
+  // caller already is (module-level constants in `lib/public-nav.ts`). Without
+  // the gate this component is an unguarded `javascript:` / `data:` sink for any
+  // future caller that passes a value it did not write itself — CMS copy, a
+  // search param, an API field — in a component whose name invites reuse.
+  //
+  // `//` is excluded explicitly: a protocol-relative `//evil.example/#x` starts
+  // with `/` but is an OFF-SITE navigation, not the same-document fragment this
+  // branch exists to serve. `/#services` and `/about#x` are the shapes it allows.
+  // Everything else falls through to `next/link`, which is the safe default.
+  if (href.startsWith("/") && !href.startsWith("//") && href.includes("#")) {
     return (
       <a href={href} {...props}>
         {children}

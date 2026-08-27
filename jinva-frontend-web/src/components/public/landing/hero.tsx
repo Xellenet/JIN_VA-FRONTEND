@@ -2,7 +2,7 @@ import type React from "react"
 import Link from "next/link"
 import { PublicLink } from "@/components/public/public-link"
 import Image from "next/image"
-import { ChevronDown, Lock, ShieldCheck } from "lucide-react"
+import { ChevronDown, Info, Lock, ShieldCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { RatingStars } from "@/components/ui/rating-stars"
@@ -21,6 +21,14 @@ import { getBookingStatusConfig } from "@/lib/status-badges"
  * fee percentages are forbidden on this page, and a platform statistic would be
  * fabricated (LP8). The one number here — the sample artisan's 4.8 (37) — is
  * product UI inside a mock profile card, per §3.3.
+ *
+ * LP8 FOLLOW-UP: "product UI, not a statistic" is the right reading, but QA was
+ * correct that nothing on screen said so, and LP8 requires any number shown to be
+ * endpoint-backed or explicitly labelled. Per the recorded decision the card now
+ * carries the SAME marker the testimonials section uses — an outline `Badge` with
+ * an `Info` icon reading "Sample content" — so the two illustrative surfaces on
+ * this page are labelled identically. If this card is ever wired to a real
+ * artisan record, remove that badge along with the hardcoded name and rating.
  *
  * The `data-enter` attributes drive a CSS-only load animation rather than the
  * IntersectionObserver reveal the rest of the page uses. The hero is the largest
@@ -114,6 +122,13 @@ export function Hero() {
 
               {/* Sample artisan card */}
               <div className="relative z-10 rounded-2xl bg-card p-6 shadow-2xl transition-transform duration-500 motion-safe:hover:scale-105">
+                {/* Sits above the avatar row rather than beside "Verified" — in
+                    that row it would read as another artisan attribute, which is
+                    the opposite of the point. */}
+                <Badge variant="outline" className="mb-4">
+                  <Info className="h-3 w-3" aria-hidden="true" />
+                  Sample content
+                </Badge>
                 <div className="flex items-center gap-4">
                   <Image
                     src="/artisan-in-hard-hat.jpg"

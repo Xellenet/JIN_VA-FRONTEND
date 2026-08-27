@@ -309,7 +309,10 @@ export function SignupForm() {
                 disabled={isLoading}
                 required
               >
-                <SelectTrigger className="h-10 bg-background border-input text-foreground">
+                {/* The `id` is what makes `<Label htmlFor="gender">` above
+                    actually work — without it, clicking the label text did
+                    nothing and no assistive technology could pair the two. */}
+                <SelectTrigger id="gender" className="h-10 bg-background border-input text-foreground">
                   <SelectValue placeholder="Select gender" />
                 </SelectTrigger>
                 <SelectContent>
@@ -329,7 +332,10 @@ export function SignupForm() {
                 disabled={isLoading}
                 required
               >
-                <SelectTrigger className="h-10 bg-background border-input text-foreground">
+                {/* Matches `<Label htmlFor="role">`. Also gives the LP13
+                    `?role=` prefill a stable hook — the two triggers were
+                    previously distinguishable only by DOM order. */}
+                <SelectTrigger id="role" className="h-10 bg-background border-input text-foreground">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>

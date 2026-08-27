@@ -339,9 +339,13 @@
   off-site navigation from a component whose whole contract is "same-site fragment". Not the `javascript:`/`data:`
   XSS class you filed, but it is the same latent-untrusted-input shape, and it costs one clause. (I wrote the
   narrower guard first and caught this reviewing my own comment, so noting it explicitly.)
-  No behaviour change for any current caller — all are `/#…` or `/about#…` constants. Re-verified in a browser
-  on the production build: all 5 header nav anchors and all 14 footer links still navigate and land on-section;
-  see the fix note on the QA report's LP3/LP9 items for the click evidence.
+  No behaviour change for any current caller — all are `/#…` or `/about#…` constants. Re-verified in Chrome
+  with real mouse events on a production build, clicking every header and footer link one at a time from all
+  five public pages: **110/110 pass**, every anchor landing its section exactly 80px from the viewport top,
+  zero console errors beyond the pre-existing `_vercel/insights` 404. (The two-line
+  `/#platform-governance` footer link needs multi-point hit-testing to click reliably — its bounding-box
+  centre falls in the leading gap, which is the same harness artifact recorded at the top of the QA report.
+  With strict hit-testing it passes from all five pages.)
 - **Owner**: frontend-engineer
 - **Status**: Open
 

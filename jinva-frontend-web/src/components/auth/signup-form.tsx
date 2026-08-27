@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -19,10 +19,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
  */
 const PREFILLABLE_ROLES = ["CUSTOMER", "ARTISAN"] as const
 
+/**
+ * LP13 — normalise `?role=` into a starting value for the role selector.
+ *
+ * Anything that is not exactly CUSTOMER or ARTISAN — absent, misspelled,
+ * lowercase, ADMIN, an injected value — returns "", which leaves the selector
+ * empty and the existing validation untouched. ADMIN is excluded deliberately,
+ * not by omission: PRD §5.1 makes admin accounts seed-only and not publicly
+ * registerable, so `?role=ADMIN` has to be treated as junk like anything else.
+ *
+ * The param is a convenience only. The submitted payload is still what the
+ * backend validates.
+ */
+function roleFromParam(requested: string | null): string {
+  if (!requested) return ""
+  return (PREFILLABLE_ROLES as readonly string[]).includes(requested) ? requested : ""
+}
+
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  /**
+   * Read `?role=` during render as the initial value, rather than applying it
+   * from an effect.
+   *
+   * This is deliberate and it is the pattern `verify-email-form.tsx` already
+   * uses for `?email=`. An effect keyed on the `useSearchParams()` object does
+   * work in dev but does NOT apply on `/signup` in a production build, because
+   * the route is statically prerendered and the effect does not get a second
+   * run once the real params are known. Reading it at render time has no such
+   * timing dependency, and it is simpler.
+   */
+  const searchParams = useSearchParams()
   const [formData, setFormData] = useState({
     firstname: "",
     lastname: "",
@@ -32,29 +62,8 @@ export function SignupForm() {
     password: "",
     confirmPassword: "",
     gender: "",
-    role: "",
+    role: roleFromParam(searchParams.get("role")),
   })
-
-  /**
-   * LP13 — prefill the role selector from `?role=`, so the landing page's
-   * artisan CTA (`/signup?role=ARTISAN`) and client CTA
-   * (`/signup?role=CUSTOMER`) land on a form that already knows which one the
-   * visitor picked.
-   *
-   * Anything that is not exactly CUSTOMER or ARTISAN — absent, misspelled,
-   * lowercase, ADMIN, an injected value — leaves the selector empty and the
-   * existing validation untouched. It never crashes and it never silently
-   * selects the wrong role, which is the actual acceptance criterion here. The
-   * param is a convenience only: the real role still travels in the submitted
-   * payload and is validated by the backend.
-   */
-  const searchParams = useSearchParams()
-  useEffect(() => {
-    const requested = searchParams.get("role")
-    if (!requested) return
-    if (!(PREFILLABLE_ROLES as readonly string[]).includes(requested)) return
-    setFormData((previous) => (previous.role ? previous : { ...previous, role: requested }))
-  }, [searchParams])
 
   const validatePassword = (password: string): boolean => {
     if (password.length < 8) {

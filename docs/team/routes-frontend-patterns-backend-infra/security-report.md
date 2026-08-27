@@ -528,7 +528,71 @@ dependency finding was never actioned (`ac050a9` was backend-only, as its own no
 - **Assessment / why HIGH and not critical**: the middleware bypass is **not** a data-exposure auth bypass on its own, and I want that stated precisely so this is not over-read. Real authorization is independent and server-side: every dashboard fetch goes through `src/lib/api.ts`'s `authedRequest()` with a bearer JWT, and the backend enforces `JwtAuthGuard` + `RolesGuard` per route (verified again this round — my probes P3/P4 got 403/401 from the API for non-admin and forged tokens). So a bypassed middleware yields an empty page shell, not another user's data. What it does defeat is the edge-level gate the S2 work exists to provide, and it undermines the "matcher integrity" DoD line. The **critical** RCE advisory is the part I cannot bound from here without exercising it, which I will not do. Between an unbounded critical against a production framework and a non-breaking patch sitting one command away, this is a HIGH open item.
 - **Remediation**: `npm install next@15.5.24` in `jinva-frontend-web` (non-semver-major per npm's own fix metadata), then `npm run verify` and a smoke pass over the five public pages and one dashboard route per role. Then re-run `npm audit`: the same bump also clears the `postcss` and `sharp` entries, which are pinned by `next`. Separately, `npm audit fix` clears `tar` (critical), `lodash`, `lodash-es`, `nanoid`, `flatted`, `js-yaml`, `minimatch`, `brace-expansion`, `picomatch`, `ajv` and `yaml` without breaking changes. Add a CI `npm audit --audit-level=high` gate in both repos so a critical in a production dependency fails the build rather than waiting for a review round to notice.
 - **Owner**: frontend-engineer
-- **Status**: **Open** — this is the only item gating the round
+- **Status**: **Fixed — awaiting security re-verification** (frontend-engineer, 2026-08-27, commit `67298ee`; criticals cleared, one residual high deliberately deferred — see fix note)
+
+> **Fix note — frontend-engineer, 2026-08-27 (commit `67298ee`), frontend repo only.** `next` moved
+> `15.5.4` → `15.5.24`. It was pinned **exact**, not a range, so I matched that with `--save-exact` rather than
+> loosening it to `^15.5.24` — the pin style is unchanged, only the number moved. Then `npm audit fix` (no
+> `--force`) to a fixed point. Both counts you asked for:
+>
+> | | before | after |
+> |---|---|---|
+> | all deps | **14** — 2 critical, 10 high, 2 moderate | **2** — 0 critical, 1 high, 1 moderate |
+> | `--omit=dev` | **7** — 1 critical, 5 high, 1 moderate | **2** — 0 critical, 1 high, 1 moderate |
+>
+> Your before-numbers reproduced exactly on my machine before I touched anything, so we were measuring the
+> same tree. **0 critical in both views**, which was the gate. GHSA-9qr9-h5gf-34mp (the flight-protocol RCE) is
+> gone, as are all four middleware/proxy-bypass and SSRF advisories you named — after the bump there are **no
+> advisories against `next`'s own code at all**. `npm audit fix` cleared `tar` (the second critical),
+> `lodash`, `lodash-es`, `nanoid`, `flatted`, `js-yaml`, `minimatch`, `brace-expansion`, `picomatch`, `ajv`,
+> `yaml` and `sharp`, all in the lockfile — `package.json` carries a **one-line** diff (the `next` pin) and
+> nothing else.
+>
+> **Two corrections to the finding's remediation text — please re-check these rather than take my word.**
+>
+> 1. The bump clears `sharp` but **not** `postcss`. Both residual entries are one root cause:
+>    `node_modules/next/node_modules/postcss` @ **8.4.31**, the copy `next` pins internally. The advisory range
+>    is `<=8.5.22` (GHSA-r28c-9q8g-f849 high + GHSA-6g55-p6wh-862q high, plus two moderates), and npm's fix
+>    metadata for it is now `next@16.3.3`, `isSemVerMajor: **true**`. So the remaining high is not reachable by
+>    any non-breaking action, and I did not take a framework major in a patch round.
+> 2. The `next` entry itself is now flagged **moderate**, and only as `via: [postcss]` — i.e. it is the same
+>    residual reported a second time through its parent, not a distinct advisory against `next`.
+>
+>    Our own top-level `postcss` devDependency is fine at **8.5.26** (above the range) — the vulnerable copy is
+>    exclusively next's nested one. My read, for you to confirm or reject: this is build-time CSS processing over
+>    first-party stylesheets, and all four advisories need attacker-controlled CSS (a crafted `sourceMappingURL`
+>    in a comment), so there is no request-path exposure at runtime. I'd suggest it becomes the tracked
+>    `next@16` ticket alongside `firebase-admin`/`axios` rather than gating this round, but that is your call,
+>    not mine.
+>
+> **Verification.** `npm run verify` (colour tokens → lint → build) exits **0**: 243 files scanned/0 hardcoded
+> palette classes, ESLint **0 errors** with the same 5 pre-existing warnings as before the bump (unused vars in
+> `artisan/calendar`, `artisan/report`, `signup-form`, `support-page`; one `react-hooks/exhaustive-deps` in
+> `reset-password-form`) — none introduced by this change, and the production build compiled every route with
+> `ƒ Middleware 39.8 kB` still emitted.
+>
+> Smoke pass done against the **production** build (`next start`, which logged `▲ Next.js 15.5.24`) in real
+> Chrome via Playwright, not just curl, since you flagged middleware specifically:
+>
+> | Check | Result |
+> |---|---|
+> | `/` renders, `h1` visible, hydrates | **PASS** — 200, no page errors |
+> | `/login` email + password inputs hydrate and accept typing | **PASS** |
+> | `/login` submit with empty email stays on `/login` (client validation) | **PASS** |
+> | `/dashboard/{user,admin,artisan}` with no cookie → `/login?redirect=…` | **PASS** — 307, redirect param preserved |
+> | Same three under `RSC: 1` and `RSC: 1` + `Next-Router-Prefetch: 1` | **PASS** — still 307, no shell served |
+> | Segment-prefetch path form (`/dashboard/admin.txt` + `Next-Router-Segment-Prefetch`) | **PASS** — still 307 |
+> | Spoofed `x-middleware-subrequest` header (the bypass-vector class) | **PASS** — still 307, not honoured |
+>
+> The last four are the ones the bypass advisories are about, so I probed them deliberately rather than
+> assuming a version number settles it. Only console noise is the pre-existing `_vercel/insights/script.js`
+> 404 you already recorded at `:639` — nothing new.
+>
+> **One thing I left alone, flagging it rather than silently fixing it:** `eslint-config-next` is still pinned
+> `15.5.4`, so it now trails `next` by a patch. It carries no advisory, it is a dev-only lint config, and lint
+> passes clean, so I did not touch it inside a contained security fix. Worth syncing on the next dependency
+> pass. I also did not add the CI `npm audit --audit-level=high` gate you recommended — there is no CI workflow
+> in this repo for me to add it to, and standing up one is out of scope for this fix; it needs its own ticket.
 
 ### [LOW] The documented rationale for `dotfiles: 'ignore'` does not hold, and the option is a no-op
 - **Category**: CWE-1078 (inconsistent/incorrect rationale) — no exploitable condition

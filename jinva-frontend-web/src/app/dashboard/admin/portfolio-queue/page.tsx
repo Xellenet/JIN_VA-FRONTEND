@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -35,9 +35,10 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react"
-import { naviiAvatar, cn, resolveMediaUrl } from "@/lib/utils"
+import { naviiAvatar, resolveMediaUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
+import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
 
 interface QueueItem {
   id: number
@@ -144,18 +145,9 @@ export default function PortfolioQueuePage() {
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Pending Review", value: items.length, color: "text-foreground",  bg: "bg-muted" },
-            { label: "Approved (session)", value: approvedCount, color: "text-primary", bg: "bg-primary/10" },
-            { label: "Rejected (session)", value: rejectedCount, color: "text-destructive", bg: "bg-destructive/10" },
-          ].map(({ label, value, color, bg }) => (
-            <Card key={label}>
-              <CardContent className={cn("p-4", bg)}>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className={cn("mt-0.5 text-2xl font-bold", color)}>{value}</p>
-              </CardContent>
-            </Card>
-          ))}
+          <QueueCounterCard label="Pending Review" value={items.length} isLoading={isLoading} />
+          <QueueCounterCard label="Approved" value={approvedCount} tone="primary" sublabel="this session" />
+          <QueueCounterCard label="Rejected" value={rejectedCount} tone="destructive" sublabel="this session" />
         </div>
 
         {/* Table card */}

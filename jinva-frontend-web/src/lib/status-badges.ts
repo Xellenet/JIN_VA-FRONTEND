@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Scale,
   Settings,
+  Handshake,
 } from "lucide-react"
 import type { Notification } from "@/lib/types"
 
@@ -90,6 +91,57 @@ export function getPaymentStatusConfig(status: string): StatusBadgeConfig & { ic
  * both on the backend (see `retryPendingTransfer`'s `In([...])` query).
  */
 export const RETRYABLE_PAYOUT_STATUSES = ["PENDING_TRANSFER", "TRANSFER_FAILED"] as const
+
+/**
+ * DisputeStatus badge map — Analytics/Admin/Disputes round (2026-08-24),
+ * design-spec.md §2.1 / requirements.md DQ5.
+ *
+ * Retires the page-local `statusCfg` that lived in
+ * `admin/disputes/page.tsx`, which gave `UNDER_REVIEW` and `CLOSED` the same
+ * muted tone — two statuses that mean opposite things (active work vs.
+ * finished) rendered pixel-identical. Every dispute badge (admin queue,
+ * admin detail, and both party-facing surfaces) reads from here.
+ *
+ * No new colour is introduced: yellow is already this app's
+ * "in progress / awaiting" tone (`bookingStatusConfig.PENDING`,
+ * `paymentStatusConfig.PENDING`) and gray-100/600 is already its
+ * terminal-neutral tone (`EXPIRED`, `REFUNDED`).
+ */
+export const disputeStatusConfig: Record<string, StatusBadgeConfig & { icon: LucideIcon }> = {
+  OPEN:         { label: "Open",         className: "bg-destructive/10 text-destructive border-destructive/20", icon: AlertTriangle },
+  UNDER_REVIEW: { label: "Under Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200",          icon: Clock },
+  RESOLVED:     { label: "Resolved",     className: "bg-primary/10 text-primary border-primary/20",             icon: CheckCircle2 },
+  CLOSED:       { label: "Closed",       className: "bg-gray-100 text-gray-600 border-gray-200",                icon: XCircle },
+}
+
+export function getDisputeStatusConfig(status: string): StatusBadgeConfig & { icon: LucideIcon } {
+  return disputeStatusConfig[status] ?? { label: status, className: "", icon: AlertCircle }
+}
+
+/**
+ * Dispute outcome (verdict) badge map — design-spec.md §2.2.
+ *
+ * The three PRD §5.13 verdicts. Tones and glyphs deliberately borrow from
+ * `paymentStatusConfig` rather than inventing dispute-specific ones: a
+ * dispute ruled for the client *is* a refund (`REFUNDED`'s
+ * `ArrowDownRight`), and one ruled for the artisan *is* a release
+ * (`RELEASED`'s `CheckCircle2`), so an admin who has used the Transactions
+ * screen recognises the money consequence from the badge alone.
+ *
+ * The `resolve` endpoint does not accept or return an outcome yet (that is
+ * this round's backend work) — this map exists now so the queue, the admin
+ * detail surface and both party views all read identically the moment it
+ * does.
+ */
+export const disputeOutcomeConfig: Record<string, StatusBadgeConfig & { icon: LucideIcon }> = {
+  REFUND_CLIENT:   { label: "Ruled for client",   className: "bg-red-100 text-red-700 border-red-200",     icon: ArrowDownRight },
+  RELEASE_ARTISAN: { label: "Ruled for artisan",  className: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle2 },
+  MUTUAL:          { label: "Mutually resolved",  className: "bg-muted text-muted-foreground border-border", icon: Handshake },
+}
+
+export function getDisputeOutcomeConfig(outcome: string): StatusBadgeConfig & { icon: LucideIcon } {
+  return disputeOutcomeConfig[outcome] ?? { label: outcome, className: "", icon: AlertCircle }
+}
 
 /**
  * Notification type-icon chips — Messaging & Notifications (2026-08-21).

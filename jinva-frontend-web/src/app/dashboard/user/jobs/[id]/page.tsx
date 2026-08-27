@@ -37,6 +37,8 @@ import { toast } from "sonner"
 import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dashboard/job-status-timeline"
 import { AttachmentGallery, type JobAttachment } from "@/components/dashboard/attachment-gallery"
 import { getPaymentStatusConfig, RETRYABLE_PAYOUT_STATUSES } from "@/lib/status-badges"
+import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
+import { DisputeEntryPoint } from "@/components/disputes/dispute-entry-point"
 
 interface BackendJob {
   id: number
@@ -420,6 +422,23 @@ export default function JobDetailPage() {
                     </Link>
                   </Button>
                 )}
+                {/* DP1: last in the constructive group. Disputes are
+                    booking-scoped on the backend, so this needs the job's
+                    linked booking — the component states plainly when a job
+                    doesn't have one rather than offering an action the server
+                    would reject. */}
+                <DisputeEntryPoint
+                  bookingId={job.bookingId}
+                  isEligible={(DISPUTABLE_BOOKING_STATUSES as readonly string[]).includes(job.status)}
+                  ineligibleReason="You can report a problem once the job is completed or cancelled."
+                  contextTitle={job.title}
+                  counterpartyName={artisanName}
+                  counterpartyRole="Artisan"
+                  counterpartyAvatar={job.acceptedArtisan?.profilePicture}
+                  amount={payment?.amount}
+                  paymentStatus={payment?.status}
+                  disputeHrefBase="/dashboard/user/disputes"
+                />
                 {(job.status === "OPEN" || job.status === "PENDING") && (
                   <Button
                     variant="destructive"

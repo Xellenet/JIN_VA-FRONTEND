@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -37,6 +37,7 @@ import { RatingStars } from "@/components/ui/rating-stars"
 import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
 import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbnails"
 import { ReviewReasonDialog } from "@/components/reviews/review-reason-dialog"
+import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
 import { Flag, Trash2, Eye, Search, MessageSquare, History, AlertTriangle, Loader2, BadgeCheck } from "lucide-react"
 import { naviiAvatar, cn } from "@/lib/utils"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
@@ -221,18 +222,9 @@ export default function AdminReviewsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Total Reviews", value: totalReviews, className: "text-foreground", bg: "bg-muted" },
-            { label: "Flagged", value: flaggedCount, className: "text-destructive", bg: "bg-destructive/10" },
-            { label: "Removed", value: removedCount, className: "text-muted-foreground", bg: "bg-muted" },
-          ].map(({ label, value, className, bg }) => (
-            <Card key={label}>
-              <CardContent className={cn("p-4", bg)}>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className={cn("mt-0.5 text-2xl font-bold", className)}>{value}</p>
-              </CardContent>
-            </Card>
-          ))}
+          <QueueCounterCard label="Total Reviews" value={totalReviews} isLoading={isLoading} />
+          <QueueCounterCard label="Flagged" value={flaggedCount} tone="destructive" />
+          <QueueCounterCard label="Removed" value={removedCount} tone="muted" />
         </div>
 
         {/* Table */}

@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 import { Button } from "@/components/ui/button"
+import { CHART_TOOLTIP_STYLE, CHART_AXIS_TICK } from "@/lib/charts"
 
 const data = [
   { month: "Jan", value: 8500 },
@@ -19,6 +20,20 @@ const data = [
   { month: "Dec", value: 16400 },
 ]
 
+/**
+ * design-spec.md §0.4: every colour in here was an invalid
+ * `hsl(var(--token))` string under this app's oklch/oklab tokens, so the bars
+ * and the tooltip chrome were rendering as SVG-default black / unstyled. Now
+ * on the bare-token form.
+ *
+ * The bar was nominally `--muted`, which resolves to `oklch(0.97 0 0)` — a
+ * near-white bar on a white card, i.e. invisible the moment the token is
+ * actually applied. It uses `--primary` here instead, matching the only one of
+ * this widget's two legend entries that corresponds to a real concept on this
+ * marketplace. The widget as a whole (hardcoded months, "Product"/"Service"
+ * legends, dead "Last Year" button) is slated for replacement by the real
+ * gross-vs-net revenue chart — design-spec.md §10.3.
+ */
 export function RevenueChart() {
   return (
     <Card>
@@ -43,16 +58,10 @@ export function RevenueChart() {
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={data}>
-            <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
-            <YAxis axisLine={false} tickLine={false} className="text-xs" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "var(--radius)",
-              }}
-            />
-            <Bar dataKey="value" fill="hsl(var(--muted))" radius={[4, 4, 0, 0]} />
+            <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" tick={CHART_AXIS_TICK} />
+            <YAxis axisLine={false} tickLine={false} className="text-xs" tick={CHART_AXIS_TICK} />
+            <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+            <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

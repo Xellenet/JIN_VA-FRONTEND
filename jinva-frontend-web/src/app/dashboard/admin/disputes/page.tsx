@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -30,8 +30,6 @@ import {
   Search,
   MessageSquare,
   CheckCircle,
-  Clock,
-  XCircle,
   Loader2,
   CreditCard,
   ArrowRight,
@@ -40,7 +38,8 @@ import Link from "next/link"
 import { naviiAvatar, cn, formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
-import { getPaymentStatusConfig } from "@/lib/status-badges"
+import { getPaymentStatusConfig, getDisputeStatusConfig } from "@/lib/status-badges"
+import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
 import { DisputeConversationPanel } from "@/components/admin/dispute-conversation-panel"
 
 // 3.6: GET /admin/disputes/:id (unlike the list endpoint) already returns
@@ -77,13 +76,6 @@ interface BackendDispute {
     lastname: string
     profilePicture?: string
   }
-}
-
-const statusCfg: Record<DisputeStatus, { label: string; icon: typeof Clock; className: string }> = {
-  OPEN:         { label: "Open",         icon: AlertTriangle, className: "bg-destructive/10 text-destructive border-destructive/20" },
-  UNDER_REVIEW: { label: "Under Review", icon: Clock,         className: "bg-muted text-muted-foreground border-border" },
-  RESOLVED:     { label: "Resolved",     icon: CheckCircle,   className: "bg-primary/10 text-primary border-primary/20" },
-  CLOSED:       { label: "Closed",       icon: XCircle,       className: "bg-muted text-muted-foreground border-border" },
 }
 
 export default function DisputesPage() {
@@ -203,19 +195,10 @@ export default function DisputesPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "Open",         value: counts.open,     className: "text-destructive",      bg: "bg-destructive/10" },
-            { label: "Under Review", value: counts.review,   className: "text-muted-foreground", bg: "bg-muted" },
-            { label: "Resolved",     value: counts.resolved, className: "text-primary",          bg: "bg-primary/10" },
-            { label: "Closed",       value: counts.closed,   className: "text-muted-foreground", bg: "bg-muted" },
-          ].map(({ label, value, className, bg }) => (
-            <Card key={label}>
-              <CardContent className={cn("p-4", bg)}>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className={cn("mt-0.5 text-2xl font-bold", className)}>{value}</p>
-              </CardContent>
-            </Card>
-          ))}
+          <QueueCounterCard label="Open"         value={counts.open}     tone="destructive" />
+          <QueueCounterCard label="Under Review" value={counts.review}   tone="muted" />
+          <QueueCounterCard label="Resolved"     value={counts.resolved} tone="primary" />
+          <QueueCounterCard label="Closed"       value={counts.closed}   tone="muted" />
         </div>
 
         <Card>
@@ -261,7 +244,7 @@ export default function DisputesPage() {
                     </TableRow>
                   ) : (
                     filtered.map((d) => {
-                      const cfg = statusCfg[d.status] ?? statusCfg.OPEN
+                      const cfg = getDisputeStatusConfig(d.status)
                       const StatusIcon = cfg.icon
                       const raiserName = d.raisedBy
                         ? `${d.raisedBy.firstname} ${d.raisedBy.lastname}`.trim()

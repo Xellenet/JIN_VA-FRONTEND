@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,10 +14,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
+import {
   Search,
   ChevronDown,
-  MoreVertical,
-  Eye,
   ArrowUpDown,
   Calendar,
   ClipboardList,
@@ -26,116 +32,228 @@ import {
   XCircle,
   UserRound,
   Loader2,
+  AlertTriangle,
 } from "lucide-react"
 import { naviiAvatar } from "@/lib/utils"
-import { apiFetch } from "@/lib/api"
+import { apiFetchWithMeta } from "@/lib/api"
+
+/**
+ * AT8 / design-spec.md §10.5 — the admin Jobs screen.
+ *
+ * Two defects fixed here:
+ *
+ *  1. It called the **public** `GET /jobs` rather than `GET /admin/jobs`. The
+ *     admin endpoint applies `withDeleted()`, so soft-deleted jobs were
+ *     invisible on the one screen whose whole purpose is seeing the full job
+ *     set. Deleted rows are now fetched and visibly marked.
+ *  2. The "Assign Artisan" and "Update Status" menu items had no `onClick` at
+ *     all. Per the round's resolved Open Question 10 they are removed rather
+ *     than wired: admin-side job mutation is not a named PRD requirement and
+ *     building it wasn't asked for. A menu item that does nothing is worse
+ *     than an absent one.
+ *
+ * The status filter is now applied server-side, the four counter tiles read
+ * real whole-set totals from the list endpoint's pagination metadata instead
+ * of counting the loaded page, and real pagination replaces the silent
+ * `limit=50` truncation. Search and column sorting remain page-local (the
+ * endpoint takes neither), which the footer states plainly.
+ */
 
 interface BackendJob {
-  id: string
-  title: string
+  id: number | string
+  title?: string
   status: string
   createdAt: string
-  customer?: { id: string; firstname: string; lastname: string; profilePicture?: string }
-  acceptedArtisan?: { id: string; firstname: string; lastname: string; profilePicture?: string }
-  service?: { id: string; name: string }
+  deletedAt?: string | null
+  customer?: { id: number | string; firstname: string; lastname: string; profilePicture?: string }
+  /**
+   * `GET /admin/jobs` joins `customer` and `service` only, so the accepted
+   * artisan's name genuinely isn't on the wire — `acceptedArtisanId` is
+   * (TypeORM populates the `@RelationId`). Shown as "Assigned" rather than a
+   * fabricated name; flagged for the backend engineer to join the relation.
+   */
+  acceptedArtisan?: { id: number | string; firstname: string; lastname: string }
+  acceptedArtisanId?: number | null
+  service?: { id: number | string; name: string }
 }
 
-interface MappedOrder {
+interface MappedJob {
   id: string
   clientName: string
   clientAvatar?: string
   artisanName: string
   serviceName: string
+  createdAt: string
   orderDate: string
   status: string
+  isDeleted: boolean
 }
 
-function mapStatus(s: string): string {
-  const map: Record<string, string> = {
-    PENDING: "pending",
-    IN_PROGRESS: "in-progress",
-    COMPLETED: "completed",
-    CANCELLED: "cancelled",
-  }
-  return map[s] ?? s.toLowerCase()
+const PAGE_SIZE = 20
+
+/** `Status` on the backend (`common/types/enums.ts`). */
+const STATUS_LABELS: Record<string, string> = {
+  OPEN: "Open",
+  PENDING: "Pending",
+  IN_PROGRESS: "In Progress",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  EXPIRED: "Expired",
 }
 
-function mapJob(j: BackendJob): MappedOrder {
+const STATUS_BADGE: Record<string, string> = {
+  OPEN: "border-primary/15 bg-primary/5 text-primary",
+  PENDING: "border-yellow-200 bg-yellow-50 text-yellow-700",
+  IN_PROGRESS: "border-border bg-muted text-muted-foreground",
+  COMPLETED: "border-primary/30 bg-primary/5 text-primary",
+  CANCELLED: "border-destructive/30 bg-destructive/5 text-destructive",
+  EXPIRED: "border-gray-200 bg-gray-100 text-gray-600",
+}
+
+const FILTER_OPTIONS = ["ALL", "OPEN", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED"] as const
+
+/** The four tiles, each a server-side filter shortcut. */
+const COUNTER_TILES = [
+  { label: "All Jobs", filter: "ALL", icon: ClipboardList },
+  { label: "Pending", filter: "PENDING", icon: Clock },
+  { label: "In Progress", filter: "IN_PROGRESS", icon: Calendar },
+  { label: "Completed", filter: "COMPLETED", icon: CheckCircle2 },
+] as const
+
+function mapJob(j: BackendJob): MappedJob {
   return {
-    id: j.id,
+    id: String(j.id),
     clientName: j.customer ? `${j.customer.firstname} ${j.customer.lastname}`.trim() : "Unknown",
     clientAvatar: j.customer?.profilePicture,
     artisanName: j.acceptedArtisan
       ? `${j.acceptedArtisan.firstname} ${j.acceptedArtisan.lastname}`.trim()
-      : "Unassigned",
-    serviceName: j.service?.name ?? j.title,
-    orderDate: new Date(j.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
-    status: mapStatus(j.status),
+      : j.acceptedArtisanId
+        ? "Assigned"
+        : "Unassigned",
+    serviceName: j.service?.name ?? j.title ?? "—",
+    createdAt: j.createdAt,
+    orderDate: new Date(j.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+    status: j.status,
+    isDeleted: Boolean(j.deletedAt),
   }
 }
 
-type SortField = "clientName" | "orderDate" | "serviceName" | "status"
+function extractTotal(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.total as number | undefined
+  const nested = (meta?.pagination as { total?: number } | undefined)?.total
+  return direct ?? nested ?? 0
+}
+
+function extractTotalPages(meta: Record<string, unknown> | undefined): number {
+  const direct = meta?.totalPages as number | undefined
+  const nested = (meta?.pagination as { totalPages?: number } | undefined)?.totalPages
+  const value = direct ?? nested ?? 1
+  return value > 0 ? value : 1
+}
+
+type SortField = "clientName" | "createdAt" | "serviceName" | "status"
 type SortDir = "asc" | "desc"
 
-export default function OrdersPage() {
-  const [orders, setOrders] = useState<MappedOrder[]>([])
+export default function AdminJobsPage() {
+  const [jobs, setJobs] = useState<MappedJob[]>([])
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [sortField, setSortField] = useState<SortField>("orderDate")
+  const [statusFilter, setStatusFilter] = useState<string>("ALL")
+  const [counts, setCounts] = useState<Record<string, number> | null>(null)
+  const [sortField, setSortField] = useState<SortField>("createdAt")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
-  useEffect(() => {
-    // `/jobs` caps `limit` at 50 (400 above it), so 100 returned nothing at all.
-    apiFetch<BackendJob[] | { items: BackendJob[] }>("/jobs?page=1&limit=50")
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: BackendJob[] }).items ?? []
-        setOrders(items.map(mapJob))
-      })
-      .catch(() => {})
-      .finally(() => setIsLoading(false))
+  const load = useCallback(async (p: number, status: string) => {
+    setIsLoading(true)
+    setLoadError(false)
+    try {
+      const query = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) })
+      if (status !== "ALL") query.set("status", status)
+      const { data, meta } = await apiFetchWithMeta<BackendJob[]>(`/admin/jobs?${query}`)
+      const rows = Array.isArray(data) ? data : []
+      if (rows.length === 0 && p > 1) {
+        await load(p - 1, status)
+        return
+      }
+      setJobs(rows.map(mapJob))
+      setPage(p)
+      setTotalPages(extractTotalPages(meta))
+      setTotal(extractTotal(meta))
+    } catch {
+      setLoadError(true)
+      setJobs([])
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
+
+  /**
+   * Real whole-set counts, one cheap `limit=1` metadata read per tile, rather
+   * than arithmetic over whichever page happened to be loaded.
+   */
+  const loadCounts = useCallback(async () => {
+    try {
+      const results = await Promise.all(
+        COUNTER_TILES.map(({ filter }) =>
+          apiFetchWithMeta<BackendJob[]>(
+            `/admin/jobs?limit=1${filter === "ALL" ? "" : `&status=${filter}`}`,
+          ),
+        ),
+      )
+      setCounts(
+        Object.fromEntries(
+          COUNTER_TILES.map(({ filter }, i) => [filter, extractTotal(results[i].meta)]),
+        ),
+      )
+    } catch {
+      // Non-blocking — the tiles show a spinner rather than a wrong number.
+    }
+  }, [])
+
+  useEffect(() => {
+    load(1, statusFilter)
+  }, [load, statusFilter])
+
+  useEffect(() => {
+    loadCounts()
+  }, [loadCounts])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(sortDir === "asc" ? "desc" : "asc")
-    else { setSortField(field); setSortDir("asc") }
+    else {
+      setSortField(field)
+      setSortDir("asc")
+    }
   }
 
-  const filtered = useMemo(() => {
-    let result = [...orders]
-    if (search) {
-      const q = search.toLowerCase()
+  // `GET /admin/jobs` takes only status/page/limit — no search, no sort. Both
+  // of these therefore narrow and reorder the loaded page only, which the
+  // footer says out loud rather than implying a whole-ledger operation.
+  const visible = useMemo(() => {
+    let result = [...jobs]
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
       result = result.filter(
         (o) =>
           o.clientName.toLowerCase().includes(q) ||
           o.artisanName.toLowerCase().includes(q) ||
-          o.serviceName.toLowerCase().includes(q),
+          o.serviceName.toLowerCase().includes(q) ||
+          o.id.includes(q),
       )
     }
-    if (statusFilter !== "all") result = result.filter((o) => o.status === statusFilter)
     result.sort((a, b) => {
-      const cmp = String(a[sortField]).localeCompare(String(b[sortField]))
+      const cmp =
+        sortField === "createdAt"
+          ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          : String(a[sortField]).localeCompare(String(b[sortField]))
       return sortDir === "asc" ? cmp : -cmp
     })
     return result
-  }, [orders, search, statusFilter, sortField, sortDir])
-
-  const statusCounts = {
-    all: orders.length,
-    pending: orders.filter((o) => o.status === "pending").length,
-    "in-progress": orders.filter((o) => o.status === "in-progress").length,
-    completed: orders.filter((o) => o.status === "completed").length,
-  }
-
-  const statusBadge = (status: string) => {
-    const map: Record<string, string> = {
-      completed: "border-primary/30 bg-primary/5 text-primary",
-      "in-progress": "border-border bg-muted text-muted-foreground",
-      pending: "border-blue-200 bg-blue-50 text-blue-700",
-      cancelled: "border-destructive/30 bg-destructive/5 text-destructive",
-    }
-    return map[status] || "border-muted bg-muted text-muted-foreground"
-  }
+  }, [jobs, search, sortField, sortDir])
 
   const SortHeader = ({ label, field }: { label: string; field: SortField }) => (
     <button
@@ -151,22 +269,23 @@ export default function OrdersPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-          {[
-            { label: "All Jobs", count: statusCounts.all, icon: ClipboardList, filter: "all" },
-            { label: "Pending", count: statusCounts.pending, icon: Clock, filter: "pending" },
-            { label: "In Progress", count: statusCounts["in-progress"], icon: Calendar, filter: "in-progress" },
-            { label: "Completed", count: statusCounts.completed, icon: CheckCircle2, filter: "completed" },
-          ].map((item) => (
-            <button key={item.label} type="button" onClick={() => setStatusFilter(item.filter)} className="text-left">
-              <Card className={`cursor-pointer transition-shadow hover:shadow-md ${statusFilter === item.filter ? "ring-2 ring-primary" : ""}`}>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          {COUNTER_TILES.map(({ label, filter, icon: Icon }) => (
+            <button key={label} type="button" onClick={() => setStatusFilter(filter)} className="text-left">
+              <Card
+                className={`cursor-pointer transition-shadow hover:shadow-md ${statusFilter === filter ? "ring-2 ring-primary" : ""}`}
+              >
                 <CardContent className="flex items-center gap-4 p-4">
                   <div className="rounded-lg bg-muted p-2.5 text-foreground">
-                    <item.icon className="h-5 w-5" />
+                    <Icon className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">{item.label}</p>
-                    <p className="text-2xl font-bold">{item.count}</p>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    {counts === null ? (
+                      <Loader2 className="mt-1 h-5 w-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <p className="text-2xl font-bold">{counts[filter] ?? 0}</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -176,19 +295,19 @@ export default function OrdersPage() {
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl font-bold">Jobs</CardTitle>
-                <p className="text-sm text-muted-foreground">View, manage, and track all platform jobs</p>
-              </div>
+            <div>
+              <CardTitle className="text-2xl font-bold">Jobs</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Every job on the platform, including soft-deleted ones
+              </p>
             </div>
           </CardHeader>
           <CardContent>
             <div className="mb-6 flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[200px]">
+              <div className="relative min-w-[200px] flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by client, artisan, or service..."
+                  placeholder="Search this page by client, artisan, service or id…"
                   className="pl-10"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -197,14 +316,14 @@ export default function OrdersPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="gap-2 bg-transparent">
-                    {statusFilter === "all" ? "All Status" : statusFilter.replace("-", " ")}
+                    {statusFilter === "ALL" ? "All Statuses" : STATUS_LABELS[statusFilter] ?? statusFilter}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {["all", "pending", "in-progress", "completed", "cancelled"].map((s) => (
-                    <DropdownMenuItem key={s} onClick={() => setStatusFilter(s)} className="capitalize">
-                      {s === "all" ? "All Status" : s.replace("-", " ")}
+                  {FILTER_OPTIONS.map((s) => (
+                    <DropdownMenuItem key={s} onClick={() => setStatusFilter(s)}>
+                      {s === "ALL" ? "All Statuses" : STATUS_LABELS[s] ?? s}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -215,6 +334,18 @@ export default function OrdersPage() {
               <div className="flex items-center justify-center py-16">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
+            ) : loadError ? (
+              <div className="py-16 text-center">
+                <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-destructive/60" />
+                <p className="text-sm text-muted-foreground">Couldn&apos;t load the job list.</p>
+                <Button
+                  variant="outline"
+                  className="mt-4 bg-transparent"
+                  onClick={() => load(page, statusFilter)}
+                >
+                  Retry
+                </Button>
+              </div>
             ) : (
               <>
                 <div className="overflow-x-auto">
@@ -223,57 +354,54 @@ export default function OrdersPage() {
                       <tr className="border-b text-left text-sm text-muted-foreground">
                         <th className="pb-3"><SortHeader label="Client" field="clientName" /></th>
                         <th className="pb-3"><SortHeader label="Service" field="serviceName" /></th>
-                        <th className="pb-3"><SortHeader label="Date" field="orderDate" /></th>
+                        <th className="pb-3"><SortHeader label="Date" field="createdAt" /></th>
                         <th className="pb-3">Assigned Artisan</th>
                         <th className="pb-3"><SortHeader label="Status" field="status" /></th>
-                        <th className="pb-3 font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.length === 0 ? (
+                      {visible.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                          <td colSpan={5} className="py-12 text-center text-muted-foreground">
                             <XCircle className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                            No jobs found matching your criteria
+                            {search
+                              ? "No jobs on this page match your search"
+                              : "No jobs with this status"}
                           </td>
                         </tr>
                       ) : (
-                        filtered.map((order) => (
-                          <tr key={order.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        visible.map((job) => (
+                          <tr
+                            key={job.id}
+                            className="border-b transition-colors last:border-0 hover:bg-muted/30"
+                          >
                             <td className="py-4">
                               <div className="flex items-center gap-3">
                                 <Avatar className="h-8 w-8">
-                                  <AvatarImage src={order.clientAvatar || naviiAvatar(order.clientName)} />
+                                  <AvatarImage src={job.clientAvatar || naviiAvatar(job.clientName)} />
                                   <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                                 </Avatar>
-                                <span className="font-medium">{order.clientName}</span>
+                                <span className="font-medium">{job.clientName}</span>
                               </div>
                             </td>
-                            <td className="py-4 text-sm text-muted-foreground">{order.serviceName}</td>
-                            <td className="py-4 text-sm text-muted-foreground">{order.orderDate}</td>
-                            <td className="py-4 text-sm text-muted-foreground">{order.artisanName}</td>
+                            <td className="py-4 text-sm text-muted-foreground">{job.serviceName}</td>
+                            <td className="py-4 text-sm text-muted-foreground">{job.orderDate}</td>
+                            <td className="py-4 text-sm text-muted-foreground">{job.artisanName}</td>
                             <td className="py-4">
-                              <Badge variant="outline" className={statusBadge(order.status)}>
-                                <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
-                                <span className="capitalize">{order.status.replace("-", " ")}</span>
-                              </Badge>
-                            </td>
-                            <td className="py-4">
-                              <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem>Assign Artisan</DropdownMenuItem>
-                                    <DropdownMenuItem>Update Status</DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <Badge variant="outline" className={STATUS_BADGE[job.status] ?? ""}>
+                                  <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
+                                  {STATUS_LABELS[job.status] ?? job.status}
+                                </Badge>
+                                {job.isDeleted && (
+                                  <Badge
+                                    variant="outline"
+                                    className="border-gray-200 bg-gray-100 text-gray-600"
+                                    title="Soft-deleted — visible only to admins"
+                                  >
+                                    Deleted
+                                  </Badge>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -282,9 +410,46 @@ export default function OrdersPage() {
                     </tbody>
                   </table>
                 </div>
+
                 <div className="mt-4 text-sm text-muted-foreground">
-                  Showing {filtered.length} of {orders.length} jobs
+                  Showing {visible.length} of {total} job{total !== 1 ? "s" : ""}
+                  {statusFilter !== "ALL" ? ` with status ${STATUS_LABELS[statusFilter] ?? statusFilter}` : ""}
+                  {" — search and column sorting apply to this page only."}
                 </div>
+
+                {totalPages > 1 && (
+                  <div className="mt-3 border-t pt-3">
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); if (page > 1) load(page - 1, statusFilter) }}
+                            className={page === 1 ? "pointer-events-none opacity-50" : ""}
+                          />
+                        </PaginationItem>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                          <PaginationItem key={p}>
+                            <PaginationLink
+                              href="#"
+                              isActive={p === page}
+                              onClick={(e) => { e.preventDefault(); load(p, statusFilter) }}
+                            >
+                              {p}
+                            </PaginationLink>
+                          </PaginationItem>
+                        ))}
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); if (page < totalPages) load(page + 1, statusFilter) }}
+                            className={page === totalPages ? "pointer-events-none opacity-50" : ""}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                )}
               </>
             )}
           </CardContent>

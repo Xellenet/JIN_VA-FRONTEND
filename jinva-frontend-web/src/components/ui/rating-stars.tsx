@@ -53,6 +53,11 @@ export interface RatingStarsProps {
  * when `totalReviews === 0`. This is the plain average (`R`) only — the
  * Bayesian-weighted score (`WR`) is a backend-only sorting input and is never
  * rendered anywhere (see api-contract.md §8).
+ *
+ * The gold star uses the `--rating` token rather than a `yellow-400` literal
+ * (DT5 / requirements.md Open Question 2, answered "token, not allowlist"). A
+ * gold star is a convention rather than a status, so it gets its own token —
+ * which is also what makes it tunable in dark mode.
  */
 export function RatingStars({
   rating,
@@ -92,7 +97,7 @@ export function RatingStars({
           style={{ width: `${fillPercent}%` }}
         >
           {Array.from({ length: 5 }).map((_, i) => (
-            <Star key={i} className={cn(starSize, "fill-yellow-400 text-yellow-400")} />
+            <Star key={i} className={cn(starSize, "fill-rating text-rating")} />
           ))}
         </span>
       </span>

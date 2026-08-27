@@ -213,7 +213,9 @@ Tests:       7 failed, 118 passed, 125 total
   percentages, no job counts. Every other number on `/` is a step index (1–5), a reminder window (24h / 2h),
   a mock appointment time, or the copyright year.
 - **Likely location**: `jinva-frontend-web/src/components/public/landing/hero.tsx`.
-- **Status**: Open
+- **DECISION (user, 2026-08-27): add a small sample marker**, matching the testimonials section's treatment,
+  rather than leaving it unlabelled or dropping the numbers.
+- **Status**: Open — fix assigned to frontend-engineer
 
 ### [MINOR] `formatCurrency()` has no fixed fraction digits, so amounts render with inconsistent decimals
 - **Repro**: log in as `admin@jinva.com`, open `/dashboard/admin/transactions`. In one table:
@@ -261,7 +263,10 @@ with colours resolved via canvas (the tokens compute to `oklab()`):
   muted surface in the product.
 - **Likely location**: `jinva-frontend-web/src/app/globals.css` (`--destructive`, `--muted-foreground` in
   `:root`), with `src/lib/status-badges.ts` as the consumer.
-- **Status**: Open — awaiting ux-designer
+- **DECISION (user, 2026-08-27): leave as-is.** Recorded as a known, disclosed deviation rather than
+  deepening either token — avoids an app-wide light-mode colour shift on every destructive/muted surface as
+  a side effect of this round.
+- **Status**: Closed — accepted, no fix required
 
 ### [MINOR] Signup form labels point at element ids that don't exist
 - **Repro**: open `/signup`, click the text "Gender" or "Role". Nothing focuses or opens.

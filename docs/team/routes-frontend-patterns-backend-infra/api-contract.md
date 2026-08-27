@@ -20,8 +20,9 @@ endpoint, and the admin verification screen has to be pointed at it.
 | `GET /verification`, `GET /verification/:id`, `GET /verification/me` | Response shape **unchanged**. `documentFrontUrl` / `documentBackUrl` / `selfieUrl` still hold `/uploads/<folder>/<file>`. | Stop treating those three fields as image URLs. See §1.2. |
 | `GET /uploads/avatars/…`, `portfolio`, `reviews`, `messages`, `job-attachments` | **Unchanged**, including `Cache-Control: public, max-age=31536000, immutable`. | None. `resolveMediaUrl()` keeps working exactly as today for all five. |
 | `GET /uploads/documents/…`, `GET /uploads/selfies/…` | **No longer served.** Now a `404` with the standard JSON error envelope, in both local and S3 mode, whether or not the file exists on disk. | Anything relying on these rendering anonymously will break — that is the point. |
+| `POST /verification` | **Request validation tightened** (security MEDIUM fix). Response shape unchanged. `documentFrontUrl`/`documentBackUrl`/`selfieUrl` now only accept a URL the matching upload endpoint actually returned. | Only if you hand-build these values — send the `url` from the upload response verbatim. See §3. |
 
-Nothing else in the API changed. No other endpoint, DTO, field or status code moved.
+Nothing else in the API changed. No other response shape, field or status code moved.
 
 ---
 
@@ -140,3 +141,30 @@ Two operator notes that affect what you'll see locally:
 - `AWS_S3_PUBLIC_URL_BASE` must not be configured to front the `private/` key prefix. The prefix is not the
   access control — the admin guard is — but it keeps a public-bucket default from exposing a KYC object
   through the same URL shape the frontend knows for avatars.
+
+---
+
+## 3. `POST /verification` — the three KYC media fields now validate their provenance
+
+**Method / path:** `POST /api/v1/verification` · **Auth:** bearer token + role `ARTISAN` (unchanged).
+
+**What changed:** `documentFrontUrl`, `documentBackUrl` and `selfieUrl` previously accepted any non-empty
+string. They now carry `@IsAttachmentUrl(<folder>)` — the same validator already on job/booking
+`attachmentUrls`, message `attachmentUrl` and review `photoUrls` — plus a `@MaxLength(500)` cap. Nothing
+else on the DTO or the response changed.
+
+| Field | Required | Accepted value |
+|---|---|---|
+| `documentFrontUrl` | yes | exactly the `url` returned by `POST /uploads/document` — `/uploads/documents/<uuid>.jpg\|.png\|.webp\|.pdf`, max 500 chars |
+| `documentBackUrl` | no | same as above (same upload endpoint) |
+| `selfieUrl` | yes | exactly the `url` returned by `POST /uploads/selfie` — `/uploads/selfies/<uuid>.jpg\|.png\|.webp`, max 500 chars |
+
+**Errors:** `400` with the standard validation envelope if any of the three is not an upload-endpoint URL for
+its own folder. Rejected: an arbitrary external URL, a hand-written or non-UUID filename, a value from the
+*other* folder (a `documents` path in `selfieUrl` or vice versa), an extension that folder cannot produce
+(`.pdf` in `selfieUrl`), a traversal or percent-encoded traversal string, an appended query string or
+fragment, and anything over 500 characters. Roles and all other status codes are unchanged.
+
+**Practical impact: none, if you already do the normal thing** — upload first, then send the returned `url`
+through untouched. This only breaks a client that constructs these strings itself. Note the Swagger examples
+were previously `/uploads/documents/abc.jpg`, which would now be rejected; they now show the real UUID shape.

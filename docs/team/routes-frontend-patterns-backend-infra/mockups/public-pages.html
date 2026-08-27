@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JinVa — Shared public page layout (NEW) — /about · /terms · /contact · 404 + error — 1024px, light</title>
+<style>
+  /* Real :root token values from jinva-frontend-web/src/app/globals.css,
+     plus the DT1 --warning token from design-spec.md §1.1. */
+  :root{
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --primary: oklab(32.107% -0.04748 0.01739);
+    --primary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --border: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --warning: oklch(0.476 0.114 61.907);   /* DT1 · #854d0e · 5.90:1 on /10 */
+    --radius: 0.625rem;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:#e9e9e9;color:var(--foreground);-webkit-font-smoothing:antialiased}
+  .mockup-note{background:#111;color:#eee;font-size:12px;line-height:1.6;padding:10px 20px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .mockup-note b{color:#fff}
+  .stagelabel{max-width:1024px;margin:32px auto 10px;font-family:ui-monospace,monospace;
+    font-size:12px;color:#444;line-height:1.6}
+  .stagelabel b{color:#000}
+  .frame{width:1024px;margin:0 auto;background:var(--background);border:1px solid var(--border);
+    box-shadow:0 18px 44px -18px rgba(0,0,0,.3);overflow:hidden}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  .prose{max-width:768px;margin:0 auto;padding:0 24px}   /* = max-w-3xl px-4 sm:px-6 */
+
+  /* ── header / footer (identical to the landing page's) ──────────────── */
+  header.site{height:64px;display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--border);padding:0 24px;
+    background:color-mix(in oklab,var(--background) 80%,transparent);backdrop-filter:blur(8px)}
+  .logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+  .logo .mark{width:30px;height:30px;border-radius:6px;background:var(--primary);
+    display:flex;align-items:center;justify-content:center}
+  .logo .word{font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--foreground)}
+  nav.desk{display:flex;align-items:center;gap:24px}
+  nav.desk a{font-size:14px;font-weight:500;color:var(--muted-foreground);text-decoration:none}
+  .hdr-actions{display:flex;align-items:center;gap:8px}
+
+  footer.site{border-top:1px solid var(--border);
+    background:color-mix(in oklab,var(--muted) 40%,var(--background));padding:48px 0 0;margin-top:64px}
+  .fgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:28px}
+  .fcol h4{font-size:13px;font-weight:600;margin-bottom:12px}
+  .fcol ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+  .fcol a{font-size:13px;color:var(--muted-foreground);text-decoration:none}
+  .fbrand p{font-size:13px;line-height:1.6;color:var(--muted-foreground);margin-top:12px;
+    max-width:280px}
+  .fbottom{margin-top:40px;border-top:1px solid var(--border);padding:18px 0;display:flex;
+    align-items:center;justify-content:space-between;font-size:12px;color:var(--muted-foreground)}
+  .fbottom .r{display:flex;gap:14px}
+  .fbottom a{color:var(--muted-foreground);text-decoration:none}
+
+  /* ── buttons / badges ───────────────────────────────────────────────── */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;
+    padding:0 16px;border-radius:6px;font-size:14px;font-weight:500;border:1px solid transparent;
+    text-decoration:none;color:var(--foreground);background:transparent;white-space:nowrap}
+  .btn-default{background:var(--primary);color:var(--primary-foreground)}
+  .btn-outline{border-color:var(--border);background:var(--background);
+    box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .btn-ghost{background:transparent}
+  .btn-icon{width:36px;height:36px;padding:0}
+  .btn-lg{height:40px;padding:0 24px;font-size:15px}
+  .ico{width:18px;height:18px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+  .i16{width:16px;height:16px}.i14{width:14px;height:14px}.i24{width:24px;height:24px}
+
+  /* ── prose shell ────────────────────────────────────────────────────── */
+  main.page{padding:48px 0 0}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted-foreground)}
+  h1.page{font-size:36px;line-height:1.15;letter-spacing:-.02em;font-weight:700;margin-top:8px;
+    text-wrap:balance}
+  p.standfirst{margin-top:12px;font-size:16px;line-height:1.65;color:var(--muted-foreground)}
+  .sepline{height:1px;background:var(--border);margin:32px 0}
+  article h2{font-size:20px;font-weight:600;margin:40px 0 12px}
+  article h2:first-child{margin-top:0}
+  article p{margin-bottom:16px;line-height:1.75;font-size:15px}
+  article ul{margin-bottom:16px;padding-left:24px;display:flex;flex-direction:column;gap:8px}
+  article li{line-height:1.7;font-size:15px}
+  article a{color:var(--primary);text-decoration:underline;text-underline-offset:4px}
+  .mut{color:var(--muted-foreground)}
+  .sm{font-size:13px;line-height:1.6}
+  .xs{font-size:12px;line-height:1.5}
+
+  /* ── alert (mirrors src/components/ui/alert.tsx), --warning tone ────── */
+  .alert{display:grid;grid-template-columns:auto 1fr;gap:12px;border:1px solid
+    color-mix(in oklab,var(--warning) 30%,transparent);border-radius:var(--radius);
+    background:color-mix(in oklab,var(--warning) 10%,transparent);padding:16px;margin-top:24px}
+  .alert .ico{color:var(--warning);margin-top:2px}
+  .alert .t{font-size:14px;font-weight:600;color:var(--warning);margin-bottom:4px}
+  .alert .d{font-size:14px;line-height:1.65;color:var(--foreground)}
+
+  /* ── cards / notes ──────────────────────────────────────────────────── */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+    box-shadow:0 1px 2px rgba(0,0,0,.05);padding:24px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+  .icotile{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;
+    justify-content:center;flex:0 0 40px;
+    background:color-mix(in oklab,var(--primary) 10%,transparent);color:var(--primary)}
+  .card h2{margin:16px 0 8px;font-size:17px;font-weight:600}
+  .card p{font-size:14px;line-height:1.65;color:var(--muted-foreground);margin-bottom:0}
+  .card .act{margin-top:20px}
+  .note{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--border);
+    border-radius:8px;background:color-mix(in oklab,var(--muted) 40%,var(--background));
+    padding:16px;margin-top:16px}
+  .note .ico{color:var(--muted-foreground);margin-top:2px}
+  .note p{font-size:14px;line-height:1.7;margin:0}
+  .note b{color:var(--foreground)}
+
+  /* ── empty state (mirrors src/components/ui/empty.tsx) ──────────────── */
+  .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;
+    border:1px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
+    text-align:center;margin:24px auto;max-width:768px}
+  .empty .media{width:40px;height:40px;border-radius:8px;background:var(--muted);
+    display:flex;align-items:center;justify-content:center;color:var(--foreground)}
+  .empty .t{font-size:18px;font-weight:500;letter-spacing:-.01em}
+  .empty .d{font-size:14px;line-height:1.7;color:var(--muted-foreground);max-width:24rem}
+  .empty .acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .empty .links{font-size:13px;color:var(--muted-foreground);display:flex;gap:12px}
+  .empty .links a{color:var(--muted-foreground);text-decoration:underline;
+    text-underline-offset:4px}
+
+  .anno{background:#fffbe6;border-left:3px solid #9a3412;color:#3a2a10;font-size:12px;
+    line-height:1.6;padding:10px 16px;font-family:ui-monospace,SFMono-Regular,monospace;
+    max-width:1024px;margin:0 auto 8px}
+  .anno b{color:#000}
+  .spacer{height:8px}
+</style>
+</head>
+<body>
+
+<div class="mockup-note">
+  <b>MOCKUP · NEW SCREENS · PUB1–PUB4 + public error/404 · design-spec.md §8 + §4 · 1024px · LIGHT theme</b><br>
+  <b>One shared layout, four content treatments.</b> The header and footer are the <i>same components</i> as the landing page (<code>PublicHeader</code> / <code>PublicFooter</code>) — shown in full on <code>/about</code>, abbreviated after that.
+  These pages exist to make the footer honest, not to be designed individually. <code>/privacy</code> is not mocked: it is byte-identical to <code>/terms</code> with two words changed.
+</div>
+
+<!-- ═══════════════════════ /about ═══════════════════════ -->
+<div class="stagelabel"><b>1 · <code>/about</code> — PUB3</b> · the shared <code>PublicProse</code> shell, populated. Content is drawn <b>entirely from PRD §1–§3</b>. No founding date, no headcount, no funding, no team bios, no user counts — none of it exists in the PRD and PUB3 forbids inventing it.</div>
+<div class="frame">
+
+  <header class="site">
+    <a class="logo" href="#" aria-label="JinVa home">
+      <span class="mark">
+        <svg width="19" height="19" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z" fill="#fff" transform="translate(-6,-4) scale(1.35)"/>
+          <circle cx="19" cy="12" r="2.6" fill="#fff"/>
+        </svg>
+      </span>
+      <span class="word">JinVa</span>
+    </a>
+    <nav class="desk" aria-label="Main">
+      <a href="#">Services</a><a href="#">How it works</a><a href="#">For artisans</a>
+      <a href="#">Why JinVa</a><a href="#">FAQ</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="btn btn-ghost btn-icon" aria-label="Toggle theme">
+        <svg class="ico i16" viewBox="0 0 24 24" style="color:var(--muted-foreground)"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
+      <a class="btn btn-ghost" href="#">Log in</a>
+      <a class="btn btn-default" href="#">Get started</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="prose">
+      <p class="eyebrow">About</p>
+      <h1 class="page">An operating system for the artisan services industry.</h1>
+      <p class="standfirst">JinVa replaces fragmented, informal hiring with a structured platform for
+        discovery, booking, payment and reputation-building.</p>
+      <div class="sepline"></div>
+
+      <article>
+        <h2>What JinVa is</h2>
+        <p>JinVa is a full-stack artisan services marketplace that connects clients with skilled,
+          verified service providers across all trade categories — electrical, plumbing, carpentry,
+          painting, cleaning, landscaping, beauty, and more.</p>
+        <p>It replaces fragmented, informal hiring with a structured platform for discovery, booking,
+          payment, and reputation-building in one cohesive system.</p>
+
+        <h2>The problem we're solving</h2>
+        <p><strong>Clients</strong> cannot easily evaluate an artisan's quality, price or availability.
+          They rely on word of mouth, face unclear pricing, have no reliable booking or payment trail,
+          and have no recourse when work goes wrong.</p>
+        <p><strong>Artisans</strong> deal with inconsistent demand, frequent no-shows, no digital
+          payment infrastructure, no way to showcase past work professionally, and no tools for
+          schedule or reputation management.</p>
+        <p><strong>Admins</strong> had no centralised view of platform health, could not enforce
+          quality standards, and could not moderate disputes without fully manual processes.</p>
+
+        <h2>What we're building toward</h2>
+        <p>These are our objectives, not claims about where we are today:</p>
+        <ul>
+          <li>To give clients transparent, trustworthy and frictionless access to verified artisans.</li>
+          <li>To give artisans tools to build a professional reputation, manage their schedule, and get paid reliably.</li>
+          <li>To give admins full visibility into platform activity, with tools to enforce quality and resolve disputes.</li>
+          <li>To establish a digital payment habit as the default transaction method across the platform.</li>
+          <li>To achieve measurable improvements in booking conversion, job completion and repeat client rates.</li>
+        </ul>
+
+        <h2>Who runs the platform</h2>
+        <p>JinVa has an internal admin team that verifies artisans, moderates portfolios and reviews,
+          oversees transactions and resolves disputes. Admin accounts are created internally and are
+          not open for registration.</p>
+        <p>You can read more about <a href="#">how JinVa keeps the platform safe</a>.</p>
+
+        <div class="sepline"></div>
+        <p style="margin-bottom:0">
+          <a href="#">See the trades we cover</a> &nbsp;·&nbsp; <a href="#">Get started</a>
+        </p>
+      </article>
+    </div>
+
+    <footer class="site">
+      <div class="wrap">
+        <div class="fgrid">
+          <div class="fcol fbrand">
+            <a class="logo" href="#" aria-label="JinVa home">
+              <span class="mark" style="width:26px;height:26px">
+                <svg width="16" height="16" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                  <path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z" fill="#fff" transform="translate(-6,-4) scale(1.35)"/>
+                  <circle cx="19" cy="12" r="2.6" fill="#fff"/>
+                </svg>
+              </span>
+              <span class="word" style="font-size:19px">JinVa</span>
+            </a>
+            <p>An artisan services marketplace. Find verified artisans, book them, pay safely, and rate the work.</p>
+          </div>
+          <div class="fcol"><h4>Product</h4><ul>
+            <li><a href="#">How it works</a></li><li><a href="#">Service categories</a></li>
+            <li><a href="#">For artisans</a></li><li><a href="#">Why JinVa</a></li>
+            <li><a href="#">Log in</a></li><li><a href="#">Get started</a></li></ul></div>
+          <div class="fcol"><h4>Company</h4><ul>
+            <li><a href="#">About JinVa</a></li>
+            <li><a href="#">How JinVa keeps the platform safe</a></li></ul></div>
+          <div class="fcol"><h4>Support</h4><ul>
+            <li><a href="#">FAQ</a></li><li><a href="#">Contact</a></li></ul></div>
+          <div class="fcol"><h4>Legal</h4><ul>
+            <li><a href="#">Terms of Service</a></li><li><a href="#">Privacy Policy</a></li></ul></div>
+        </div>
+        <div class="fbottom">
+          <span>© 2026 JinVa. All rights reserved.</span>
+          <span class="r"><a href="#">Terms</a><a href="#">Privacy</a></span>
+        </div>
+      </div>
+    </footer>
+  </main>
+</div>
+<div class="spacer"></div>
+<div class="anno">
+  <b>§8.1 ·</b> <code>max-w-3xl</code> at 15–16px / <code>leading-relaxed</code> ≈ 70 characters per line. <b><code>@tailwindcss/typography</code> is NOT installed — do not add it</b>; the prose rhythm is a handful of arbitrary-child utilities on the <code>&lt;article&gt;</code> (§8.1 lists them).<br>
+  <b>The honesty rule on this page:</b> the objectives list is written in the infinitive ("To give clients…"), never "We give clients…". That one grammatical choice is the difference between a goal and an unapproved claim.<br>
+  <b>The footer's on-page anchors must be <code>/#services</code>, not <code>#services</code></b> — from <code>/about</code> a bare hash resolves to <code>/about#services</code> and does nothing. Most likely dead-link bug in the round.
+</div>
+
+<!-- ═══════════════════════ /terms ═══════════════════════ -->
+<div class="stagelabel"><b>2 · <code>/terms</code> — PUB1</b> (and <code>/privacy</code> — PUB2, identical) · ships as a <b>visibly labelled draft placeholder</b> per the user's 2026-08-27 decision. No agent authors binding legal text — and this design deliberately does <b>not</b> sketch section headings either, because a plausible-looking "1. Acceptance of Terms / 2. Limitation of Liability" skeleton is still authoring the structure of a legal document.</div>
+<div class="frame">
+  <header class="site">
+    <a class="logo" href="#" aria-label="JinVa home">
+      <span class="mark">
+        <svg width="19" height="19" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z" fill="#fff" transform="translate(-6,-4) scale(1.35)"/>
+          <circle cx="19" cy="12" r="2.6" fill="#fff"/>
+        </svg>
+      </span>
+      <span class="word">JinVa</span>
+    </a>
+    <nav class="desk" aria-label="Main">
+      <a href="#">Services</a><a href="#">How it works</a><a href="#">For artisans</a>
+      <a href="#">Why JinVa</a><a href="#">FAQ</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="btn btn-ghost btn-icon" aria-label="Toggle theme">
+        <svg class="ico i16" viewBox="0 0 24 24" style="color:var(--muted-foreground)"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
+      <a class="btn btn-ghost" href="#">Log in</a>
+      <a class="btn btn-default" href="#">Get started</a>
+    </div>
+  </header>
+
+  <main class="page" style="padding-bottom:56px">
+    <div class="prose">
+      <p class="eyebrow">Legal</p>
+      <h1 class="page">Terms of Service</h1>
+
+      <div class="alert" role="status">
+        <svg class="ico" viewBox="0 0 24 24"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <div>
+          <div class="t">Draft — pending legal review</div>
+          <div class="d">JinVa's Terms of Service have not been published yet. This page is a
+            placeholder so that links to it resolve; it is not a legal agreement and nothing on it
+            is binding.</div>
+        </div>
+      </div>
+
+      <div class="sepline"></div>
+
+      <article>
+        <p>The published version will be added here before JinVa is open to the public.</p>
+        <p>If you need to understand how JinVa handles bookings, payments or your personal
+          information in the meantime, please <a href="#">get in touch</a>.</p>
+      </article>
+
+      <div class="sepline"></div>
+      <p class="sm mut">Last updated: not yet published.</p>
+    </div>
+  </main>
+</div>
+<div class="spacer"></div>
+<div class="anno">
+  <b>§8.3 ·</b> the <code>Alert</code> uses the new <code>--warning</code> token: <code>border-warning/30 bg-warning/10 text-warning</code> — <b>5.90:1</b> light, <b>9.22:1</b> dark. The description drops to <code>text-foreground</code> so a longer paragraph reads at full contrast. <b>Icon + the literal word "Draft"</b>, so the status is never carried by colour alone.<br>
+  <b>"Last updated: not yet published"</b> rather than a fabricated date — same no-fabrication rule as LP8.<br>
+  <b>Handoff to the human, not to an engineer:</b> supply the real copy. A marketplace handling payments and personal data with no published terms or privacy policy is a compliance exposure; this page is a placeholder, not a resolution of it (requirements doc Open Question 4).
+</div>
+
+<!-- ═══════════════════════ /contact ═══════════════════════ -->
+<div class="stagelabel"><b>3 · <code>/contact</code> — PUB4</b> · <b>fully static — it does not check for a session</b>, because public routes may not call an authenticated endpoint. So it shows both paths, clearly labelled, and lets the visitor pick. <b>No contact form</b> (nothing exists to receive it) and <b>no invented email address</b> (Open Question 7).</div>
+<div class="frame">
+  <header class="site">
+    <a class="logo" href="#" aria-label="JinVa home">
+      <span class="mark">
+        <svg width="19" height="19" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z" fill="#fff" transform="translate(-6,-4) scale(1.35)"/>
+          <circle cx="19" cy="12" r="2.6" fill="#fff"/>
+        </svg>
+      </span>
+      <span class="word">JinVa</span>
+    </a>
+    <nav class="desk" aria-label="Main">
+      <a href="#">Services</a><a href="#">How it works</a><a href="#">For artisans</a>
+      <a href="#">Why JinVa</a><a href="#">FAQ</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="btn btn-ghost btn-icon" aria-label="Toggle theme">
+        <svg class="ico i16" viewBox="0 0 24 24" style="color:var(--muted-foreground)"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
+      <a class="btn btn-ghost" href="#">Log in</a>
+      <a class="btn btn-default" href="#">Get started</a>
+    </div>
+  </header>
+
+  <main class="page" style="padding-bottom:56px">
+    <div class="prose">
+      <p class="eyebrow">Support</p>
+      <h1 class="page">Get in touch.</h1>
+      <p class="standfirst">Every support request goes through your JinVa account, so it arrives
+        attached to you and to the job it's about.</p>
+      <div class="sepline"></div>
+
+      <div class="grid2">
+        <div class="card">
+          <span class="icotile">
+            <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.9 4.9 4.2 4.2"/><path d="m14.9 14.9 4.2 4.2"/><path d="m19.1 4.9-4.2 4.2"/><path d="m9.1 14.9-4.2 4.2"/></svg>
+          </span>
+          <h2>Already have a JinVa account?</h2>
+          <p>Log in and open <strong>Support</strong> in your sidebar. Every role has it. You can
+            browse answers, open a ticket, or use <strong>Report a problem</strong> if something's
+            gone wrong with a specific job.</p>
+          <div class="act"><a class="btn btn-lg btn-default" href="#">Log in
+            <svg class="ico i16" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a></div>
+        </div>
+
+        <div class="card">
+          <span class="icotile">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>
+          </span>
+          <h2>Not signed up yet?</h2>
+          <p>Create an account and you'll get the same support channel — plus the booking and payment
+            record that makes a problem easy to sort out.</p>
+          <div class="act"><a class="btn btn-lg btn-outline" href="#">Create an account</a></div>
+        </div>
+      </div>
+
+      <div class="note">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <p><b>We don't publish a support email address yet.</b> Support runs through your account so
+          that a request arrives with your jobs, bookings and payments already attached — which is
+          usually what's needed to resolve it. If that changes, this page is where the address will
+          appear.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="spacer"></div>
+<div class="anno">
+  <b>§8.4 ·</b> both actions resolve to a real 200 page (<code>/login</code>, <code>/signup</code>), and the copy names the destination inside the app ("open <b>Support</b> in your sidebar") because a public page can't know which role's dashboard to deep-link to.<br>
+  <b>The note's second sentence is the whole design contribution here</b> — it gives the <i>reason</i>, which turns a missing address into a defensible policy instead of looking broken. <b>Revisit trigger:</b> the moment a real support address is supplied it becomes a third card at the top with a <code>Mail</code> icon and a <code>mailto:</code> link, and this note shrinks to one line.
+</div>
+
+<!-- ═══════════════════════ error + 404 ═══════════════════════ -->
+<div class="stagelabel"><b>4 · public <code>error.tsx</code> and <code>not-found.tsx</code></b> · design-spec §4.1 / §4.2. Both sit inside the <code>(public)</code> group so the shared header and footer still render around them. <b>Neither is a dead end.</b></div>
+<div class="frame">
+  <header class="site">
+    <a class="logo" href="#" aria-label="JinVa home">
+      <span class="mark">
+        <svg width="19" height="19" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z" fill="#fff" transform="translate(-6,-4) scale(1.35)"/>
+          <circle cx="19" cy="12" r="2.6" fill="#fff"/>
+        </svg>
+      </span>
+      <span class="word">JinVa</span>
+    </a>
+    <nav class="desk" aria-label="Main">
+      <a href="#">Services</a><a href="#">How it works</a><a href="#">For artisans</a>
+      <a href="#">Why JinVa</a><a href="#">FAQ</a>
+    </nav>
+    <div class="hdr-actions">
+      <button class="btn btn-ghost btn-icon" aria-label="Toggle theme">
+        <svg class="ico i16" viewBox="0 0 24 24" style="color:var(--muted-foreground)"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
+      <a class="btn btn-ghost" href="#">Log in</a>
+      <a class="btn btn-default" href="#">Get started</a>
+    </div>
+  </header>
+
+  <main class="page" style="padding-bottom:48px">
+    <p class="xs mut" style="max-width:768px;margin:0 auto 4px;padding:0 24px;
+      font-family:ui-monospace,monospace">error.tsx — a section threw during render</p>
+    <div class="empty">
+      <div class="media">
+        <svg class="ico i24" viewBox="0 0 24 24"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      </div>
+      <div>
+        <div class="t">Something went wrong loading this page</div>
+        <div class="d" style="margin-top:6px">This is on us, not you. Try again — or head straight to
+          your account.</div>
+      </div>
+      <div class="acts">
+        <a class="btn btn-default" href="#">
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.3L3 8"/></svg>
+          Try again</a>
+        <a class="btn btn-outline" href="#">Get started</a>
+        <a class="btn btn-ghost" href="#">Log in</a>
+      </div>
+    </div>
+
+    <div class="sepline" style="max-width:768px;margin:40px auto"></div>
+
+    <p class="xs mut" style="max-width:768px;margin:0 auto 4px;padding:0 24px;
+      font-family:ui-monospace,monospace">not-found.tsx — e.g. a visitor typed /faq (the FAQ lives at /#faq)</p>
+    <div class="empty">
+      <div class="media">
+        <svg class="ico i24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2 6.3-6.4 2.1 2-6.3z"/></svg>
+      </div>
+      <div>
+        <div class="t">We couldn't find that page</div>
+        <div class="d" style="margin-top:6px">The link may be old, or the address may have a typo.</div>
+      </div>
+      <div class="acts">
+        <a class="btn btn-default" href="#">Back to home</a>
+      </div>
+      <div class="links">
+        <a href="#">About</a><a href="#">FAQ</a><a href="#">Contact</a><a href="#">Log in</a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site" style="margin-top:0">
+    <div class="wrap">
+      <div class="fbottom" style="margin-top:0;border-top:0">
+        <span>© 2026 JinVa. All rights reserved.</span>
+        <span class="r"><a href="#">Terms</a><a href="#">Privacy</a></span>
+      </div>
+    </div>
+  </footer>
+</div>
+<div class="spacer"></div>
+<div class="anno">
+  <b>§4.1 / §4.2 ·</b> both are the <code>Empty</code> primitive (<code>Empty</code> + <code>EmptyMedia variant="icon"</code> + <code>EmptyTitle</code> + <code>EmptyDescription</code> + <code>EmptyContent</code>) — the same idiom every admin screen already uses for its error state, so a broken public page still looks like JinVa.<br>
+  <b>The error state carries three actions, not one.</b> Even a broken marketing page must still be able to convert, so "Get started" and "Log in" sit beside "Try again". The 404 offers four real destinations, one of which is <code>/#faq</code> — the exact guess (<code>/faq</code>) that would land a visitor here.
+</div>
+
+<div class="mockup-note" style="margin-top:24px">
+  <b>Shared-layout summary:</b> one <code>src/app/(public)/layout.tsx</code> renders <code>&lt;PublicHeader /&gt;{'{children}'}&lt;PublicFooter /&gt;</code> and <b>nothing else — no width constraint</b>, because <code>/</code> needs full-bleed sections. The four prose pages wrap themselves in <code>PublicProse</code> (<code>max-w-3xl</code>).
+  <b>Put <code>/</code> inside the group</b> as <code>(public)/page.tsx</code> — route groups don't change the URL, and it's the only way <code>/</code> can share this layout. <code>src/app/page.tsx</code> must be deleted in the same commit or Next reports a duplicate route.
+</div>
+
+</body>
+</html>

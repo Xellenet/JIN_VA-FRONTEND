@@ -36,6 +36,19 @@ const SUGGESTIONS = [
   { label: "Log in", href: "/login" },
 ] as const
 
+/**
+ * The page-not-found metadata both `not-found.tsx` boundaries export, kept here
+ * next to the copy it has to agree with. See those files for why it is exported
+ * from this module rather than written inline in each.
+ */
+export const notFoundMetadata = {
+  title: "Page not found",
+  description: "The link may be old, or the address may have a typo.",
+  // No `robots` key on purpose: Next.js already emits
+  // `<meta name="robots" content="noindex"/>` for a not-found boundary, and
+  // setting it here produced a second, duplicate robots tag in the rendered HTML.
+} as const
+
 export function NotFoundContent() {
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6 md:py-24">
@@ -44,7 +57,18 @@ export function NotFoundContent() {
           <EmptyMedia variant="icon">
             <Compass aria-hidden="true" />
           </EmptyMedia>
-          <EmptyTitle>We couldn&rsquo;t find that page</EmptyTitle>
+          {/*
+            The `<h1>` is required, not decorative: this was the only public page
+            in the app with no `h1` at all, so its heading outline started at the
+            footer's `<h2>` column headings (LP10 — "heading levels descend
+            without skipping"). `EmptyTitle` renders a `div`, so the heading is
+            nested inside it; Tailwind's preflight resets heading `font-size` and
+            `font-weight` to `inherit`, so it picks up `EmptyTitle`'s type styles
+            and looks identical.
+          */}
+          <EmptyTitle>
+            <h1>We couldn&rsquo;t find that page</h1>
+          </EmptyTitle>
           <EmptyDescription>The link may be old, or the address may have a typo.</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>

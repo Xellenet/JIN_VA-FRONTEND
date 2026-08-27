@@ -1,6 +1,14 @@
+import type { Metadata } from "next"
 import { PublicHeader } from "@/components/public/public-header"
 import { PublicFooter } from "@/components/public/public-footer"
-import { NotFoundContent } from "@/components/public/not-found-content"
+import { NotFoundContent, notFoundMetadata } from "@/components/public/not-found-content"
+
+/**
+ * Without this the tab and the browser history entry for a dead link read
+ * "JinVa — Find verified artisans", the root layout's default — indistinguishable
+ * from the landing page.
+ */
+export const metadata: Metadata = notFoundMetadata
 
 /**
  * The 404 any unmatched URL lands on — `/faq`, a stale link, a typo.

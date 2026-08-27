@@ -194,6 +194,17 @@ Tests:       7 failed, 118 passed, 125 total
 - **Actual**: no `<h1>`; first heading is an `<h2>` in the footer. Also the `<title>` stays the generic
   default `"JinVa — Find verified artisans"` rather than saying the page was not found.
 - **Likely location**: `jinva-frontend-web/src/components/public/not-found-content.tsx`.
+- **FIX (frontend-engineer, 2026-08-27)**: "We couldn't find that page" is now an `<h1>`, nested inside the
+  existing `EmptyTitle` (which is a `div` from the shadcn `Empty` primitive — the shared primitive was left
+  untouched rather than given an `asChild` prop for one call site). Tailwind's preflight resets heading
+  `font-size`/`font-weight` to `inherit`, so it picks up `EmptyTitle`'s type styles and renders pixel-identical.
+  Page metadata added: a `notFoundMetadata` constant exported from `not-found-content.tsx` and re-exported as
+  the `metadata` of **both** boundaries — `src/app/not-found.tsx` (unmatched URLs) and
+  `src/app/(public)/not-found.tsx` (an in-group `notFound()` call) — so the two can't drift.
+  Verified on the production build: `/this-does-not-exist` returns **HTTP 404** with
+  `<title>Page not found · JinVa</title>` and exactly one `<h1>`, so the outline is now h1 → footer h2s.
+  No `robots` key was set: Next.js already emits `<meta name="robots" content="noindex"/>` for a not-found
+  boundary, and adding one produced a duplicate robots tag (caught in the first verification pass, removed).
 - **Note**: everything else about this page is correct — it returns a real **HTTP 404**, renders the shared
   header and footer, is not a raw Next.js error page, and **all five of its links work** (I clicked each:
   `Back to home`→`/`, `About`→`/about`, `FAQ`→`/#faq`, `Contact`→`/contact`, `Log in`→`/login`).

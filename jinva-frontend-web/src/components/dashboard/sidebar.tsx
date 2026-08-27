@@ -128,7 +128,8 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
-        <Logo />
+        {/* The sidebar surface is brand green in both themes — DT4's on-brand tone */}
+        <Logo tone="on-brand" />
         <button
           type="button"
           onClick={onClose}

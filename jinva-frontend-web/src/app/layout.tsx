@@ -7,9 +7,19 @@ import "./globals.css"
 import { Toaster } from "sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 
+/**
+ * LP11 — the old description ("Application for managing hard skills and
+ * services") was what a search engine or a chat-app link preview showed for
+ * every route in the app. Replaced with PRD §1's first sentence. The `template`
+ * gives every page that sets its own `title` the "… · JinVa" suffix for free.
+ */
 export const metadata: Metadata = {
-  title: "JinVa",
-  description: "Application for managing hard skills and services",
+  title: {
+    default: "JinVa — Find verified artisans",
+    template: "%s · JinVa",
+  },
+  description:
+    "JinVa connects clients with skilled, verified artisans across all trade categories — electrical, plumbing, carpentry, painting, cleaning, landscaping, beauty and more.",
   icons: {
     icon: "/icon.svg",
     apple: "/apple-icon.png",

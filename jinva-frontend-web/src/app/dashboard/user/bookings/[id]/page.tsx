@@ -212,7 +212,7 @@ export default function BookingDetailPage() {
                 )}
 
                 {(booking.noShowByCustomerAt || booking.noShowByArtisanAt) && (
-                  <div className="mt-4 space-y-1 rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+                  <div className="mt-4 space-y-1 rounded-lg border border-attention/20 bg-attention/10 p-4 text-sm text-attention">
                     <p className="flex items-center gap-1.5 font-medium">
                       <AlertOctagon className="h-3.5 w-3.5" />
                       No-show flagged
@@ -288,7 +288,7 @@ export default function BookingDetailPage() {
                 {canFlagNoShow && (
                   <Button
                     variant="outline"
-                    className="w-full border-orange-300 bg-transparent text-orange-700 hover:bg-orange-50"
+                    className="w-full border-attention/40 bg-transparent text-attention hover:bg-attention/10"
                     onClick={handleFlagNoShow}
                     disabled={isFlagging}
                   >

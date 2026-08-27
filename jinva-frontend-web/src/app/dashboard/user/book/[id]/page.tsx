@@ -652,7 +652,7 @@ export default function BookArtisanPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Status</span>
-                    <Badge variant="outline" className="border-yellow-200 bg-yellow-100 text-yellow-700">Pending</Badge>
+                    <Badge variant="outline" className="border-warning/20 bg-warning/10 text-warning">Pending</Badge>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Date</span>

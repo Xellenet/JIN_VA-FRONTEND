@@ -116,8 +116,8 @@ export default function ClientsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           {[
             { label: "Total Clients",  count: statusCounts.all,    icon: Users,      color: "text-foreground",  filter: "all"    },
-            { label: "Active Clients", count: statusCounts.active,  icon: UserCheck,  color: "text-green-600",   filter: "active" },
-            { label: "Banned Clients", count: statusCounts.banned,  icon: UserX,      color: "text-red-600",     filter: "banned" },
+            { label: "Active Clients", count: statusCounts.active,  icon: UserCheck,  color: "text-success",   filter: "active" },
+            { label: "Banned Clients", count: statusCounts.banned,  icon: UserX,      color: "text-destructive",     filter: "banned" },
           ].map((item) => (
             <button
               key={item.label}
@@ -236,8 +236,8 @@ export default function ClientsPage() {
                               variant="outline"
                               className={
                                 client.status === "active"
-                                  ? "border-green-200 bg-green-50 text-green-700"
-                                  : "border-red-200 bg-red-50 text-red-700"
+                                  ? "border-success/20 bg-success/10 text-success"
+                                  : "border-destructive/20 bg-destructive/10 text-destructive"
                               }
                             >
                               <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
@@ -256,7 +256,7 @@ export default function ClientsPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem
-                                  className={client.status === "banned" ? "text-green-600" : "text-destructive"}
+                                  className={client.status === "banned" ? "text-success" : "text-destructive"}
                                   onClick={() => handleBan(client.id, client.status)}
                                 >
                                   {client.status === "banned" ? "Unban User" : "Ban User"}

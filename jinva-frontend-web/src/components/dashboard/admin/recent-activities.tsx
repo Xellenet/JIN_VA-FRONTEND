@@ -28,18 +28,18 @@ const statusConfig = {
   },
   completed: { 
     label: "Completed", 
-    className: "bg-green-50 text-green-700 border-green-200",
-    dotColor: "bg-green-500"
+    className: "bg-success/10 text-success border-success/20",
+    dotColor: "bg-success"
   },
   cancelled: { 
     label: "Cancelled", 
-    className: "bg-red-50 text-red-700 border-red-200",
-    dotColor: "bg-red-500"
+    className: "bg-destructive/10 text-destructive border-destructive/20",
+    dotColor: "bg-destructive"
   },
   pending: { 
     label: "Pending", 
-    className: "bg-amber-50 text-amber-700 border-amber-200",
-    dotColor: "bg-amber-500"
+    className: "bg-warning/10 text-warning border-warning/20",
+    dotColor: "bg-warning"
   },
 }
 

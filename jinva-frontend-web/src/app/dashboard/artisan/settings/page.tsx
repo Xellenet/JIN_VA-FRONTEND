@@ -492,7 +492,7 @@ function ArtisanSettingsContent() {
                             Last transfer failed
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="mt-1.5 border-green-200 bg-green-100 text-green-700">
+                          <Badge variant="outline" className="mt-1.5 border-success/20 bg-success/10 text-success">
                             Working
                           </Badge>
                         )}

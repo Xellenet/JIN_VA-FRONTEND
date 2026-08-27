@@ -332,7 +332,7 @@ export default function SearchArtisansPage() {
                       className={minRating === opt.value ? "bg-accent text-accent-foreground" : ""}
                     >
                       <div className="flex items-center gap-2">
-                        {opt.value > 0 && <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />}
+                        {opt.value > 0 && <Star className="h-3.5 w-3.5 fill-rating text-rating" />}
                         {opt.label}
                       </div>
                     </DropdownMenuItem>

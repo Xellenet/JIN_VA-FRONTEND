@@ -28,10 +28,10 @@ import type { Notification } from "@/lib/types"
  * DT2 (2026-08-27) — every map below now reads from the DT1 semantic tokens
  * (`--success` / `--warning` / `--attention` / `--info`, defined in
  * src/app/globals.css) instead of light-mode-only Tailwind palette literals
- * (`bg-yellow-100 text-yellow-700 border-yellow-200`, …) which carried no
- * `dark:` variants and rendered washed-out or illegible on the app's real dark
- * theme. The literal -> token mapping is design-spec.md §1.3 verbatim; nothing
- * here was invented locally.
+ * (the yellow-100/700/200, green-100/700/200, red-100/700/200, blue-100/700/200
+ * and gray-100/600/200 triplets) which carried no `dark:` variants and rendered
+ * washed-out or illegible on the app's real dark theme. The literal -> token
+ * mapping is design-spec.md §1.3 verbatim; nothing here was invented locally.
  *
  * Two consequences worth knowing, both intended and both flagged in the design
  * spec rather than shipped silently:
@@ -177,8 +177,8 @@ export function getDisputeOutcomeConfig(outcome: string): StatusBadgeConfig & { 
  * requirements.md's UI/UX notes.
  *
  * `review`, `assignment` and `message` previously used literal light-mode-only
- * palette colors (`bg-yellow-100 text-yellow-600`, `bg-blue-100
- * text-blue-600`, `bg-violet-100 text-violet-600`) with no `dark:` variants,
+ * palette colors (yellow-100/600, blue-100/600 and violet-100/600) with no
+ * `dark:` variants,
  * which rendered muddy on the dark theme at the 40px chip scale. They now use
  * the semantic tokens the other three categories in this map already used, so
  * the app's real `.dark` theme handles them. This is a deliberate reduction

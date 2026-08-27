@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 /**
  * DT4 (design-spec.md §1.2): this file's colour literals are now tokens.
  *
- * The brand gradient it used to hardcode as `from-[#1c4532] to-[#2d5a42]` is
+ * The brand gradient it used to hardcode as a pair of hex literals is now
  * `from-brand to-brand-accent`, the same pair the landing page's hero panel and
  * final CTA band use, so the marketing surfaces can never drift apart. The
  * `<defs>` grid/dot pattern moved to `<BrandPattern />` (unique SVG ids, so it

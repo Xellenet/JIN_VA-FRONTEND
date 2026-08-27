@@ -46,19 +46,19 @@ export function ForgotPasswordForm() {
   if (isSubmitted) {
     return (
       <AuthSplitLayout>
-        <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+        <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-[#1c4532]/10 rounded-full flex items-center justify-center">
-              <CheckCircle2 className="w-8 h-8 text-[#1c4532]" />
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-primary" />
             </div>
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">Check your email</h1>
-            <p className="text-gray-600 leading-relaxed">
-              We&apos;ve sent a password reset link to <span className="font-medium text-gray-900">{email}</span>
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Check your email</h1>
+            <p className="text-muted-foreground leading-relaxed">
+              We&apos;ve sent a password reset link to <span className="font-medium text-foreground">{email}</span>
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               The link will expire in 24 hours. If you don&apos;t see the email, check your spam folder.
             </p>
           </div>
@@ -66,7 +66,7 @@ export function ForgotPasswordForm() {
           <div className="space-y-4">
             <Button
               onClick={() => (window.location.href = "/login")}
-              className="w-full h-12 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             >
               Back to Sign In
             </Button>
@@ -89,11 +89,11 @@ export function ForgotPasswordForm() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 bg-white rounded-lg p-8 ">
+      <div className="space-y-8 bg-background rounded-lg p-8 ">
         {/* Back Button */}
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Sign In
@@ -101,15 +101,15 @@ export function ForgotPasswordForm() {
 
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Forgot Password?</h1>
-          <p className="text-gray-600 leading-relaxed">No worries, we&apos;ll send you reset instructions to your email.</p>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Forgot Password?</h1>
+          <p className="text-muted-foreground leading-relaxed">No worries, we&apos;ll send you reset instructions to your email.</p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Email Field */}
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm text-gray-600">
+            <Label htmlFor="email" className="text-sm text-muted-foreground">
               E-mail
             </Label>
             <Input
@@ -118,7 +118,7 @@ export function ForgotPasswordForm() {
               placeholder="example@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+              className="h-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
               required
               disabled={isLoading}
             />
@@ -127,7 +127,7 @@ export function ForgotPasswordForm() {
           {/* Submit Button */}
           <Button
             type="submit"
-            className="w-full h-10 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+            className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             disabled={isLoading}
           >
             {isLoading ? "Sending..." : "Send Reset Link"}

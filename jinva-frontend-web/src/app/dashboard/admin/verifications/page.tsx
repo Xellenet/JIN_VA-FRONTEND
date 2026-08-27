@@ -123,8 +123,8 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
  * destructive for rejected.
  */
 const STATUS_CFG: Record<VerificationStatus, { label: string; className: string; icon: typeof Clock }> = {
-  PENDING:      { label: "Pending",      className: "bg-gray-100 text-gray-600 border-gray-200",                icon: Clock },
-  UNDER_REVIEW: { label: "Under Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200",          icon: Clock },
+  PENDING:      { label: "Pending",      className: "bg-muted text-muted-foreground border-border",                icon: Clock },
+  UNDER_REVIEW: { label: "Under Review", className: "bg-warning/10 text-warning border-warning/20",          icon: Clock },
   APPROVED:     { label: "Approved",     className: "bg-primary/10 text-primary border-primary/20",             icon: CheckCircle },
   REJECTED:     { label: "Rejected",     className: "bg-destructive/10 text-destructive border-destructive/20", icon: XCircle },
 }

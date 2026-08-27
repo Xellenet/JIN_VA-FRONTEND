@@ -54,10 +54,10 @@ const revenueData = [
 ]
 
 const serviceBreakdown = [
-  { name: "Emergency Repairs", value: 35, color: "#171717" },
-  { name: "Installation", value: 28, color: "#eab308" },
-  { name: "Maintenance", value: 22, color: "#6b7280" },
-  { name: "Inspection", value: 15, color: "#d1d5db" },
+  { name: "Emergency Repairs", value: 35, color: "var(--brand)" },
+  { name: "Installation", value: 28, color: "var(--rating)" },
+  { name: "Maintenance", value: 22, color: "var(--muted-foreground)" },
+  { name: "Inspection", value: 15, color: "var(--border)" },
 ]
 
 const weeklyOrders = [
@@ -124,13 +124,13 @@ export default function AdminReportPage() {
                   <p className="text-2xl font-bold">
                     GH₵ {(totalRevenue / 1000).toFixed(1)}k
                   </p>
-                  <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
+                  <div className="mt-1 flex items-center gap-1 text-sm text-success">
                     <TrendingUp className="h-3.5 w-3.5" />
                     <span>+12.5% vs last period</span>
                   </div>
                 </div>
-                <div className="rounded-lg bg-green-50 p-3">
-                  <DollarSign className="h-5 w-5 text-green-600" />
+                <div className="rounded-lg bg-success/10 p-3">
+                  <DollarSign className="h-5 w-5 text-success" />
                 </div>
               </div>
             </CardContent>
@@ -142,7 +142,7 @@ export default function AdminReportPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Total Orders</p>
                   <p className="text-2xl font-bold">{mockOrders.length}</p>
-                  <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
+                  <div className="mt-1 flex items-center gap-1 text-sm text-success">
                     <TrendingUp className="h-3.5 w-3.5" />
                     <span>+8 new this week</span>
                   </div>
@@ -162,13 +162,13 @@ export default function AdminReportPage() {
                   <p className="text-2xl font-bold">
                     {mockClients.filter((c) => c.status === "active").length}
                   </p>
-                  <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
+                  <div className="mt-1 flex items-center gap-1 text-sm text-success">
                     <TrendingUp className="h-3.5 w-3.5" />
                     <span>+3 this month</span>
                   </div>
                 </div>
-                <div className="rounded-lg bg-blue-50 p-3">
-                  <Users className="h-5 w-5 text-blue-600" />
+                <div className="rounded-lg bg-info/10 p-3">
+                  <Users className="h-5 w-5 text-info" />
                 </div>
               </div>
             </CardContent>
@@ -182,13 +182,13 @@ export default function AdminReportPage() {
                   <p className="text-2xl font-bold">
                     {((cancelledOrders / mockOrders.length) * 100).toFixed(1)}%
                   </p>
-                  <div className="mt-1 flex items-center gap-1 text-sm text-red-600">
+                  <div className="mt-1 flex items-center gap-1 text-sm text-destructive">
                     <TrendingDown className="h-3.5 w-3.5" />
                     <span>-2% improvement</span>
                   </div>
                 </div>
-                <div className="rounded-lg bg-red-50 p-3">
-                  <XCircle className="h-5 w-5 text-red-600" />
+                <div className="rounded-lg bg-destructive/10 p-3">
+                  <XCircle className="h-5 w-5 text-destructive" />
                 </div>
               </div>
             </CardContent>
@@ -207,7 +207,7 @@ export default function AdminReportPage() {
                     <span className="text-muted-foreground">Revenue</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: "#d1d5db" }} />
+                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: "var(--muted-foreground)" }} />
                     <span className="text-muted-foreground">Orders</span>
                   </div>
                 </div>
@@ -216,13 +216,13 @@ export default function AdminReportPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={revenueData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
                   <YAxis axisLine={false} tickLine={false} className="text-xs" />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
+                      border: "1px solid var(--border)",
                       borderRadius: "8px",
                       fontSize: "13px",
                     }}
@@ -231,7 +231,7 @@ export default function AdminReportPage() {
                       name === "revenue" ? "Revenue" : "Orders",
                     ]}
                   />
-                  <Bar dataKey="revenue" fill="#171717" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="revenue" fill="var(--brand)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -261,7 +261,7 @@ export default function AdminReportPage() {
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "white",
-                        border: "1px solid #e5e7eb",
+                        border: "1px solid var(--border)",
                         borderRadius: "8px",
                         fontSize: "13px",
                       }}
@@ -295,12 +295,12 @@ export default function AdminReportPage() {
               <CardTitle className="text-lg">Order Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg bg-green-50 p-4">
+              <div className="flex items-center justify-between rounded-lg bg-success/10 p-4">
                 <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                  <span className="font-medium text-green-800">Completed</span>
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                  <span className="font-medium text-success">Completed</span>
                 </div>
-                <span className="text-xl font-bold text-green-700">{completedOrders}</span>
+                <span className="text-xl font-bold text-success">{completedOrders}</span>
               </div>
               <div className="flex items-center justify-between rounded-lg bg-muted p-4">
                 <div className="flex items-center gap-3">
@@ -309,19 +309,19 @@ export default function AdminReportPage() {
                 </div>
                 <span className="text-xl font-bold text-muted-foreground">{inProgressOrders}</span>
               </div>
-              <div className="flex items-center justify-between rounded-lg bg-yellow-50 p-4">
+              <div className="flex items-center justify-between rounded-lg bg-warning/10 p-4">
                 <div className="flex items-center gap-3">
-                  <Calendar className="h-5 w-5 text-yellow-600" />
-                  <span className="font-medium text-yellow-800">Pending</span>
+                  <Calendar className="h-5 w-5 text-warning" />
+                  <span className="font-medium text-warning">Pending</span>
                 </div>
-                <span className="text-xl font-bold text-yellow-700">{pendingOrders}</span>
+                <span className="text-xl font-bold text-warning">{pendingOrders}</span>
               </div>
-              <div className="flex items-center justify-between rounded-lg bg-red-50 p-4">
+              <div className="flex items-center justify-between rounded-lg bg-destructive/10 p-4">
                 <div className="flex items-center gap-3">
-                  <XCircle className="h-5 w-5 text-red-600" />
-                  <span className="font-medium text-red-800">Cancelled</span>
+                  <XCircle className="h-5 w-5 text-destructive" />
+                  <span className="font-medium text-destructive">Cancelled</span>
                 </div>
-                <span className="text-xl font-bold text-red-700">{cancelledOrders}</span>
+                <span className="text-xl font-bold text-destructive">{cancelledOrders}</span>
               </div>
             </CardContent>
           </Card>
@@ -336,13 +336,13 @@ export default function AdminReportPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={weeklyOrders}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="day" axisLine={false} tickLine={false} className="text-xs" />
                   <YAxis axisLine={false} tickLine={false} className="text-xs" />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
+                      border: "1px solid var(--border)",
                       borderRadius: "8px",
                       fontSize: "13px",
                     }}
@@ -350,9 +350,9 @@ export default function AdminReportPage() {
                   <Line
                     type="monotone"
                     dataKey="count"
-                    stroke="#171717"
+                    stroke="var(--brand)"
                     strokeWidth={2.5}
-                    dot={{ r: 4, fill: "#171717" }}
+                    dot={{ r: 4, fill: "var(--brand)" }}
                     activeDot={{ r: 6 }}
                   />
                 </LineChart>
@@ -389,7 +389,7 @@ export default function AdminReportPage() {
                 <tbody>
                   {mockArtisans.map((artisan) => {
                     const perf = artisan.avgRating >= 4.9 ? "Excellent" : artisan.avgRating >= 4.5 ? "Good" : "Average"
-                    const perfColor = perf === "Excellent" ? "text-green-600 bg-green-50 border-green-200" : perf === "Good" ? "text-foreground bg-muted border-muted" : "text-yellow-600 bg-yellow-50 border-yellow-200"
+                    const perfColor = perf === "Excellent" ? "text-success bg-success/10 border-success/20" : perf === "Good" ? "text-foreground bg-muted border-muted" : "text-warning bg-warning/10 border-warning/20"
                     return (
                       <tr key={artisan.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="py-4">
@@ -418,8 +418,8 @@ export default function AdminReportPage() {
                             variant="outline"
                             className={
                               artisan.availability === "available"
-                                ? "border-green-200 bg-green-50 text-green-700"
-                                : "border-red-200 bg-red-50 text-red-700"
+                                ? "border-success/20 bg-success/10 text-success"
+                                : "border-destructive/20 bg-destructive/10 text-destructive"
                             }
                           >
                             <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />

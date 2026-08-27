@@ -103,11 +103,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_BADGE: Record<string, string> = {
   OPEN: "border-primary/15 bg-primary/5 text-primary",
-  PENDING: "border-yellow-200 bg-yellow-50 text-yellow-700",
+  PENDING: "border-warning/20 bg-warning/10 text-warning",
   IN_PROGRESS: "border-border bg-muted text-muted-foreground",
   COMPLETED: "border-primary/30 bg-primary/5 text-primary",
   CANCELLED: "border-destructive/30 bg-destructive/5 text-destructive",
-  EXPIRED: "border-gray-200 bg-gray-100 text-gray-600",
+  EXPIRED: "border-border bg-muted text-muted-foreground",
 }
 
 const FILTER_OPTIONS = ["ALL", "OPEN", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED"] as const
@@ -396,7 +396,7 @@ export default function AdminJobsPage() {
                                 {job.isDeleted && (
                                   <Badge
                                     variant="outline"
-                                    className="border-gray-200 bg-gray-100 text-gray-600"
+                                    className="border-border bg-muted text-muted-foreground"
                                     title="Soft-deleted — visible only to admins"
                                   >
                                     Deleted

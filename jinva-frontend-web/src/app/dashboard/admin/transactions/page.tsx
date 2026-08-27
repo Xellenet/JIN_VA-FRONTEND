@@ -244,7 +244,7 @@ export default function TransactionsPage() {
             { label: "Revenue (this page)", value: formatCurrency(stats.totalRevenue), icon: DollarSign, iconBg: "bg-primary/10", iconColor: "text-primary" },
             { label: "Payouts (this page)", value: formatCurrency(stats.totalPayouts), icon: ArrowDownRight, iconBg: "bg-muted", iconColor: "text-foreground" },
             { label: "Fees (this page)", value: formatCurrency(stats.totalFees), icon: ArrowUpRight, iconBg: "bg-primary/10", iconColor: "text-primary" },
-            { label: "Needs Review (this page)", value: String(stats.needsReview), icon: AlertTriangle, iconBg: "bg-orange-100", iconColor: "text-orange-700" },
+            { label: "Needs Review (this page)", value: String(stats.needsReview), icon: AlertTriangle, iconBg: "bg-attention/10", iconColor: "text-attention" },
           ].map(({ label, value, icon: Icon, iconBg, iconColor }) => (
             <Card key={label} className="transition-shadow hover:shadow-md">
               <CardContent className="p-4">

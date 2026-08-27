@@ -457,7 +457,7 @@ export default function ArtisanPublicProfile() {
                                 <p className="text-sm font-medium text-foreground">{reviewerName}</p>
                                 {review.verifiedBooking && <VerifiedBookingBadge />}
                                 {isUnderReview && (
-                                  <Badge variant="outline" className="border-yellow-200 bg-yellow-100 text-yellow-700">
+                                  <Badge variant="outline" className="border-warning/20 bg-warning/10 text-warning">
                                     Under review
                                   </Badge>
                                 )}
@@ -472,7 +472,7 @@ export default function ArtisanPublicProfile() {
                             {Array.from({ length: 5 }).map((_, i) => (
                               <Star
                                 key={`${review.id}-star-${i}`}
-                                className={`h-4 w-4 ${i < Number(review.rating) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                                className={`h-4 w-4 ${i < Number(review.rating) ? "fill-rating text-rating" : "text-muted-foreground/30"}`}
                               />
                             ))}
                           </div>

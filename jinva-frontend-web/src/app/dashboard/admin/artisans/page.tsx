@@ -106,7 +106,7 @@ export default function ArtisansPage() {
                           <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                         </Avatar>
                         <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-background px-2 py-1 text-sm font-semibold">
-                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <Star className="h-3.5 w-3.5 fill-rating text-rating" />
                           {artisan.avgRating.toFixed(1)}
                         </div>
                         {artisan.isVerified && (

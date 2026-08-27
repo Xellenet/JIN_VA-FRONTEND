@@ -523,7 +523,7 @@ export default function ArtisanProfile() {
                               {Array.from({ length: 5 }).map((_, si) => (
                                 <Star
                                   key={`${review.id}-star-${si}`}
-                                  className={`h-3.5 w-3.5 ${si < Number(review.rating) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                                  className={`h-3.5 w-3.5 ${si < Number(review.rating) ? "fill-rating text-rating" : "text-muted-foreground/30"}`}
                                 />
                               ))}
                             </div>

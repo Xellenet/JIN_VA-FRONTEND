@@ -255,7 +255,7 @@ export default function ArtisanMyReviewsPage() {
                   )}
                 >
                   <button type="button" onClick={() => setRatingFilter(n)}>
-                    <Star className={cn("h-2.5 w-2.5", ratingFilter === n ? "fill-primary-foreground text-primary-foreground" : "fill-yellow-400 text-yellow-400")} />
+                    <Star className={cn("h-2.5 w-2.5", ratingFilter === n ? "fill-primary-foreground text-primary-foreground" : "fill-rating text-rating")} />
                     {n} ({counts[n]})
                   </button>
                 </Badge>
@@ -302,7 +302,7 @@ export default function ArtisanMyReviewsPage() {
                             {Array.from({ length: 5 }).map((_, i) => (
                               <Star
                                 key={`${review.id}-star-${i}`}
-                                className={cn("h-3.5 w-3.5", i < Math.round(Number(review.rating)) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30")}
+                                className={cn("h-3.5 w-3.5", i < Math.round(Number(review.rating)) ? "fill-rating text-rating" : "text-muted-foreground/30")}
                               />
                             ))}
                           </div>

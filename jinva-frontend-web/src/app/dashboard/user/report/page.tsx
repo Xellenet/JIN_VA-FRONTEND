@@ -46,10 +46,10 @@ export default function UserReportPage() {
 
   const statusConfig: Record<string, { label: string; className: string }> = {
     "in-progress": { label: "In Progress", className: "bg-muted text-muted-foreground border-muted" },
-    completed: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
-    cancelled: { label: "Cancelled", className: "bg-red-100 text-red-700 border-red-200" },
-    pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-    available: { label: "Available", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    completed: { label: "Completed", className: "bg-success/10 text-success border-success/20" },
+    cancelled: { label: "Cancelled", className: "bg-destructive/10 text-destructive border-destructive/20" },
+    pending: { label: "Pending", className: "bg-warning/10 text-warning border-warning/20" },
+    available: { label: "Available", className: "bg-info/10 text-info border-info/20" },
   }
 
   return (
@@ -77,8 +77,8 @@ export default function UserReportPage() {
                   <p className="text-sm text-muted-foreground">Total Spent</p>
                   <p className="text-2xl font-bold">GH₵ {totalSpent}</p>
                 </div>
-                <div className="rounded-lg bg-green-50 p-3">
-                  <DollarSign className="h-5 w-5 text-green-600" />
+                <div className="rounded-lg bg-success/10 p-3">
+                  <DollarSign className="h-5 w-5 text-success" />
                 </div>
               </div>
             </CardContent>
@@ -90,8 +90,8 @@ export default function UserReportPage() {
                   <p className="text-sm text-muted-foreground">Completed</p>
                   <p className="text-2xl font-bold">{completed}</p>
                 </div>
-                <div className="rounded-lg bg-green-50 p-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <div className="rounded-lg bg-success/10 p-3">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
                 </div>
               </div>
             </CardContent>
@@ -116,8 +116,8 @@ export default function UserReportPage() {
                   <p className="text-sm text-muted-foreground">Cancelled</p>
                   <p className="text-2xl font-bold">{cancelled}</p>
                 </div>
-                <div className="rounded-lg bg-red-50 p-3">
-                  <XCircle className="h-5 w-5 text-red-600" />
+                <div className="rounded-lg bg-destructive/10 p-3">
+                  <XCircle className="h-5 w-5 text-destructive" />
                 </div>
               </div>
             </CardContent>
@@ -135,19 +135,19 @@ export default function UserReportPage() {
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={monthlySpending}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
                 <YAxis axisLine={false} tickLine={false} className="text-xs" tickFormatter={(v) => `GH₵ ${v}`} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "white",
-                    border: "1px solid #e5e7eb",
+                    border: "1px solid var(--border)",
                     borderRadius: "8px",
                     fontSize: "13px",
                   }}
                   formatter={(value: number) => [`GH₵ ${value}`, "Spent"]}
                 />
-                <Bar dataKey="amount" fill="#1e4035" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="amount" fill="var(--brand)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -209,10 +209,10 @@ export default function UserReportPage() {
                           variant="outline"
                           className={
                             booking.paymentStatus === "paid"
-                              ? "border-green-200 bg-green-50 text-green-700"
+                              ? "border-success/20 bg-success/10 text-success"
                               : booking.paymentStatus === "pending"
-                                ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                                : "border-red-200 bg-red-50 text-red-700"
+                                ? "border-warning/20 bg-warning/10 text-warning"
+                                : "border-destructive/20 bg-destructive/10 text-destructive"
                           }
                         >
                           {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
@@ -221,7 +221,7 @@ export default function UserReportPage() {
                       <td className="py-4">
                         {booking.status === "completed" ? (
                           <div className="flex items-center gap-1">
-                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <Star className="h-4 w-4 fill-rating text-rating" />
                             <span className="text-sm font-medium">4.8</span>
                           </div>
                         ) : (

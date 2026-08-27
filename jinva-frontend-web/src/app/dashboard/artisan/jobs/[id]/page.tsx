@@ -84,11 +84,11 @@ interface BackendJob {
 
 const statusConfig = {
   IN_PROGRESS: { label: "In Progress", className: "bg-muted text-muted-foreground border-muted", icon: Timer },
-  COMPLETED:   { label: "Completed",   className: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle2 },
-  CANCELLED:   { label: "Cancelled",   className: "bg-red-100 text-red-700 border-red-200",     icon: XCircle },
-  PENDING:     { label: "Pending",     className: "bg-yellow-100 text-yellow-700 border-yellow-200", icon: AlertCircle },
-  OPEN:        { label: "Open",        className: "bg-blue-100 text-blue-700 border-blue-200",   icon: CheckCircle2 },
-  EXPIRED:     { label: "Expired",     className: "bg-gray-100 text-gray-600 border-gray-200",   icon: AlertCircle },
+  COMPLETED:   { label: "Completed",   className: "bg-success/10 text-success border-success/20", icon: CheckCircle2 },
+  CANCELLED:   { label: "Cancelled",   className: "bg-destructive/10 text-destructive border-destructive/20",     icon: XCircle },
+  PENDING:     { label: "Pending",     className: "bg-warning/10 text-warning border-warning/20", icon: AlertCircle },
+  OPEN:        { label: "Open",        className: "bg-info/10 text-info border-info/20",   icon: CheckCircle2 },
+  EXPIRED:     { label: "Expired",     className: "bg-muted text-muted-foreground border-border",   icon: AlertCircle },
 } as const
 
 type StatusKey = keyof typeof statusConfig
@@ -350,7 +350,7 @@ export default function ArtisanJobDetailPage() {
                   )}
                   {isMyJob && job.status === "IN_PROGRESS" && !job.completionRequestedAt && (
                     <Button
-                      className="bg-green-600 text-white hover:bg-green-700"
+                      className="bg-success text-success-foreground hover:bg-success/90"
                       onClick={handleRequestCompletion}
                       disabled={isRequestingCompletion}
                     >

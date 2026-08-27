@@ -29,21 +29,21 @@ function ErrorState({ error }: { error: string }) {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+      <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-            <XCircle className="w-8 h-8 text-red-600" />
+          <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+            <XCircle className="w-8 h-8 text-destructive" />
           </div>
         </div>
 
         <div className="space-y-3">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Sign-in interrupted</h1>
-          <p className="text-gray-600 leading-relaxed">{message}</p>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Sign-in interrupted</h1>
+          <p className="text-muted-foreground leading-relaxed">{message}</p>
         </div>
 
         <Button
           onClick={() => (window.location.href = "/login")}
-          className="w-full h-12 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+          className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
         >
           Back to Sign In
         </Button>
@@ -84,16 +84,16 @@ function PendingState() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+      <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-[#1c4532]/10 rounded-full flex items-center justify-center">
-            <Loader2 className="w-8 h-8 text-[#1c4532] animate-spin" />
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         </div>
 
         <div className="space-y-3">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Signing you in&hellip;</h1>
-          <p className="text-gray-600">Please wait while we finish setting up your session.</p>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Signing you in&hellip;</h1>
+          <p className="text-muted-foreground">Please wait while we finish setting up your session.</p>
         </div>
       </div>
     </AuthSplitLayout>

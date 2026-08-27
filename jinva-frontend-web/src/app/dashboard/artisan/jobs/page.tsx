@@ -51,10 +51,10 @@ interface BackendJob {
 
 const statusConfig = {
   IN_PROGRESS: { label: "In Progress", className: "bg-muted text-muted-foreground border-muted",              icon: Timer },
-  COMPLETED:   { label: "Completed",   className: "bg-green-100 text-green-700 border-green-200",             icon: CheckCircle2 },
-  CANCELLED:   { label: "Cancelled",   className: "bg-red-100 text-red-700 border-red-200",                   icon: XCircle },
-  PENDING:     { label: "Pending",     className: "bg-yellow-100 text-yellow-700 border-yellow-200",          icon: AlertCircle },
-  OPEN:        { label: "Open",        className: "bg-blue-100 text-blue-700 border-blue-200",                icon: CheckCircle2 },
+  COMPLETED:   { label: "Completed",   className: "bg-success/10 text-success border-success/20",             icon: CheckCircle2 },
+  CANCELLED:   { label: "Cancelled",   className: "bg-destructive/10 text-destructive border-destructive/20",                   icon: XCircle },
+  PENDING:     { label: "Pending",     className: "bg-warning/10 text-warning border-warning/20",          icon: AlertCircle },
+  OPEN:        { label: "Open",        className: "bg-info/10 text-info border-info/20",                icon: CheckCircle2 },
 } as const
 
 type StatusKey = keyof typeof statusConfig
@@ -216,7 +216,7 @@ export default function ArtisanJobsPage() {
                   {key !== "all" && (
                     <div className={cn(
                       "h-2 w-2 rounded-full",
-                      key === "IN_PROGRESS" ? "bg-primary" : key === "COMPLETED" ? "bg-green-500" : "bg-blue-500",
+                      key === "IN_PROGRESS" ? "bg-primary" : key === "COMPLETED" ? "bg-success" : "bg-info",
                     )} />
                   )}
                   <p className="text-sm text-muted-foreground">
@@ -489,7 +489,7 @@ export default function ArtisanJobsPage() {
                         {isMyJob && job.status === "IN_PROGRESS" && (
                           <Button
                             size="sm"
-                            className="bg-green-600 text-white hover:bg-green-700"
+                            className="bg-success text-success-foreground hover:bg-success/90"
                             onClick={(e) => handleRequestCompletion(e, job.id)}
                           >
                             <CheckCircle2 className="mr-1.5 h-4 w-4" />

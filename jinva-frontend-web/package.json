@@ -6,7 +6,9 @@
     "dev": "next dev -p 4200 --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:colors": "node scripts/check-color-tokens.mjs",
+    "verify": "npm run check:colors && npm run lint && npm run build"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

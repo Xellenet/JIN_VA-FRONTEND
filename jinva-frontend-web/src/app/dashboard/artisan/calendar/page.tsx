@@ -748,7 +748,7 @@ export default function ArtisanCalendarPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-orange-300 bg-transparent text-orange-700 hover:bg-orange-50"
+                                className="border-attention/40 bg-transparent text-attention hover:bg-attention/10"
                                 onClick={() => handleFlagNoShow(booking)}
                                 disabled={isResponding}
                               >

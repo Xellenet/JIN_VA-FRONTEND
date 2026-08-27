@@ -299,7 +299,7 @@ export default function PaymentCheckoutPage() {
         {phase === "confirming" && (
           <Card>
             <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-info/10 text-info">
                 <Loader2 className="h-6 w-6 animate-spin" />
               </span>
               <h3 className="font-semibold text-foreground">Confirming your payment…</h3>
@@ -323,7 +323,7 @@ export default function PaymentCheckoutPage() {
         {phase === "success" && (
           <Card>
             <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-success/10 text-success">
                 <CheckCircle2 className="h-7 w-7" />
               </span>
               <h3 className="text-lg font-semibold text-foreground">Payment secured</h3>

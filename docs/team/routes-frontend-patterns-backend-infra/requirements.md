@@ -841,16 +841,75 @@ Ranked by how much they change scope. 1, 3, 4, 8 and 9 should be answered before
 - [ ] Brand-gradient tokenisation agreed between the landing page and DT4's `auth-split-layout.tsx` fix.
 - [ ] Every landing-page claim annotated with the PRD section it came from.
 
-**Frontend**
-- [ ] LP1–LP12 all pass. LP13 passes or is formally dropped per Open Question 6.
-- [ ] PUB1–PUB5 exist and **every single header and footer link resolves** — QA clicked each one.
-- [ ] DT1 tokens defined; DT2 (`status-badges.ts`) migrated; DT3 dead toast files deleted; DT4
-      (`phone-input`, `logo`, `auth-split-layout`) fixed.
-- [ ] DT5: before/after literal-colour counts reported (baseline: 257 occurrences / 37 files on
-      2026-08-27), top offenders cleared, allowlist written down, and a mechanical check added so the count
-      cannot silently climb again.
-- [ ] Zero new hardcoded palette classes or hex literals in any file touched this round.
-- [ ] `npm run lint` and `npm run build` green; manually verified in a browser in both themes.
+**Frontend** — built 2026-08-27 (frontend-engineer). Verified against a **production build**
+(`npm run build` + `npm start`), driven in headless Chrome, in both themes, at 320/375/768/1024/1440.
+
+- [x] LP1–LP12 all pass. LP13 passes (Open Question 6 = yes).
+      - LP1: `/` is `src/app/(public)/page.tsx`; the old `src/app/page.tsx` redirect is deleted. Static
+        prerender (`○ /`), still outside the middleware matcher.
+      - LP2: measured — `/` issues **0 off-origin requests and 0 API-path requests**. Renders identically
+        with the backend stopped.
+      - LP3/LP9: all **22** header + footer links clicked individually; every route 200, every one of the
+        6 on-page anchors lands 80px from the viewport top (`scroll-mt-20` clearing the `h-16` header).
+        Zero `href="#"`, zero `javascript:void(0)`, zero 404s.
+      - LP4: exactly one `<h1>`; both CTAs above the fold at 1440×900 and 375×812.
+      - LP5: `#platform-governance` contains no signup link of any kind.
+      - LP10: no horizontal scroll at any of the five widths; heading levels descend without skipping;
+        every header control keyboard-reachable in visual order with a visible focus ring; all images
+        have `alt`.
+      - LP11: root metadata description replaced; `/` and each public page set their own title +
+        description; OG card generated via `next/og`.
+      - LP12: zero palette classes and zero hex literals in any new file — enforced by
+        `npm run check:colors`.
+      - LP13: verified in prod for `ARTISAN`/`CUSTOMER`, and for absent / empty / `ADMIN` / lowercase /
+        mixed-case / script payload / null byte / `?ROLE=`, all of which leave the selector empty with no
+        console error.
+- [x] PUB1–PUB5 exist and **every single header and footer link resolves** — all 22 clicked one at a
+      time from `/`, and every footer anchor re-clicked from `/terms`, `/about`, `/privacy` and
+      `/contact` to prove the root-relative `/#anchor` form (design-spec §3.12's flagged risk).
+- [x] DT1 tokens defined (`--success`/`--warning`/`--attention`/`--info` + `-foreground` pairs, plus
+      `--brand`/`--brand-accent`/`--brand-foreground` and `--rating`); DT2 (`status-badges.ts`) migrated
+      per design-spec §1.3 with labels and icons frozen; DT3 dead toast files deleted (all four:
+      `ui/toast.tsx`, `ui/toaster.tsx`, `ui/use-toast.ts`, `hooks/use-toast.ts`); DT4 (`phone-input`,
+      `logo`, `auth-split-layout`) fixed, with the SVG pattern extracted to
+      `components/brand/brand-pattern.tsx`.
+      - Contrast **measured in-browser through the real cascade** (not derived): all four new tokens pass
+        AA in both themes at badge scale — warning 5.84 / 10.11, success 6.07 / 9.86, attention
+        6.24 / 7.57, info 7.42 / 6.87 (light / dark).
+      - ⚠️ **Two pre-existing token pairs measure below AA in light mode and DT2 widened their use.**
+        `bg-destructive/10 text-destructive` = **3.97:1** and `bg-muted text-muted-foreground` =
+        **4.35:1** (both fine in dark: 5.22:1). Not introduced here — `--destructive` and
+        `--muted-foreground` are pre-existing and design-spec §1.3 mandates the mapping — but
+        `CANCELLED`/`DECLINED`/`REFUND_CLIENT` and `EXPIRED`/`REFUNDED`/`CLOSED`/`MUTUAL` were slightly
+        *better* on the old literals in light mode. **Needs a ux-designer decision** (deepening either
+        token changes every destructive/muted surface in the product), so it is left as-is and flagged
+        rather than silently changed. Same class of finding as design-spec §1.4.
+- [x] DT5: before/after literal-colour counts reported, top offenders cleared, allowlist written down,
+      and a mechanical check added so the count cannot silently climb again.
+      - **Before:** 257 matching lines / **412 individual occurrences** across **37 files** (the doc's
+        `rg -c` repro sums to 257 because it counts matching *lines*, not occurrences).
+      - **After:** **0**, in both measures, outside the allowlist. All eight named top offenders cleared.
+      - **Allowlist — 4 files, recorded with its reasons in `jinva-frontend-web/scripts/check-color-tokens.mjs`**
+        (the single authoritative place; the script enforces it):
+        `src/app/opengraph-image.tsx` (Satori runs outside the CSS cascade and cannot read
+        `var(--brand)`) · `src/app/globals.css` (where the tokens are defined) ·
+        `src/app/global-error.tsx` (self-contained `<style>` that must survive the stylesheet failing to
+        load) · `src/components/ui/chart.tsx` (unmodified shadcn; its hexes are *attribute selectors*
+        matching Recharts' defaults in order to override them).
+      - Open Question 2 answered **"token, not allowlist"**: the gold star is `--rating`
+        (`fill-rating text-rating`).
+      - Check: `npm run check:colors`, chained as `npm run verify` ahead of lint and build. It ignores
+        comments (so a migration note can still quote the literal it replaced) and does not flag
+        `bg-black/50` scrims or `text-white` over a photo, which carry no numeric shade.
+- [x] Zero new hardcoded palette classes or hex literals in any file touched this round.
+- [x] `npm run lint` (0 errors; 5 pre-existing warnings, none in new code) and `npm run build` green;
+      manually verified in a browser in both themes, including the mobile `Sheet` opening, navigating and
+      closing, and the reduced-motion path.
+- [x] **Entrance/scroll animation respects `prefers-reduced-motion`** (user requirement, LP10/WCAG AA).
+      Measured under emulated `prefers-reduced-motion: reduce`: of 42 `[data-reveal]` elements and 5
+      `[data-enter]` elements, **0 are hidden**, and `html { scroll-behavior }` drops to `auto`. The
+      hidden state is additionally guarded by `scripting: enabled`, so a visitor with JS off also gets
+      the content immediately.
 
 **QA**
 - [ ] `/` renders fully with the backend stopped (LP2).

@@ -33,18 +33,23 @@ import { FinalCta } from "@/components/public/landing/final-cta"
  * are the theme toggle, the mobile sheet, the how-it-works tabs, the FAQ
  * accordion, and the scroll-reveal wrappers.
  */
+/**
+ * NO `openGraph` / `twitter` BLOCK HERE — ON PURPOSE. Both fields are set once
+ * in `src/app/layout.tsx` and inherited.
+ *
+ * Next.js REPLACES rather than merges those two fields across segments, so the
+ * `openGraph` block this page used to declare (title + description + type +
+ * siteName, but no `images`) overwrote the root's resolved object and threw away
+ * the `app/opengraph-image.tsx` card. `/` was the only public page declaring
+ * `openGraph`, which is why it was the only one unfurling without an image while
+ * `/about`, `/terms`, `/privacy` and `/contact` — all of which set just `title`
+ * and `description` — were fine. Setting `title`/`description` alone is enough:
+ * Next derives `og:title`/`og:description` from them.
+ */
 export const metadata: Metadata = {
   title: "Find verified artisans — book, pay and rate in one place",
   description:
     "Hiring an artisan shouldn't depend on word of mouth. JinVa replaces fragmented, informal hiring with a structured platform for discovery, booking, payment and reputation-building.",
-  openGraph: {
-    title: "Find verified artisans — book, pay and rate in one place",
-    description:
-      "Hiring an artisan shouldn't depend on word of mouth. JinVa replaces fragmented, informal hiring with a structured platform for discovery, booking, payment and reputation-building.",
-    type: "website",
-    siteName: "JinVa",
-  },
-  twitter: { card: "summary_large_image" },
 }
 
 export default function LandingPage() {

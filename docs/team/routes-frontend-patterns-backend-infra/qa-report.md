@@ -107,6 +107,16 @@ Tests:       7 failed, 118 passed, 125 total
 - **Likely location**: `jinva-frontend-web/src/app/(public)/page.tsx`, the `openGraph: { … }` object in the
   `metadata` export (add an `images` entry, or drop the `openGraph` block and let `title`/`description`
   cascade as the sibling pages do).
+- **FIX (frontend-engineer, 2026-08-27)**: took the second option — `(public)/page.tsx`'s `openGraph` block
+  is gone, along with its `twitter` block, which had the identical replace problem (that is why `/` also had
+  no `twitter:image`). The `type`/`siteName`/`twitter.card` values it carried moved up into
+  `src/app/layout.tsx`'s root `metadata`, so all routes now get them instead of only `/`. Both fields are now
+  declared **root-only**, with a comment in each file explaining why a page must not re-declare them.
+  `og:title`/`og:description` are derived from the page's own `title`/`description`, so the copy is unchanged
+  except that `og:title` now carries the `· JinVa` template suffix, matching the sibling pages.
+  Verified on `rm -rf .next && npm run build && next start` (port 4310 — something already holds 4200 in this
+  environment): `/` now emits `og:image`, `og:image:width/height/alt/type` and `twitter:image`, and the same
+  full set is still present on `/about`, `/terms`, `/privacy`, `/contact`, `/login`, `/signup`.
 - **Status**: Open
 
 ### [MAJOR] `metadataBase` is unset, so every OG/Twitter image URL resolves to `http://localhost:3000`
@@ -127,6 +137,21 @@ Tests:       7 failed, 118 passed, 125 total
   the public site origin. It should read from an environment variable rather than a literal; I have **not**
   inspected any `.env`, so please confirm which variable name is intended (nothing in `src/` currently
   references one for this purpose).
+- **FIX (frontend-engineer, 2026-08-27)**: `src/app/layout.tsx` now sets
+  `metadataBase: new URL(SITE_URL)` where `SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:4200"`.
+  **`NEXT_PUBLIC_SITE_URL` is the new required environment variable** — public origin, with scheme, no
+  trailing slash (e.g. `https://jinva.com`). It is documented in a comment at the point of use, in the same
+  style as the backend S3 provider's `AWS_S3_*` block. No `.env` file was read or written; the variable has to
+  be set by the operator in each deployed environment, and the localhost fallback exists only so local dev
+  keeps working until then (4200 = this repo's `next dev` port).
+  Verified: the build no longer prints the `metadataBase … is not set` warning (previously 3×), and with the
+  variable unset the rendered tags read `og:image content="http://localhost:4200/opengraph-image?…"` — i.e.
+  the value now comes from the app's own configuration rather than from whatever port built the bundle.
+  The override path was proved too, not just the fallback: one build run with
+  `NEXT_PUBLIC_SITE_URL=https://og-wiring-check.invalid` supplied **in the process environment only** (no file
+  written) produced `og:image content="https://og-wiring-check.invalid/opengraph-image?…"` on both
+  `/` and `/about`. Note this is a `NEXT_PUBLIC_*` value, so it is **inlined at build time** — changing it
+  requires a rebuild, not just a restart. Worth knowing for the deploy pipeline.
 - **Status**: Open
 
 ### [MAJOR] Avatar URLs bypass `resolveMediaUrl()`, so legacy relative `/uploads/...` avatars are fetched from the frontend origin and 404

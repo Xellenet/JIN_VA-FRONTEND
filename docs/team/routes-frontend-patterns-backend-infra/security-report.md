@@ -30,6 +30,29 @@ critical advisory with a *non-breaking* patch available, and several of its HIGH
 middleware-bypass classes that bear directly on this app's `/dashboard/*` gate. The frontend half of the
 dependency finding was never actioned (`ac050a9` was backend-only, as its own note says).
 
+## Re-verification pass — round 3 (final), 2026-08-27, security-engineer
+
+The two items left open at the end of round 2 were fixed and re-checked here. **Both are now
+Verified fixed**, with my own fresh evidence, not the engineers' claims:
+
+| Item | Fix commits | My evidence | Status |
+|---|---|---|---|
+| `next@15.5.4` critical + middleware-bypass advisories | `67298ee` / `45c265d` | `npm audit` re-run (both views), my own `npm run build` + `next start` (logged `▲ Next.js 15.5.24`), **16** bypass probes across all three advisory classes, plus 2 controls, source hashes of the gate re-confirmed | **Verified fixed** |
+| `SubmitVerificationDto` KYC media fields unvalidated | `48b0ea3` / `a7e35d8` | **11** probe cases through the real DTO, asserting *which constraint fired*; plus a measured confirmation of the same latent gap on all four sibling fields | **Verified fixed** (consequence (1) re-filed as LOW) |
+
+**Verdict change: ship-blocking items go from 1 to 0.** See [Release readiness](#release-readiness). The
+residual `postcss`-via-`next` entry is **not** an open high in my judgement — reasoning under that finding.
+
+**Scope discipline.** I re-tested only these two items plus the regression surface they touch. Everything
+marked Verified fixed in round 2 was left alone; nothing in either fix commit goes near it (`67298ee` is
+`package.json` + `package-lock.json` only; `48b0ea3` is one DTO file, purely additive). The
+`security-review` skill was re-run scoped to both diffs as a cross-check and returned **no findings** —
+correctly, since one diff has no source change and the other only narrows an accepted input set.
+
+**No `.env` / `.env.*` file was opened, read or grepped in this round either.** The one env-name question
+that came up (`S3_PUBLIC_URL_HOST` vs `AWS_S3_PUBLIC_URL_BASE`) was answered by grepping **code references**
+only, which is sufficient to establish the mismatch. No credential value appears anywhere in this report.
+
 ## Lead finding — read first
 
 ### [HIGH] RS256 JWT signing keypair is recoverable from git history
@@ -528,7 +551,7 @@ dependency finding was never actioned (`ac050a9` was backend-only, as its own no
 - **Assessment / why HIGH and not critical**: the middleware bypass is **not** a data-exposure auth bypass on its own, and I want that stated precisely so this is not over-read. Real authorization is independent and server-side: every dashboard fetch goes through `src/lib/api.ts`'s `authedRequest()` with a bearer JWT, and the backend enforces `JwtAuthGuard` + `RolesGuard` per route (verified again this round — my probes P3/P4 got 403/401 from the API for non-admin and forged tokens). So a bypassed middleware yields an empty page shell, not another user's data. What it does defeat is the edge-level gate the S2 work exists to provide, and it undermines the "matcher integrity" DoD line. The **critical** RCE advisory is the part I cannot bound from here without exercising it, which I will not do. Between an unbounded critical against a production framework and a non-breaking patch sitting one command away, this is a HIGH open item.
 - **Remediation**: `npm install next@15.5.24` in `jinva-frontend-web` (non-semver-major per npm's own fix metadata), then `npm run verify` and a smoke pass over the five public pages and one dashboard route per role. Then re-run `npm audit`: the same bump also clears the `postcss` and `sharp` entries, which are pinned by `next`. Separately, `npm audit fix` clears `tar` (critical), `lodash`, `lodash-es`, `nanoid`, `flatted`, `js-yaml`, `minimatch`, `brace-expansion`, `picomatch`, `ajv` and `yaml` without breaking changes. Add a CI `npm audit --audit-level=high` gate in both repos so a critical in a production dependency fails the build rather than waiting for a review round to notice.
 - **Owner**: frontend-engineer
-- **Status**: **Fixed — awaiting security re-verification** (frontend-engineer, 2026-08-27, commit `67298ee`; criticals cleared, one residual high deliberately deferred — see fix note)
+- **Status**: **Verified fixed** (2026-08-27, security-engineer — audit counts reproduced, all three bypass classes re-probed against my own production build; residual `postcss` re-classified LOW-in-context, see below)
 
 > **Fix note — frontend-engineer, 2026-08-27 (commit `67298ee`), frontend repo only.** `next` moved
 > `15.5.4` → `15.5.24`. It was pinned **exact**, not a range, so I matched that with `--save-exact` rather than
@@ -593,6 +616,87 @@ dependency finding was never actioned (`ac050a9` was backend-only, as its own no
 > passes clean, so I did not touch it inside a contained security fix. Worth syncing on the next dependency
 > pass. I also did not add the CI `npm audit --audit-level=high` gate you recommended — there is no CI workflow
 > in this repo for me to add it to, and standing up one is out of scope for this fix; it needs its own ticket.
+
+> ### Re-verified — **Verified fixed** (security-engineer, 2026-08-27)
+>
+> I did not accept the fix note. I re-ran the audit, rebuilt the app myself, and re-fired the bypass classes.
+>
+> **(a) Both audit counts reproduce exactly.** `npm audit` in `jinva-frontend-web`:
+>
+> | | my round-2 measurement | engineer's claim | **my re-run** |
+> |---|---|---|---|
+> | all deps | 14 — 2 crit, 10 high, 2 moderate | 2 — 0 crit, 1 high, 1 moderate | **2 — 0 crit, 1 high, 1 moderate** ✔ |
+> | `--omit=dev` | 7 — 1 crit, 5 high, 1 moderate | 2 — 0 crit, 1 high, 1 moderate | **2 — 0 crit, 1 high, 1 moderate** ✔ |
+>
+> **Zero critical in both views.** GHSA-9qr9-h5gf-34mp (the flight-protocol RCE) is gone, and so are all four
+> middleware/proxy-bypass and SSRF advisories I named. I checked this structurally rather than by reading the
+> summary: parsing `npm audit --json`, the entire advisory set is now **two entries with one root cause**. The
+> `next` entry is `severity: moderate`, `via: ["postcss"]` — a bare parent reference with **no advisory object
+> of its own** — so the engineer's correction #2 is right: there is no remaining advisory against `next`'s own
+> code. `npm ls` confirms the vulnerable copy is `node_modules/next/node_modules/postcss@8.4.31` **only**;
+> our top-level `postcss` is `8.5.26` and `@tailwindcss/postcss`/`autoprefixer` both dedupe to it.
+>
+> **The pin is intact.** `package.json:57` reads `"next": "15.5.24"` — exact, no caret — and
+> `git diff 67298ee~1 45c265d -- jinva-frontend-web/package.json` is a **one-line** diff. No other dependency
+> moved in `package.json`; everything else `npm audit fix` did is lockfile-only, as claimed.
+>
+> **(b) The three bypass classes, re-probed on my own build — this is the part I would not take on trust.**
+> `npm run build` (clean, `ƒ Middleware 39.8 kB` emitted) then `next start`, which logged
+> **`▲ Next.js 15.5.24`**, confirming the running binary and not just the manifest. **16** gate probes with no cookie, plus 2 controls:
+>
+> | Probe | Result |
+> |---|---|
+> | `GET /dashboard/{admin,artisan,user}` | **307** → `/login?redirect=…`, redirect param preserved, 3/3 |
+> | `RSC: 1` / `RSC: 1` + `Next-Router-Prefetch: 1` / `RSC: 1` + `Next-Router-State-Tree` | **307** × 3 |
+> | Segment-prefetch path form: `/dashboard/admin.txt` (+ `Next-Router-Segment-Prefetch`), bare `.txt`, `/dashboard/admin/__PAGE__.txt` | **307** × 3 |
+> | Spoofed `x-middleware-subrequest`: `middleware`, `src/middleware`, `pages/_middleware`, **and the chained `middleware:middleware:middleware:middleware:middleware`** form | **307** × 4 — none honoured |
+> | `x-nextjs-data: 1` | **307** |
+> | `//dashboard/admin`, `/dashboard//admin` | **308** normalise, then **307**; following the chain lands on `/login?redirect=%2Fdashboard%2Fadmin` |
+> | Control: `GET /`, `GET /login` | **200** — so the 307s are the gate working, not a broken server |
+>
+> Every dashboard shape redirected; **no page shell was served in any case** (36–51 bytes of redirect body).
+> I added the chained `x-middleware-subrequest` variant and the two path-normalisation shapes, which the
+> engineer's pass did not cover.
+>
+> **The gate logic itself is untouched by the bump**, so the round-1 baseline still applies: SHA-256 of
+> `src/middleware.ts` is still `29e6c8b5f48b88762ee5b6a5b45c8d54e45e443430f68a5cadaa9acda9f4a567` and
+> `src/lib/session-cookie.ts` still `557488616f4c347734d17e19b5e3e8ede239970b0b22dddea9299a4771be7c06` —
+> byte-for-byte identical to pre-round `1d6aaa3`.
+>
+> **(c) The residual `postcss` — my independent call, and I would label it differently to both of us.**
+> Non-blocking, agreed, but neither "an open high" nor merely "a moderate":
+>
+> - **No request-path exposure. Confirmed, not assumed.** All four advisories (GHSA-6g55-p6wh-862q high,
+>   GHSA-r28c-9q8g-f849 high, GHSA-fxqj-rqcc-2cmp + one more moderate) are CWE-22/CWE-200: an arbitrary
+>   `.map` file read driven by an attacker-controlled `sourceMappingURL` **in the CSS source postcss parses**.
+>   `postcss` is a build-time tool; `next start` serves pre-compiled CSS. A repo-wide grep for
+>   `postcss|styleSheet|insertRule|CSSStyleSheet` across `src/**/*.ts{,x}` returns **zero** hits, so the app
+>   has no runtime CSS processing and no user-supplied-CSS path at all — no themes, no CSS uploads, no
+>   stylesheet content from the database. The only CSS reaching next's pipeline is first-party, on a trusted
+>   build machine, and the worst outcome is disclosure of a `.map` file to that same machine's build output.
+>   **Contextual severity is LOW, not high** — the CVSS 7.5 assumes a context where the CSS input is
+>   attacker-controlled, which is not this app's.
+> - **The engineer's correction #1 is confirmed, with the reasoning pinned down.** `next@15.5.24` declares
+>   `postcss: 8.4.31` as an exact dependency (`npm view next@15.5.24 dependencies.postcss`), and
+>   `npm view next@'>=15.5.24 <16' version` returns **only `15.5.24`** — it is the newest 15.x in existence, so
+>   there is no later patch to take. npm's own `fixAvailable` is `next@16.3.3`, `isSemVerMajor: true`. Not
+>   taking a framework major inside a security patch round was the right call.
+> - **But there *is* a non-breaking path the fix note ruled out, and I want it on the ticket.** An npm
+>   `overrides` entry — `"overrides": { "next": { "postcss": "^8.5.26" } }` — would force next's nested copy to
+>   the already-installed patched version (the advisory ranges top out at `<=8.5.22`, so `8.5.26` clears all
+>   four) and would likely dedupe to a single copy. That is a lockfile-level change with no major bump. I have
+>   **not** validated it, and deliberately did not touch `package.json` — it needs frontend-engineer to apply
+>   it and confirm `npm run build` still produces byte-equivalent CSS, since next pins that version exactly and
+>   may rely on it. Cheaper first option for the ticket than waiting on `next@16`.
+>
+> **So: this finding is closed.** The residual is recorded below as a LOW-in-context tracked item, not an open
+> high, and it does **not** gate the release.
+>
+> **Two open recommendations from my original remediation were not actioned, both correctly flagged rather
+> than silently skipped, neither blocking:** the CI `npm audit --audit-level=high` gate (no CI workflow exists
+> in the repo to add it to — it needs its own ticket, and I agree standing one up is out of scope for a
+> contained fix), and `eslint-config-next` still pinned `15.5.4` (dev-only lint config, carries no advisory,
+> lint passes clean).
 
 ### [LOW] The documented rationale for `dotfiles: 'ignore'` does not hold, and the option is a no-op
 - **Category**: CWE-1078 (inconsistent/incorrect rationale) — no exploitable condition
@@ -743,7 +847,7 @@ dependency finding was never actioned (`ac050a9` was backend-only, as its own no
   3. **Unbounded input.** No `@MaxLength` and a `text` column, unlike `idNumber` (100), `fullLegalName` (200) and `additionalNotes` (1000) on the same DTO. Three unbounded columns per submission is a cheap storage-abuse primitive.
 - **Remediation**: add `@IsAttachmentUrl('documents')` to `documentFrontUrl` and `documentBackUrl`, and `@IsAttachmentUrl('selfies')` to `selfieUrl` — no new code, the decorator and both folder entries already exist, and it fixes (2) and (3) outright and narrows (1) to "a well-formed reference in the right folder". For (1) properly, bind uploads to their uploader: have `POST /uploads/document|selfie` record `(filename, uploaderUserId)` and have `VerificationService.submit` reject a reference the submitting artisan did not upload. That is a small schema addition and should be its own ticket rather than bolted onto this round.
 - **Owner**: backend-engineer
-- **Status**: **Open (new)** — MEDIUM, does not gate the release bar
+- **Status**: **Verified fixed** (2026-08-27, security-engineer — 11 probe cases through the real DTO; consequences (2) and (3) closed, (1) narrowed and re-filed as a LOW ticket, see below)
 
 > **backend-engineer fix note (follow-up round) — ready for re-verification.**
 >
@@ -810,6 +914,103 @@ dependency finding was never actioned (`ac050a9` was backend-only, as its own no
 > `qa-report.md:173`). Seeds insert entities directly and bypass the DTO, so nothing breaks today and I left
 > them alone, but seeded rows no longer represent input the API would accept.
 
+> ### Re-verified — **Verified fixed** (security-engineer, 2026-08-27)
+>
+> I ran my own probe suite (**11 cases, all pass**) through the *real* `SubmitVerificationDto` with
+> `plainToInstance` + `validateSync`, inspecting **which constraint key fired** rather than just pass/fail —
+> that distinction is the whole point of the engineer's `@MaxLength` argument. Throwaway spec, run and
+> **deleted**; backend `git status` shows only CRLF line-ending noise on three files (`src/main.ts`,
+> `src/database/seeds/seed.ts`, `test/app.e2e-spec.ts`) with **zero content diff**, and no application code
+> was touched.
+>
+> **The decorators are present and correct.** `submit-verification.dto.ts:47-51`, `:59-64`, `:74-78`:
+> `@IsAttachmentUrl('documents')` on `documentFrontUrl`/`documentBackUrl`, `@IsAttachmentUrl('selfies')` on
+> `selfieUrl`, `@MaxLength(500)` on all three, with `@IsString`/`@IsNotEmpty`/`@IsOptional` retained. The
+> commit (`48b0ea3`) is **purely additive** — no existing constraint was removed or loosened, so there is no
+> validation regression to look for.
+>
+> **V1–V2: the exploit strings from my own finding are now rejected.** All three legitimate local references
+> validate clean (plus a `.pdf` front). Rejected with `isAttachmentUrl` firing:
+> `https://attacker.example/beacon.png`, a bare arbitrary string, a `selfies` path in `documentFrontUrl`, a
+> `documents` path in `selfieUrl`, `.pdf` in `selfieUrl`, `../../etc/passwd`, `%2e%2e%2f` traversal, an
+> appended `?x=1`, the old non-UUID `abc.jpg` example, and an **uppercased** UUID (the pattern is
+> lowercase-hex only). So consequence **(2)** — the arbitrary absolute URL — is closed at the server
+> boundary, where it belongs, rather than by the frontend's client-side shape check.
+>
+> **V3–V4: the engineer's reasoning about the S3 branch is correct, and I confirmed it by reading *and*
+> running.** `is-attachment-url.decorator.ts:97-98` builds two patterns from the same `fileShape` — the local
+> one anchored at **both** ends (`^\/uploads\/(?:…)$`), the remote one anchored at the **end only**
+> (`\/(?:…)$`). The local branch is therefore self-bounding. The S3 branch (`:118-127`) tests the
+> end-anchored pattern against `url.pathname`, so **any** prefix is admissible provided it trips none of
+> `SUSPICIOUS_PATTERN` (`:73` — `..`, `%2e`, `%2f`, `%5c`, `?`, `#`, backslash, whitespace); a prefix of plain
+> `a/b/c/…` segments is unconstrained. Proven, not inferred:
+>
+> - **V3** — with `S3_PUBLIC_URL_HOST=cdn.jinva.example`, the value
+>   `https://cdn.jinva.example/<400 chars of "a/">documents/<uuid>.jpg` produced **zero** constraint errors.
+>   The shape check alone accepts a junk prefix.
+> - **V4** — the same value grown to **10 076 characters** fired **exactly `['maxLength']`** and nothing else.
+>
+> **That is the confirmation asked for: `@MaxLength(500)` is what closes consequence (3), not the shape
+> check.** `isAttachmentUrl` never fires on an oversized prefix. I agree with the engineer's write-up
+> completely, and V4 is the evidence for it.
+>
+> **V6 — the branch is fail-closed by default.** With `S3_PUBLIC_URL_HOST` unset, *no* absolute URL is
+> accepted at all, so the gap above is dormant until an operator sets that variable.
+>
+> **One thing neither of us had noticed, and it makes the residual smaller than it looks.** After the KYC fix,
+> `buildPrivateMediaReference` (`src/uploads/upload-folders.ts`) returns `/uploads/<folder>/<filename>` for
+> private folders **in both storage modes** — deliberately, so pre-cutover and post-cutover rows read back
+> through one rule. So a *legitimate* KYC value always matches the fully anchored local pattern, and **the S3
+> branch is unreachable for these three fields on any honest request**. An attacker would have to hand-build
+> an absolute URL to reach it at all. Combined with V6, the practical exposure of the unbounded-prefix gap on
+> the KYC fields is close to nil even before the cap.
+>
+> **V5 — a small shape-check weakness I am recording rather than filing.** Because the remote pattern is
+> end-anchored, `https://<S3_PUBLIC_URL_HOST>/private/documents/<uuid>.jpg` — the *public* CDN host in front
+> of the *private* key prefix — **passes** the shape check. It is not exploitable: private objects are never
+> anonymously readable (that is the closed HIGH), `kyc-media.tsx:28` rejects any non-`/uploads/…` reference so
+> the admin screen never fetches it, and the operator note already says `AWS_S3_PUBLIC_URL_BASE` must not
+> front the `private/` prefix. Worth knowing that the validator would not stop such a value being *stored*.
+>
+> **Consequence (1) — uploader binding — is genuinely still open, exactly as the engineer says.** Now the only
+> remaining part. **I am re-filing it as LOW rather than carrying the MEDIUM forward**, and stating the
+> reasoning so this is not read as severity-shopping: impact stays high (a KYC-integrity failure — an admin
+> could approve one artisan's identity while looking at another's document), but the attacker must guess a
+> 122-bit `randomUUID()`, and no endpoint discloses another artisan's references (`GET /verification/me` is
+> own-record only; list/detail are `@Roles(ADMIN)`; my round-2 probe P3 confirmed an artisan gets **403** from
+> the KYC reader). Impact × likelihood lands at LOW. The fix is a schema addition — record
+> `(filename, uploaderUserId)` at `POST /uploads/document|selfie` and have `VerificationService.submit` reject
+> a reference the submitter did not upload — which is its own ticket, per my own original remediation.
+>
+> **W1–W5: the sibling gap is confirmed, and it is worse than on the field that was just fixed.** The engineer
+> flagged that the four sibling attachment-URL fields share the latent gap and asked me to confirm my
+> understanding matches. It does, and I measured it. **None of the four carries `@MaxLength`** — I re-read all
+> four rather than trusting the note:
+>
+> | Field | Location | Bound present | Probe result (S3 branch live) |
+> |---|---|---|---|
+> | `SendMessageDto.attachmentUrl` | `src/messages/dto/send-message.dto.ts:48-51` | none | **W1** — accepted a **50 075**-char value, zero constraint errors |
+> | `CreateReviewDto.photoUrls` | `src/reviews/dto/create-review.dto.ts:57-61` | `@ArrayMaxSize(3)` | **W2** — accepted a 50 075-char element; the array bound caps **count only** |
+> | `CreateJobDto.attachmentUrls` | `src/jobs/dto/create-job.dto.ts:124-128` | `@ArrayMaxSize(10)` | **W3** — accepted **10 × 50 075 = 500 820** chars in one request |
+> | `CreateBookingDto.attachmentUrls` | `src/bookings/dto/create-booking.dto.ts:108-112` | `@ArrayMaxSize(10)` | **W4** — same, **500 820** chars |
+>
+> **W5 control**: the identical shape against `documentFrontUrl` fires `['maxLength']`. So the cap really is
+> the differentiator, and the three array fields are the worse case — `@ArrayMaxSize` multiplies an unbounded
+> element length by up to ten. Same caveats apply as on the KYC fields (needs `S3_PUBLIC_URL_HOST` set), with
+> one difference that cuts the other way: `job-attachments`/`reviews`/`messages` are *public* folders, so
+> their legitimate values genuinely do take the absolute-URL form after a cutover, which makes the branch live
+> for them in a way it is not for KYC. **Pre-existing, correctly out of scope for this fix, and not gating** —
+> but it should be a ticket: add `@MaxLength` to all four, and consider anchoring the remote pattern at both
+> ends so the shape check is self-bounding like the local branch, which fixes the class rather than the four
+> instances.
+>
+> **One related pre-existing observation, recorded under "outside this round" below.** The validator reads
+> `S3_PUBLIC_URL_HOST` (`:117`) while `S3StorageProvider` reads `AWS_S3_PUBLIC_URL_BASE` — two different
+> variable names for the same cutover, and `S3_PUBLIC_URL_HOST` appears **nowhere** in the codebase outside
+> this validator and its own spec. Fail-closed for security, but after a real cutover the four *public*-folder
+> sibling fields would start 400-ing on legitimate CDN URLs until an operator sets a second, undocumented
+> variable. Established by grepping **code references only** — no `.env` file was opened.
+
 ### [LOW — informational, NEW] The KYC reader is admin-only by design, so an artisan cannot view their own submitted document
 - **Category**: Access-control design note — not a vulnerability
 - **Location**: `JIN_VA-BACKEND/src/uploads/uploads.controller.ts:197-199` (`@Roles(Role.ADMIN)`); the artisan-facing read is `JIN_VA-BACKEND/src/verification/verification.controller.ts:51-59` (`GET /verification/me`, `@Roles(ARTISAN)`), which returns the stored *references* the artisan cannot resolve
@@ -860,6 +1061,32 @@ endpoints. Its own ticket.
 that also takes user-supplied query parameters. Suggest a bound parameter (`:status`) instead. Every other
 value in that builder is already parameterised.
 
+**[LOW — pre-existing, confirmed by probe this round] None of the four sibling attachment-URL fields is
+length-bounded.** `SendMessageDto.attachmentUrl` (`src/messages/dto/send-message.dto.ts:48-51`),
+`CreateReviewDto.photoUrls` (`src/reviews/dto/create-review.dto.ts:57-61`), `CreateJobDto.attachmentUrls`
+(`src/jobs/dto/create-job.dto.ts:124-128`) and `CreateBookingDto.attachmentUrls`
+(`src/bookings/dto/create-booking.dto.ts:108-112`) all carry `@IsAttachmentUrl(...)` but **no `@MaxLength`**.
+Because the validator's S3 branch anchors only the end of the pathname, each accepts an arbitrarily long key
+prefix once `S3_PUBLIC_URL_HOST` is configured — measured: 50 075 characters in one `attachmentUrl`, and
+500 820 characters in a ten-element `attachmentUrls`, all with **zero** constraint errors. `@ArrayMaxSize`
+bounds the element *count*, not element length, so the array fields are the worse case. This is the same gap
+`@MaxLength(500)` just closed on the three KYC fields, and unlike KYC these are **public** folders whose
+legitimate post-cutover values really do take the absolute-URL form, so the branch is live for them.
+**Recommend:** `@MaxLength` on all four, and anchor the validator's remote pattern at both ends
+(`is-attachment-url.decorator.ts:98`) so the shape check is self-bounding like the local branch — that fixes
+the class rather than four instances. Its own ticket; not gating.
+
+**[LOW — pre-existing] The attachment validator and the S3 provider read two different env variable names
+for the same cutover.** `is-attachment-url.decorator.ts:117` gates its S3 branch on `S3_PUBLIC_URL_HOST`,
+while `S3StorageProvider` builds public URLs from `AWS_S3_PUBLIC_URL_BASE`. `S3_PUBLIC_URL_HOST` appears
+nowhere else in the codebase — only in that validator and its own spec. The direction is **fail-closed**, so
+it is not a security defect: until someone sets it, no absolute URL validates at all. But after a real
+`STORAGE_PROVIDER=s3` cutover an operator would naturally set `AWS_S3_PUBLIC_URL_BASE` and nothing else, and
+the five public-folder attachment fields would then start rejecting the very CDN URLs the provider mints.
+**Recommend:** derive the validator's allowed host from `AWS_S3_PUBLIC_URL_BASE` (parse its host) rather than
+a second variable, or at minimum document both together in the cutover runbook. Established from code
+references only — no `.env` file was opened.
+
 **[non-security, pre-existing] That same analytics query is broken and fails on every refresh.** Visible in
 every boot of my e2e runs: `Platform analytics refresh failed for range 7d/30d/90d/1y: syntax error at or
 near "."`. The cause is `WHERE j.accepted_artisan_id = user.id` at
@@ -880,59 +1107,117 @@ shipped feature — passing to backend-engineer/QA.
 | Resend SDK `console.error` leak | MEDIUM | **Verified fixed** (incl. restore-under-real-throw + concurrency) |
 | SMTP raw error in the log line | MEDIUM | **Verified fixed** (tested at the log sink, not the throw) |
 | Dependency advisories — backend | MEDIUM | **Verified fixed as far as non-breaking allows**; residual highs confirmed unreachable |
-| Dependency advisories — frontend | → **HIGH** | **Still present**, not actioned, and worse than originally recorded — split out as its own finding |
+| Dependency advisories — frontend | → **HIGH** | **Verified fixed** in round 3 (`next@15.5.24`) — audit counts reproduced, 17 bypass probes on my own build |
 | `dotfiles` rationale | LOW | **Verified fixed** (one stale version pin, non-blocking) |
 | `AWS_S3_*` names in non-prod errors | LOW | Open — accepted, unchanged |
 | `resend` unused subdeps | LOW | Open — informational, unchanged |
 | `PublicLink` unvalidated `href` | LOW | **Verified fixed** (residual: `next/link` is not a sanitizer) |
+| `next@15.5.4` critical + bypass advisories | HIGH (new in r2) | **Verified fixed** in r3 — 0 critical both views; residual `postcss` re-classified LOW-in-context |
+| `SubmitVerificationDto` KYC fields | MEDIUM (new in r2) | **Verified fixed** in r3 — (2) and (3) closed; (1) uploader binding re-filed as LOW ticket |
 
-**New this round:** 1 HIGH (`next@15.5.4` advisories), 1 MEDIUM (`SubmitVerificationDto` KYC fields), 1 LOW
-informational (admin-only KYC read is deliberate), plus three pre-existing out-of-round observations.
+**Raised across rounds 2–3:** 1 HIGH (`next@15.5.4` advisories) and 1 MEDIUM (`SubmitVerificationDto` KYC
+fields) — **both now Verified fixed** — plus 1 LOW informational (admin-only KYC read is deliberate) and five
+pre-existing out-of-round observations.
+
+**Open items after round 3:**
 
 - Open critical: **0**
-- Open high: **2** — JWT keypair in git history (pre-existing, out-of-round); `next@15.5.4` advisories (frontend dependency, **new**)
-- Open medium: **2** — `SubmitVerificationDto` KYC fields unvalidated (pre-existing); no rate limiting on auth (pre-existing, out-of-round)
-- Open low: **4** — `AWS_S3_*` names in non-prod errors (accepted); `resend` unused subdeps (informational); admin-only KYC read (informational); raw-SQL interpolation in analytics (pre-existing, out-of-round)
+- Open high: **1** — JWT keypair in git history. Pre-existing, out of this round's scope, operator-owned.
+  **Nothing from this round's own code remains open at high or critical.**
+- Open medium: **1** — no rate limiting on auth (pre-existing, out-of-round)
+- Open low: **8** — `AWS_S3_*` names in non-prod errors (accepted); `resend` unused subdeps (informational);
+  admin-only KYC read (informational); raw-SQL interpolation in analytics (pre-existing, out-of-round);
+  `postcss@8.4.31` nested under `next` (audit label high, **LOW in this app's context** — build-time only, no
+  request-path exposure, no non-breaking fix taken this round); uploader binding for KYC references (re-filed
+  down from the closed MEDIUM); no `@MaxLength` on the four sibling attachment-URL fields (pre-existing,
+  confirmed by probe); `S3_PUBLIC_URL_HOST` vs `AWS_S3_PUBLIC_URL_BASE` naming mismatch (pre-existing,
+  fail-closed)
 
 ### Release readiness
 
-**This round's *new code* is clean. The round is not release-ready, because of a dependency, not the code.**
-Splitting that carefully, since it is the question that was asked:
+**Round 3 verdict: ship-blocking items = 0. This round is release-ready on the "zero open critical/high" bar.**
 
-1. **Every finding raised against this round's own code is now closed.** The HIGH (KYC identity documents on
-   a public path) is **Verified fixed** — and not by reading the diff: 14 of my own probe cases against the
-   real app, in the harsher `STORAGE_PROVIDER=local` mode, confirm that no public URL can be minted for a
-   private folder in either storage mode, that all three non-admin principals (anonymous, artisan, customer)
-   and four bad-token shapes are rejected, that the folder parameter is a closed two-value enum and the
-   filename survives a 30-case hostile fuzz, and that a KYC object cannot be reached by climbing out of a
-   public folder mount. All four MEDIUMs and both LOWs against this round's code are **Verified fixed**. The
-   `STORAGE_PROVIDER=s3` cutover, which my first report said must not be flipped on, is **now safe to flip
-   from a KYC-exposure standpoint** — with the operator note that `AWS_S3_PUBLIC_URL_BASE` must not be
-   configured to front the `private/` prefix, and that bucket policy should deny public reads on it as
-   defence in depth (the guard, not the prefix, is the control). BI4's Resend path can ship.
-2. **The gate is not met, because of one open HIGH in this round's scope: `next@15.5.4`.** The frontend half
-   of the dependency finding was never actioned, and a fresh audit shows a critical advisory against the
-   framework itself plus middleware-bypass and SSRF highs, with a **non-semver-major** patch (`15.5.24`)
-   available. Its practical impact is bounded — server-side authorization is independent of the middleware
-   and I re-confirmed it holds — but I will not sign off "zero open high" against an unbounded critical in a
-   production framework when the fix is one install away. **This is the only item blocking the round.**
-   Expected effort: minutes, plus a smoke pass.
-3. **The lead HIGH (leaked JWT keypair) is pre-existing, out of this round's scope, and tracked separately.**
-   It does not gate this round's code. It does gate the next release, and still needs the operator
-   confirmation and history purge specified above.
+Splitting it the same way as before, because that is the question that keeps being asked:
 
-**Verdict:** ship-blocking items = **1**, and it is `npm install next@15.5.24` (plus `npm audit fix`) in
-`jinva-frontend-web`. Once that lands and the audit is clean at high, this round is release-ready on the
-"zero open critical/high" bar, with the pre-existing keypair HIGH tracked as a separate, operator-owned
-release gate.
+1. **Every finding raised against this round's own code is closed, and every one was re-tested by me rather
+   than accepted.** Across rounds 2 and 3 that is 1 HIGH (KYC identity documents on a public path), 1 HIGH
+   raised during re-verification (`next@15.5.4`), 4 MEDIUMs, 1 MEDIUM raised during re-verification
+   (`SubmitVerificationDto`), and 2 LOWs — **all Verified fixed**. Total independent probe cases across the
+   two re-verification rounds: 14 (KYC delivery leg) + 6 (Resend SDK containment) + 2 (SMTP log sink) + 16
+   (Next.js middleware bypass) + 11 (KYC DTO validation), plus two audit re-runs per repo and four control
+   suite runs.
+
+2. **The `next` dependency HIGH — the single item that blocked round 2 — is closed.** `next@15.5.24` is
+   installed and running (the server itself logs `▲ Next.js 15.5.24`), the pin is still exact, and
+   `npm audit` is **0 critical / 1 high / 1 moderate** in *both* the all-deps and `--omit=dev` views, down
+   from 14 and 7. There are **no advisories against `next`'s own code at all** — the remaining `next` entry
+   is `via: ["postcss"]` with no advisory object of its own. I re-fired all three bypass classes the
+   advisories describe (RSC header variants, segment-prefetch path forms, and four spoofed
+   `x-middleware-subrequest` shapes including the chained form) against my own production build: **307 to
+   `/login` in every one of 16 gate probes, no page shell served**, with `GET /` and `GET /login` returning 200 as
+   controls. The gate source is byte-identical to the pre-round baseline.
+
+3. **The residual `postcss` high is not, in my judgement, an open high — and I would not gate on it.** This
+   is the judgement call I was asked for, so here is the reasoning rather than just the conclusion. All four
+   advisories are path-traversal / info-disclosure driven by an attacker-controlled `sourceMappingURL` **in
+   the CSS that postcss parses**. `postcss` is build-time only; `next start` serves pre-compiled CSS, and a
+   grep for `postcss|styleSheet|insertRule|CSSStyleSheet` across `src/**/*.ts{,x}` returns **zero** hits —
+   the app has no runtime CSS processing and no path by which user content becomes a stylesheet. The
+   vulnerable copy is `node_modules/next/node_modules/postcss@8.4.31` **only**; our own top-level `postcss` is
+   `8.5.26`, above every range. So there is no request-path exposure, and the worst case is a `.map` file read
+   on a trusted build machine. **Contextual severity: LOW.** I have recorded it as such rather than as an open
+   high, because carrying an unreachable build-tool advisory as a release gate would be inaccurate.
+   Not taking `next@16` in a patch round was correct — and I confirmed there is no alternative patch:
+   `npm view next@'>=15.5.24 <16' version` returns only `15.5.24`, and that version pins `postcss` at
+   `8.4.31` exactly. **One correction for the ticket:** an npm `overrides` entry
+   (`"overrides": { "next": { "postcss": "^8.5.26" } }`) *would* clear it without a major bump, contrary to
+   "the only non-breaking fix is `next@16`". I have not applied or validated it — frontend-engineer should,
+   and confirm the CSS build is unchanged.
+
+4. **The `SubmitVerificationDto` MEDIUM is closed, and the engineer's own caveat about it is correct.** I
+   verified their reasoning by probe, not by agreement: with the S3 branch live, a junk-prefixed URL under 500
+   characters passes the shape check with zero errors, and the same value at 10 076 characters fires
+   **exactly `['maxLength']`**. So `@MaxLength(500)` is indeed the control that closes the unbounded-input
+   consequence — `@IsAttachmentUrl` never fires on an oversized prefix. I also confirmed the identical latent
+   gap on all four sibling fields (up to 500 820 characters accepted in one request), which is pre-existing,
+   correctly outside this fix, and now ticketed. The one remaining part of that finding — binding an upload to
+   its uploader — needs a schema change and is re-filed as **LOW** (guessing a 122-bit UUID), tracked
+   separately.
+
+5. **The lead HIGH (leaked RS256 JWT keypair in git history) is the only thing keeping this file from reading
+   "fully clean", and I want that stated without hedging.** It is pre-existing, was never in this round's
+   diff, is explicitly out of this round's scope by agreement with the requesting lead, and is owned by the
+   operator, not by either engineer. It does **not** gate this round's code. It **does** gate the deployment,
+   and it still needs: (1) operator confirmation that every deployed environment runs the rotated pair, not
+   the historical one — blob-hash comparison shows the working-tree pair has been rotated, but I cannot see
+   deployed values without reading environment configuration, which is out of bounds; (2) a history purge
+   (`git filter-repo`/BFG) across all branches plus a re-clone by every contributor; (3) a CI secret scan so a
+   key cannot be re-committed.
+
+**So, precisely: `security-report.md` now has zero open critical or high findings arising from this round's
+own code.** The one remaining open HIGH is the pre-existing leaked keypair, and it is the *only* reason the
+file does not read "fully clean". Everything else open is LOW, plus one pre-existing MEDIUM (auth rate
+limiting) that predates the round.
+
+The `STORAGE_PROVIDER=s3` cutover, which my first report said must not be flipped, remains **safe to flip
+from a KYC-exposure standpoint**, with the two operator notes recorded under that finding
+(`AWS_S3_PUBLIC_URL_BASE` must not front the `private/` prefix; bucket policy should deny public reads on it
+as defence in depth). BI4's Resend path can ship.
 
 ### Re-verification loop
 
-Round 2 complete; statuses above are mine, not the engineers'. For round 3 I need only:
-- frontend-engineer: the `next` bump + `npm audit fix`, then post the fresh `npm audit` counts (all-deps and
-  `--omit=dev`) under that finding. I will re-run the audit myself and re-check the five public pages plus one
-  dashboard route per role still render.
-- backend-engineer: optional this round — the three `@IsAttachmentUrl` decorators on
-  `SubmitVerificationDto` (MEDIUM, does not gate), and tickets for the auth rate limiting, the
-  upload-to-uploader binding, the `nodemailer`/`axios`/`firebase-admin` major bumps and the broken
-  `topArtisans()` query.
+**Round 3 complete. Loop closed — no round 4 is needed for this feature.** All statuses in this report are
+mine, established by my own probes.
+
+Nothing is required of either engineer to release this round. Carried forward as tickets, none gating:
+
+- **operator (blocking the *deployment*, not this round):** confirm the deployed `JWT_PRIVATE_KEY`/
+  `JWT_PUBLIC_KEY` are the rotated pair; purge the historical blob from git history; add a CI secret scan.
+- **frontend-engineer:** try `"overrides": { "next": { "postcss": "^8.5.26" } }` and confirm the CSS build is
+  unchanged — cheaper than waiting for `next@16`; sync `eslint-config-next` to `15.5.24` on the next
+  dependency pass; stand up a CI workflow with `npm audit --audit-level=high` in both repos.
+- **backend-engineer:** `@MaxLength` on the four sibling attachment-URL fields, and both-end anchoring of the
+  validator's remote pattern; upload-to-uploader binding for KYC references; reconcile `S3_PUBLIC_URL_HOST`
+  with `AWS_S3_PUBLIC_URL_BASE`; global auth rate limiting/lockout; the `nodemailer`/`axios`/`firebase-admin`
+  major bumps; bound parameter for the analytics raw SQL; and the broken `topArtisans()` query
+  (`"user"."id"`), which is a silent total failure of a shipped feature.

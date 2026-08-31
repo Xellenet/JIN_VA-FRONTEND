@@ -1,9 +1,12 @@
 import type React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Logo } from "@/components/logo"
 import { BrandPattern } from "@/components/brand/brand-pattern"
-import { MessageCircle } from "lucide-react"
+import { Info, MessageCircle, ShieldCheck } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { RatingStars } from "@/components/ui/rating-stars"
 
 /**
  * DT4 (design-spec.md §1.2): this file's colour literals are tokens.
@@ -20,6 +23,18 @@ import { Button } from "@/components/ui/button"
  * leftover ("Grow your beauty business" on a platform that covers all trades).
  * Speaks to both sides of the marketplace since this layout is shared by
  * every auth screen, not just one role's signup.
+ *
+ * The card visual used to be a generic fintech-template pair (a fake "JinVa
+ * Pro" payment card plus an unlabelled "347 Monthly Bookings" figure) that
+ * matched neither JinVa's product — there's no card product — nor its
+ * honesty rule against fabricated numbers (the same LP8 principle the
+ * landing hero follows). Replaced with a compact version of the hero's own
+ * sample-artisan snapshot, carrying the same "Sample content" label. Laid
+ * out in normal flow (a `rotate-1` transform, not `absolute` positioning),
+ * unlike the hero's floating chips — the auth panel is a single narrow
+ * column, not a two-column layout with room to spare, and absolute
+ * positioning here is exactly what caused the heading-collision bug this
+ * file used to have.
  */
 
 interface AuthSplitLayoutProps {
@@ -54,7 +69,7 @@ export function AuthSplitLayout({ children }: Readonly<AuthSplitLayoutProps>) {
         </Button>
 
         {/* Main Content */}
-        <div className="relative z-10 space-y-8 max-w-lg">
+        <div className="relative z-10 space-y-6 max-w-lg">
           {/* Feature Card */}
           <div className="bg-card rounded-2xl p-8 shadow-2xl space-y-6 transform transition-all duration-500 hover:scale-105">
             <div className="transition-opacity duration-300">
@@ -74,36 +89,36 @@ export function AuthSplitLayout({ children }: Readonly<AuthSplitLayoutProps>) {
             >
               <Link href="/">Learn more</Link>
             </Button>
+          </div>
 
-            {/* Card Visual */}
-            <div className="relative min-h-44 pt-2">
-              <div className="absolute -top-4 right-0 w-64 h-40 bg-linear-to-br from-brand-accent to-brand rounded-xl shadow-xl transform rotate-6 p-6 text-brand-foreground transition-all duration-500 hover:rotate-3 hover:scale-105">
-                <div className="text-sm text-brand-foreground/80 mb-8">JinVa Pro</div>
-                <div className="text-xl font-mono tracking-wider">7812 2139 0823 XXXX</div>
-                <div className="mt-4 flex justify-between text-xs text-brand-foreground/80">
-                  <span>08/27</span>
-                  <span>08●●</span>
-                </div>
+          {/* Sample artisan snapshot — see file header re: why this replaced
+              the old fake card/stat pairing */}
+          <div className="flex flex-col items-start gap-2 pl-2">
+            <Badge variant="outline" className="bg-card/90">
+              <Info className="h-3 w-3" aria-hidden="true" />
+              Sample content
+            </Badge>
+            <div className="flex items-center gap-3 rounded-xl bg-card p-3 pr-5 shadow-xl ring-1 ring-brand-foreground/10 rotate-1 transition-all duration-500 hover:rotate-0 hover:scale-105">
+              <Image
+                src="/artisan-in-hard-hat.jpg"
+                alt="A JinVa artisan on site"
+                width={48}
+                height={48}
+                className="size-12 shrink-0 rounded-full object-cover"
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-card-foreground">Kwame Asante</p>
+                <p className="truncate text-xs text-muted-foreground">Plumbing &middot; Accra</p>
               </div>
-
-              {/* Bookings Widget */}
-              <div className="absolute -bottom-8 -right-4 bg-card rounded-xl shadow-lg p-4 w-48 transition-all duration-500 hover:scale-105 hover:shadow-2xl">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center transition-colors duration-300">
-                    <svg
-                      className="w-5 h-5 text-muted-foreground"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                      aria-hidden="true"
-                    >
-                      <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Monthly Bookings</div>
-                    <div className="text-2xl font-bold text-card-foreground">347</div>
-                  </div>
-                </div>
+              <div className="ml-1 flex items-center gap-2 border-l border-border pl-3">
+                <Badge
+                  variant="outline"
+                  className="border-primary/20 bg-primary/10 px-1.5 text-primary"
+                  aria-label="Verified"
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                </Badge>
+                <RatingStars rating={4.8} size="sm" showCount={false} />
               </div>
             </div>
           </div>

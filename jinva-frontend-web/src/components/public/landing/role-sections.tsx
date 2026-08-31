@@ -107,7 +107,7 @@ const GOVERNANCE_CARDS = [
 export function ClientsSection() {
   return (
     <section className="bg-background">
-      <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-16 sm:px-6 md:py-24 lg:px-8">
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <Reveal>
             {/* PRD §3, bullet 1 — verbatim except capitalisation */}
@@ -148,7 +148,7 @@ export function ClientsSection() {
 export function ArtisansSection() {
   return (
     <section id="for-artisans" className="scroll-mt-20 border-y border-border bg-muted/40">
-      <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-16 sm:px-6 md:py-24 lg:px-8">
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
           {/* Image first at lg, so this section mirrors the one above */}
           <Reveal delay={120} className="lg:order-first">
@@ -217,7 +217,7 @@ export function ArtisansSection() {
 export function GovernanceSection() {
   return (
     <section id="platform-governance" className="scroll-mt-20 bg-background">
-      <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-16 sm:px-6 md:py-24 lg:px-8">
         <Reveal className="max-w-2xl">
           <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
             Someone is actually checking.

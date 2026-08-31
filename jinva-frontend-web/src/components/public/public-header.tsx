@@ -52,7 +52,7 @@ export function PublicHeader() {
       data-scrolled={scrolled}
       className="sticky top-0 z-50 w-full border-b border-transparent bg-background/90 backdrop-blur-md transition-colors duration-300 data-[scrolled=true]:border-border"
     >
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 w-full max-w-[96rem] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link
           href="/"
           aria-label="JinVa home"

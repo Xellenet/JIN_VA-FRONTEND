@@ -18,7 +18,7 @@ const TRUST_POINTS = [
 export function TrustStrip() {
   return (
     <section className="border-y border-border bg-muted/40">
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-8 sm:px-6 lg:px-8">
         <h2 className="sr-only">How JinVa protects both sides of a job</h2>
         <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {TRUST_POINTS.map((point, index) => (

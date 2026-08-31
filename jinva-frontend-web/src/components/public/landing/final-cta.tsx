@@ -18,7 +18,7 @@ export function FinalCta() {
   return (
     <section className="relative overflow-hidden bg-linear-to-br from-brand to-brand-accent">
       <BrandPattern />
-      <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-20 lg:px-8">
+      <div className="relative z-10 mx-auto w-full max-w-[96rem] px-4 py-16 sm:px-6 md:py-20 lg:px-8">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight text-balance text-brand-foreground sm:text-4xl">
             Get the job done properly.

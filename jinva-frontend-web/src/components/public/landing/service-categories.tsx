@@ -37,7 +37,7 @@ const CATEGORIES = [
 export function ServiceCategories() {
   return (
     <section id="services" className="scroll-mt-20 bg-background">
-      <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-16 sm:px-6 md:py-24 lg:px-8">
         <Reveal className="max-w-2xl">
           <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
             Every trade, one platform.

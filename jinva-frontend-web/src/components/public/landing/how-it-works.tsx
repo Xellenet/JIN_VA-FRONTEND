@@ -52,7 +52,7 @@ function StepList({ steps, wide }: { readonly steps: readonly string[]; readonly
 export function HowItWorks() {
   return (
     <section id="how-it-works" className="scroll-mt-20 border-y border-border bg-muted/40">
-      <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-16 sm:px-6 md:py-24 lg:px-8">
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">How JinVa works.</h2>
 
         <Tabs defaultValue="clients" className="mt-10 gap-8">

@@ -54,7 +54,7 @@ export function Testimonials() {
 
   return (
     <section id="testimonials" className="scroll-mt-20 bg-background">
-      <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-16 sm:px-6 md:py-24 lg:px-8">
         {/* The dashed edge is the tell — borrowed from the Empty primitive, and
             nothing else on this page has one, so the section reads as
             scaffolding at a glance in both themes. */}

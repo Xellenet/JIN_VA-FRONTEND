@@ -20,7 +20,7 @@ export function PublicFooter() {
 
   return (
     <footer className="border-t border-border bg-muted/40">
-      <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 py-12 sm:px-6 lg:px-8">
         {/*
           SIX columns at lg, not five: the brand block spans two and there are
           four link columns, so a 5-column grid orphans "Legal" onto a second row

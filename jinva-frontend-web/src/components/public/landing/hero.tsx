@@ -40,7 +40,7 @@ export function Hero() {
 
   return (
     <section className="relative overflow-hidden bg-background">
-      <div className="mx-auto w-full max-w-7xl px-4 pt-10 pb-16 sm:px-6 md:pt-20 md:pb-24 lg:px-8">
+      <div className="mx-auto w-full max-w-[96rem] px-4 pt-10 pb-16 sm:px-6 md:pt-20 md:pb-24 lg:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           {/* Copy */}
           <div>

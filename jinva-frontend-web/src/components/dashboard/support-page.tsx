@@ -160,7 +160,7 @@ export function SupportPage({ role }: SupportPageProps) {
               <p className="text-sm font-semibold text-foreground">Live Chat</p>
               <p className="text-xs text-muted-foreground">Avg. response: 2 min</p>
             </div>
-            <Badge className="ml-auto bg-green-100 text-green-700 hover:bg-green-100">Online</Badge>
+            <Badge className="ml-auto bg-success/10 text-success hover:bg-success/10">Online</Badge>
           </CardContent>
         </Card>
         <Card className="group cursor-pointer border-border transition-shadow hover:shadow-md">
@@ -287,8 +287,8 @@ export function SupportPage({ role }: SupportPageProps) {
           {ticketSubmitted ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                  <CheckCircle2 className="h-8 w-8 text-green-600" />
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+                  <CheckCircle2 className="h-8 w-8 text-success" />
                 </div>
                 <h3 className="text-xl font-semibold text-foreground">Ticket Submitted Successfully</h3>
                 <p className="mt-2 max-w-md text-sm text-muted-foreground">
@@ -410,7 +410,7 @@ export function SupportPage({ role }: SupportPageProps) {
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
                       {ticket.status === "resolved" ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <CheckCircle2 className="h-5 w-5 text-success" />
                       ) : (
                         <Clock className="h-5 w-5 text-primary" />
                       )}
@@ -422,7 +422,7 @@ export function SupportPage({ role }: SupportPageProps) {
                           variant="secondary"
                           className={
                             ticket.status === "resolved"
-                              ? "bg-green-100 text-green-700 hover:bg-green-100"
+                              ? "bg-success/10 text-success hover:bg-success/10"
                               : "bg-muted text-primary hover:bg-muted"
                           }
                         >
@@ -456,7 +456,7 @@ export function SupportPage({ role }: SupportPageProps) {
                     variant="secondary"
                     className={
                       selectedTicket?.status === "resolved"
-                        ? "bg-green-100 text-green-700 hover:bg-green-100"
+                        ? "bg-success/10 text-success hover:bg-success/10"
                         : "bg-muted text-primary hover:bg-muted"
                     }
                   >

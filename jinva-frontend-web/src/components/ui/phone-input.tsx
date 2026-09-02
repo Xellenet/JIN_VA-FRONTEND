@@ -59,7 +59,7 @@ export function PhoneInput({
             role="combobox"
             aria-expanded={open}
             disabled={disabled}
-            className="h-10 w-[120px] justify-between bg-white border-gray-200 text-gray-900 shadow-none"
+            className="h-10 w-[120px] justify-between bg-background border-input text-foreground shadow-none"
           >
             <span className="flex items-center gap-2">
               <span>{selectedCountry.flag}</span>
@@ -68,7 +68,7 @@ export function PhoneInput({
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[280px] p-0 shadow-none border-gray-200">
+        <PopoverContent className="w-[280px] p-0 shadow-none border-input">
           <Command>
             <CommandInput placeholder="Search country..." />
             <CommandList>
@@ -82,7 +82,7 @@ export function PhoneInput({
                       onCountryCodeChange(country.code)
                       setOpen(false)
                     }}
-                    className="hover:bg-green-100  cursor-pointer"
+                    className="cursor-pointer hover:bg-accent hover:text-accent-foreground"
                   >
                     <Check className={cn("mr-2 h-4 w-4", countryCode === country.code ? "opacity-100" : "opacity-0")} />
                     <span className="mr-2">{country.flag}</span>
@@ -101,7 +101,7 @@ export function PhoneInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className="h-10 flex-1 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 shadow-none"
+        className="h-10 flex-1 bg-background border-input text-foreground placeholder:text-muted-foreground shadow-none"
       />
     </div>
   )

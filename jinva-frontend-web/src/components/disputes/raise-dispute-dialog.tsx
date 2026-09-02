@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Clock, Loader2, Lock, MessageSquare } from "lucide-react"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { ApiError, apiFetch } from "@/lib/api"
 import {
@@ -187,7 +187,7 @@ export function RaiseDisputeDialog({
         <div className="rounded-lg bg-muted/40 p-3">
           <div className="flex items-start gap-3">
             <Avatar className="h-9 w-9 shrink-0">
-              <AvatarImage src={counterpartyAvatar || naviiAvatar(counterpartyName, 36)} />
+              <AvatarImage src={resolveAvatarUrl(counterpartyAvatar, counterpartyName, 36)} />
               <AvatarFallback className="text-xs">{counterpartyName[0]}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">

@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Star, Calendar, DollarSign, Briefcase, Loader2, UserRound } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/contexts/auth-context"
-import { naviiAvatar, cn } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 
 interface BackendJob {
   id: string
@@ -150,7 +150,7 @@ export default function ArtisanDashboard() {
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-2.5">
                               <Avatar className="h-8 w-8">
-                                <AvatarImage src={job.customer?.profilePicture || naviiAvatar(clientName)} />
+                                <AvatarImage src={resolveAvatarUrl(job.customer?.profilePicture, clientName)} />
                                 <AvatarFallback><UserRound className="h-3.5 w-3.5" /></AvatarFallback>
                               </Avatar>
                               <span className="font-medium text-foreground">{clientName}</span>

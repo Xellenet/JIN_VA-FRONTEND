@@ -23,9 +23,31 @@ import type { Notification } from "@/lib/types"
  * Shared status-pill conventions for the Availability/Booking/Job Lifecycle
  * remediation. Reuses the existing bg-, text-, and border- badge pattern
  * already established across the app (see e.g. the old user/bookings/page.tsx
- * statusConfig) instead of inventing a new visual language — EXPIRED and
- * NO_SHOW simply extend the same palette with a couple of previously-unused
- * (but consistent) tones.
+ * statusConfig) instead of inventing a new visual language.
+ *
+ * DT2 (2026-08-27) — every map below now reads from the DT1 semantic tokens
+ * (`--success` / `--warning` / `--attention` / `--info`, defined in
+ * src/app/globals.css) instead of light-mode-only Tailwind palette literals
+ * (the yellow-100/700/200, green-100/700/200, red-100/700/200, blue-100/700/200
+ * and gray-100/600/200 triplets) which carried no `dark:` variants and rendered
+ * washed-out or illegible on the app's real dark theme. The literal -> token
+ * mapping is design-spec.md §1.3 verbatim; nothing here was invented locally.
+ *
+ * Two consequences worth knowing, both intended and both flagged in the design
+ * spec rather than shipped silently:
+ *   • Light-mode status pills are very slightly DEEPER than before. That is the
+ *     point: `yellow-100/700` and `orange-100/700` measured ~4.4:1 and FAILED
+ *     WCAG AA, and `green-100/700` passed by 0.07. The tokens clear 4.5:1 by at
+ *     least 1.3x in both themes.
+ *   • `disputeStatusConfig.OPEN`, `bookingStatusConfig.CANCELLED` and
+ *     `disputeOutcomeConfig.REFUND_CLIENT` all render on `--destructive` now.
+ *     They never share a column, and each carries a distinct label + icon, so
+ *     the no-colour-only-signalling rule still holds. Do not invent a fifth
+ *     tone to separate them.
+ *
+ * LABELS AND ICONS ARE FROZEN by DT2 — only the colour source changed. In
+ * particular `HELD` stays "Withheld". `notificationTypeConfig` at the bottom of
+ * this file already used tokens and is untouched.
  */
 export interface StatusBadgeConfig {
   label: string
@@ -34,13 +56,13 @@ export interface StatusBadgeConfig {
 
 /** BookingStatus: PENDING | CONFIRMED | COMPLETED | CANCELLED | DECLINED | EXPIRED | NO_SHOW */
 export const bookingStatusConfig: Record<string, StatusBadgeConfig> = {
-  PENDING: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  PENDING: { label: "Pending", className: "bg-warning/10 text-warning border-warning/20" },
   CONFIRMED: { label: "Confirmed", className: "bg-primary/10 text-primary border-primary/20" },
-  COMPLETED: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
-  CANCELLED: { label: "Cancelled", className: "bg-red-100 text-red-700 border-red-200" },
-  DECLINED: { label: "Declined", className: "bg-red-100 text-red-700 border-red-200" },
-  EXPIRED: { label: "Expired", className: "bg-gray-100 text-gray-600 border-gray-200" },
-  NO_SHOW: { label: "No-show", className: "bg-orange-100 text-orange-700 border-orange-200" },
+  COMPLETED: { label: "Completed", className: "bg-success/10 text-success border-success/20" },
+  CANCELLED: { label: "Cancelled", className: "bg-destructive/10 text-destructive border-destructive/20" },
+  DECLINED: { label: "Declined", className: "bg-destructive/10 text-destructive border-destructive/20" },
+  EXPIRED: { label: "Expired", className: "bg-muted text-muted-foreground border-border" },
+  NO_SHOW: { label: "No-show", className: "bg-attention/10 text-attention border-attention/20" },
 }
 
 export function getBookingStatusConfig(status: string): StatusBadgeConfig {
@@ -64,21 +86,22 @@ export function getBookingStatusConfig(status: string): StatusBadgeConfig {
  * or whose initiation itself errored, as opposed to `PENDING_TRANSFER`'s
  * "never attempted, no payout method on file" case). Both states are
  * retryable via the same `POST /payments/retry-transfer/:jobId` action, so
- * they intentionally share the same orange "needs attention" tone here,
- * distinguished only by label/icon — this is not a departure from the design
- * spec's palette, just coverage for a real backend value the spec predates.
+ * they intentionally share the same `--attention` "needs a human to act, but
+ * this is not a failure" tone here, distinguished only by label/icon — this is
+ * not a departure from the design spec's palette, just coverage for a real
+ * backend value the spec predates.
  *
  * IMPORTANT: `HELD` is labelled "Withheld" per the one approved copy change
  * (mockups + design-spec.md already reflect this) — never "Held in Escrow".
  */
 export const paymentStatusConfig: Record<string, StatusBadgeConfig & { icon: LucideIcon }> = {
-  PENDING: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200", icon: Clock },
-  HELD: { label: "Withheld", className: "bg-blue-100 text-blue-700 border-blue-200", icon: Lock },
-  PENDING_TRANSFER: { label: "Payout Needs Attention", className: "bg-orange-100 text-orange-700 border-orange-200", icon: AlertTriangle },
-  TRANSFER_FAILED: { label: "Transfer Failed", className: "bg-orange-100 text-orange-700 border-orange-200", icon: RefreshCcw },
-  RELEASED: { label: "Paid Out", className: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle2 },
-  REFUNDED: { label: "Refunded", className: "bg-gray-100 text-gray-600 border-gray-200", icon: ArrowDownRight },
-  CANCELLED: { label: "Cancelled", className: "bg-red-100 text-red-700 border-red-200", icon: XCircle },
+  PENDING: { label: "Pending", className: "bg-warning/10 text-warning border-warning/20", icon: Clock },
+  HELD: { label: "Withheld", className: "bg-info/10 text-info border-info/20", icon: Lock },
+  PENDING_TRANSFER: { label: "Payout Needs Attention", className: "bg-attention/10 text-attention border-attention/20", icon: AlertTriangle },
+  TRANSFER_FAILED: { label: "Transfer Failed", className: "bg-attention/10 text-attention border-attention/20", icon: RefreshCcw },
+  RELEASED: { label: "Paid Out", className: "bg-success/10 text-success border-success/20", icon: CheckCircle2 },
+  REFUNDED: { label: "Refunded", className: "bg-muted text-muted-foreground border-border", icon: ArrowDownRight },
+  CANCELLED: { label: "Cancelled", className: "bg-destructive/10 text-destructive border-destructive/20", icon: XCircle },
   FAILED: { label: "Failed", className: "bg-destructive/10 text-destructive border-destructive/20", icon: AlertCircle },
 }
 
@@ -102,16 +125,16 @@ export const RETRYABLE_PAYOUT_STATUSES = ["PENDING_TRANSFER", "TRANSFER_FAILED"]
  * finished) rendered pixel-identical. Every dispute badge (admin queue,
  * admin detail, and both party-facing surfaces) reads from here.
  *
- * No new colour is introduced: yellow is already this app's
+ * No new colour is introduced: `--warning` is already this app's
  * "in progress / awaiting" tone (`bookingStatusConfig.PENDING`,
- * `paymentStatusConfig.PENDING`) and gray-100/600 is already its
- * terminal-neutral tone (`EXPIRED`, `REFUNDED`).
+ * `paymentStatusConfig.PENDING`) and muted is already its terminal-neutral
+ * tone (`EXPIRED`, `REFUNDED`).
  */
 export const disputeStatusConfig: Record<string, StatusBadgeConfig & { icon: LucideIcon }> = {
   OPEN:         { label: "Open",         className: "bg-destructive/10 text-destructive border-destructive/20", icon: AlertTriangle },
-  UNDER_REVIEW: { label: "Under Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200",          icon: Clock },
+  UNDER_REVIEW: { label: "Under Review", className: "bg-warning/10 text-warning border-warning/20",             icon: Clock },
   RESOLVED:     { label: "Resolved",     className: "bg-primary/10 text-primary border-primary/20",             icon: CheckCircle2 },
-  CLOSED:       { label: "Closed",       className: "bg-gray-100 text-gray-600 border-gray-200",                icon: XCircle },
+  CLOSED:       { label: "Closed",       className: "bg-muted text-muted-foreground border-border",             icon: XCircle },
 }
 
 export function getDisputeStatusConfig(status: string): StatusBadgeConfig & { icon: LucideIcon } {
@@ -134,9 +157,9 @@ export function getDisputeStatusConfig(status: string): StatusBadgeConfig & { ic
  * does.
  */
 export const disputeOutcomeConfig: Record<string, StatusBadgeConfig & { icon: LucideIcon }> = {
-  REFUND_CLIENT:   { label: "Ruled for client",   className: "bg-red-100 text-red-700 border-red-200",     icon: ArrowDownRight },
-  RELEASE_ARTISAN: { label: "Ruled for artisan",  className: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle2 },
-  MUTUAL:          { label: "Mutually resolved",  className: "bg-muted text-muted-foreground border-border", icon: Handshake },
+  REFUND_CLIENT:   { label: "Ruled for client",   className: "bg-destructive/10 text-destructive border-destructive/20", icon: ArrowDownRight },
+  RELEASE_ARTISAN: { label: "Ruled for artisan",  className: "bg-success/10 text-success border-success/20",             icon: CheckCircle2 },
+  MUTUAL:          { label: "Mutually resolved",  className: "bg-muted text-muted-foreground border-border",             icon: Handshake },
 }
 
 export function getDisputeOutcomeConfig(outcome: string): StatusBadgeConfig & { icon: LucideIcon } {
@@ -154,8 +177,8 @@ export function getDisputeOutcomeConfig(outcome: string): StatusBadgeConfig & { 
  * requirements.md's UI/UX notes.
  *
  * `review`, `assignment` and `message` previously used literal light-mode-only
- * palette colors (`bg-yellow-100 text-yellow-600`, `bg-blue-100
- * text-blue-600`, `bg-violet-100 text-violet-600`) with no `dark:` variants,
+ * palette colors (yellow-100/600, blue-100/600 and violet-100/600) with no
+ * `dark:` variants,
  * which rendered muddy on the dark theme at the 40px chip scale. They now use
  * the semantic tokens the other three categories in this map already used, so
  * the app's real `.dark` theme handles them. This is a deliberate reduction

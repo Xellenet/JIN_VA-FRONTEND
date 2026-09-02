@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ArrowLeft, Star, CheckCircle2, Loader2, UserRound, Clock, AlertTriangle } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { ReviewPhotoPicker } from "@/components/reviews/review-photo-picker"
 import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbnails"
@@ -143,8 +143,8 @@ function ReviewPageContent() {
         <div className="flex min-h-[60vh] items-center justify-center">
           <Card className="w-full max-w-md">
             <CardContent className="flex flex-col items-center p-8 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <CheckCircle2 className="h-8 w-8 text-green-600" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+                <CheckCircle2 className="h-8 w-8 text-success" />
               </div>
               <h2 className="mt-4 text-xl font-bold text-foreground">
                 {isEditMode ? "Review Updated" : "Review Submitted"}
@@ -158,7 +158,7 @@ function ReviewPageContent() {
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Star
                     key={i}
-                    className={`h-5 w-5 ${i < rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                    className={`h-5 w-5 ${i < rating ? "fill-rating text-rating" : "text-muted-foreground/30"}`}
                   />
                 ))}
               </div>
@@ -209,7 +209,7 @@ function ReviewPageContent() {
           )
         )}
         {isEditMode && existingReview?.status === "FLAGGED" && (
-          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+          <div className="rounded-lg border border-warning/20 bg-warning/10 p-3 text-sm text-warning">
             This review is under moderation review and is temporarily hidden from other users. You can still edit
             it — editing won&apos;t clear the flag.
           </div>
@@ -239,7 +239,7 @@ function ReviewPageContent() {
                           <Star
                             className={`h-10 w-10 transition-colors ${
                               starValue <= (hoveredRating || rating)
-                                ? "fill-yellow-400 text-yellow-400"
+                                ? "fill-rating text-rating"
                                 : "text-muted-foreground/30"
                             }`}
                           />
@@ -319,7 +319,7 @@ function ReviewPageContent() {
                 <CardContent className="p-5">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-14 w-14">
-                      <AvatarImage src={job.acceptedArtisan.profilePicture || naviiAvatar(artisanName)} />
+                      <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture, artisanName)} />
                       <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                     <div>

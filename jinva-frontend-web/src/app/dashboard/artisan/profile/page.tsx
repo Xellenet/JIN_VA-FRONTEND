@@ -35,7 +35,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
@@ -508,7 +508,7 @@ export default function ArtisanProfile() {
                       <div key={review.id} className="p-5">
                         <div className="flex items-start gap-4">
                           <Avatar className="h-10 w-10">
-                            <AvatarImage src={avatar || naviiAvatar(reviewerName)} />
+                            <AvatarImage src={resolveAvatarUrl(avatar, reviewerName)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
@@ -523,7 +523,7 @@ export default function ArtisanProfile() {
                               {Array.from({ length: 5 }).map((_, si) => (
                                 <Star
                                   key={`${review.id}-star-${si}`}
-                                  className={`h-3.5 w-3.5 ${si < Number(review.rating) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                                  className={`h-3.5 w-3.5 ${si < Number(review.rating) ? "fill-rating text-rating" : "text-muted-foreground/30"}`}
                                 />
                               ))}
                             </div>

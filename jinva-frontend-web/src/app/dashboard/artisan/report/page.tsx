@@ -29,7 +29,7 @@ import {
   UserRound,
 } from "lucide-react"
 import { mockArtisans, mockOrders } from "@/lib/data/mock-data"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 
 const monthlyEarnings = [
   { month: "Jul", earnings: 1800 },
@@ -66,10 +66,10 @@ export default function ArtisanReportPage() {
 
   const statusConfig: Record<string, { label: string; className: string }> = {
     "in-progress": { label: "In Progress", className: "bg-muted text-muted-foreground border-muted" },
-    completed: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
-    cancelled: { label: "Cancelled", className: "bg-red-100 text-red-700 border-red-200" },
-    pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-    available: { label: "Available", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    completed: { label: "Completed", className: "bg-success/10 text-success border-success/20" },
+    cancelled: { label: "Cancelled", className: "bg-destructive/10 text-destructive border-destructive/20" },
+    pending: { label: "Pending", className: "bg-warning/10 text-warning border-warning/20" },
+    available: { label: "Available", className: "bg-info/10 text-info border-info/20" },
   }
 
   return (
@@ -96,13 +96,13 @@ export default function ArtisanReportPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Total Earnings</p>
                   <p className="text-2xl font-bold">GH₵ {totalEarnings.toLocaleString()}</p>
-                  <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
+                  <div className="mt-1 flex items-center gap-1 text-sm text-success">
                     <TrendingUp className="h-3.5 w-3.5" />
                     <span>+14% vs last period</span>
                   </div>
                 </div>
-                <div className="rounded-lg bg-green-50 p-3">
-                  <DollarSign className="h-5 w-5 text-green-600" />
+                <div className="rounded-lg bg-success/10 p-3">
+                  <DollarSign className="h-5 w-5 text-success" />
                 </div>
               </div>
             </CardContent>
@@ -113,7 +113,7 @@ export default function ArtisanReportPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Jobs Completed</p>
                   <p className="text-2xl font-bold">{artisan.jobsCompleted}</p>
-                  <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
+                  <div className="mt-1 flex items-center gap-1 text-sm text-success">
                     <TrendingUp className="h-3.5 w-3.5" />
                     <span>+8 this month</span>
                   </div>
@@ -131,8 +131,8 @@ export default function ArtisanReportPage() {
                   <p className="text-sm text-muted-foreground">Active Jobs</p>
                   <p className="text-2xl font-bold">{activeJobs}</p>
                 </div>
-                <div className="rounded-lg bg-blue-50 p-3">
-                  <Clock className="h-5 w-5 text-blue-600" />
+                <div className="rounded-lg bg-info/10 p-3">
+                  <Clock className="h-5 w-5 text-info" />
                 </div>
               </div>
             </CardContent>
@@ -143,13 +143,13 @@ export default function ArtisanReportPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Average Rating</p>
                   <p className="text-2xl font-bold">{artisan.avgRating}</p>
-                  <div className="mt-1 flex items-center gap-1 text-sm text-green-600">
+                  <div className="mt-1 flex items-center gap-1 text-sm text-success">
                     <TrendingUp className="h-3.5 w-3.5" />
                     <span>{artisan.reviews} reviews</span>
                   </div>
                 </div>
-                <div className="rounded-lg bg-yellow-50 p-3">
-                  <Star className="h-5 w-5 text-yellow-600" />
+                <div className="rounded-lg bg-warning/10 p-3">
+                  <Star className="h-5 w-5 text-warning" />
                 </div>
               </div>
             </CardContent>
@@ -168,19 +168,19 @@ export default function ArtisanReportPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={monthlyEarnings}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
                   <YAxis axisLine={false} tickLine={false} className="text-xs" tickFormatter={(v) => `GH₵ ${v}`} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
+                      border: "1px solid var(--border)",
                       borderRadius: "8px",
                       fontSize: "13px",
                     }}
                     formatter={(value: number) => [`GH₵ ${value.toLocaleString()}`, "Earnings"]}
                   />
-                  <Bar dataKey="earnings" fill="#1e4035" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="earnings" fill="var(--brand)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -193,13 +193,13 @@ export default function ArtisanReportPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={ratingHistory}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
                   <YAxis domain={[4.0, 5.0]} axisLine={false} tickLine={false} className="text-xs" />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
+                      border: "1px solid var(--border)",
                       borderRadius: "8px",
                       fontSize: "13px",
                     }}
@@ -208,9 +208,9 @@ export default function ArtisanReportPage() {
                   <Line
                     type="monotone"
                     dataKey="rating"
-                    stroke="#eab308"
+                    stroke="var(--rating)"
                     strokeWidth={2.5}
-                    dot={{ r: 4, fill: "#eab308" }}
+                    dot={{ r: 4, fill: "var(--rating)" }}
                     activeDot={{ r: 6 }}
                   />
                 </LineChart>
@@ -228,24 +228,24 @@ export default function ArtisanReportPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={weeklyJobs}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="week" axisLine={false} tickLine={false} className="text-xs" />
                   <YAxis axisLine={false} tickLine={false} className="text-xs" />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
+                      border: "1px solid var(--border)",
                       borderRadius: "8px",
                       fontSize: "13px",
                     }}
                   />
-                  <Bar dataKey="assigned" fill="#d1d5db" radius={[4, 4, 0, 0]} name="Assigned" />
-                  <Bar dataKey="completed" fill="#1e4035" radius={[4, 4, 0, 0]} name="Completed" />
+                  <Bar dataKey="assigned" fill="var(--muted-foreground)" radius={[4, 4, 0, 0]} name="Assigned" />
+                  <Bar dataKey="completed" fill="var(--brand)" radius={[4, 4, 0, 0]} name="Completed" />
                 </BarChart>
               </ResponsiveContainer>
               <div className="mt-4 flex items-center justify-center gap-6 text-sm">
                 <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: "#d1d5db" }} />
+                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: "var(--muted-foreground)" }} />
                   <span className="text-muted-foreground">Assigned</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -261,15 +261,15 @@ export default function ArtisanReportPage() {
               <CardTitle className="text-lg">Performance Stats</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg bg-green-50 p-4">
+              <div className="flex items-center justify-between rounded-lg bg-success/10 p-4">
                 <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <CheckCircle2 className="h-5 w-5 text-success" />
                   <div>
-                    <p className="font-medium text-green-800">Completion Rate</p>
-                    <p className="text-sm text-green-600">Jobs completed on time</p>
+                    <p className="font-medium text-success">Completion Rate</p>
+                    <p className="text-sm text-success">Jobs completed on time</p>
                   </div>
                 </div>
-                <span className="text-xl font-bold text-green-700">92%</span>
+                <span className="text-xl font-bold text-success">92%</span>
               </div>
               <div className="flex items-center justify-between rounded-lg bg-muted p-4">
                 <div className="flex items-center gap-3">
@@ -281,25 +281,25 @@ export default function ArtisanReportPage() {
                 </div>
                 <span className="text-xl font-bold text-foreground">1.2h</span>
               </div>
-              <div className="flex items-center justify-between rounded-lg bg-yellow-50 p-4">
+              <div className="flex items-center justify-between rounded-lg bg-warning/10 p-4">
                 <div className="flex items-center gap-3">
-                  <Star className="h-5 w-5 text-yellow-600" />
+                  <Star className="h-5 w-5 text-warning" />
                   <div>
-                    <p className="font-medium text-yellow-800">Client Satisfaction</p>
-                    <p className="text-sm text-yellow-600">Based on review feedback</p>
+                    <p className="font-medium text-warning">Client Satisfaction</p>
+                    <p className="text-sm text-warning">Based on review feedback</p>
                   </div>
                 </div>
-                <span className="text-xl font-bold text-yellow-700">96%</span>
+                <span className="text-xl font-bold text-warning">96%</span>
               </div>
-              <div className="flex items-center justify-between rounded-lg bg-blue-50 p-4">
+              <div className="flex items-center justify-between rounded-lg bg-info/10 p-4">
                 <div className="flex items-center gap-3">
-                  <Briefcase className="h-5 w-5 text-blue-600" />
+                  <Briefcase className="h-5 w-5 text-info" />
                   <div>
-                    <p className="font-medium text-blue-800">Avg. Jobs per Week</p>
-                    <p className="text-sm text-blue-600">Weekly average this quarter</p>
+                    <p className="font-medium text-info">Avg. Jobs per Week</p>
+                    <p className="text-sm text-info">Weekly average this quarter</p>
                   </div>
                 </div>
-                <span className="text-xl font-bold text-blue-700">5.5</span>
+                <span className="text-xl font-bold text-info">5.5</span>
               </div>
             </CardContent>
           </Card>
@@ -334,7 +334,7 @@ export default function ArtisanReportPage() {
                       <td className="py-4">
                         <div className="flex items-center gap-2">
                           <Avatar className="h-7 w-7">
-                            <AvatarImage src={job.clientAvatar || naviiAvatar(job.clientName)} />
+                            <AvatarImage src={resolveAvatarUrl(job.clientAvatar, job.clientName)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <span className="text-sm font-medium">{job.clientName}</span>
@@ -358,10 +358,10 @@ export default function ArtisanReportPage() {
                           variant="outline"
                           className={
                             job.paymentStatus === "paid"
-                              ? "border-green-200 bg-green-50 text-green-700"
+                              ? "border-success/20 bg-success/10 text-success"
                               : job.paymentStatus === "pending"
-                                ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                                : "border-red-200 bg-red-50 text-red-700"
+                                ? "border-warning/20 bg-warning/10 text-warning"
+                                : "border-destructive/20 bg-destructive/10 text-destructive"
                           }
                         >
                           {job.paymentStatus.charAt(0).toUpperCase() + job.paymentStatus.slice(1)}

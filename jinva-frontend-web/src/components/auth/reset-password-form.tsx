@@ -83,23 +83,23 @@ export function ResetPasswordForm() {
   if (isSuccess) {
     return (
       <AuthSplitLayout>
-        <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+        <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-[#1c4532]/10 rounded-full flex items-center justify-center">
-              <CheckCircle2 className="w-8 h-8 text-[#1c4532]" />
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-primary" />
             </div>
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">Password Reset!</h1>
-            <p className="text-gray-600 leading-relaxed">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Password Reset!</h1>
+            <p className="text-muted-foreground leading-relaxed">
               Your password has been successfully reset. You can now sign in with your new password.
             </p>
           </div>
 
           <Button
             onClick={() => (window.location.href = "/login")}
-            className="w-full h-12 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
           >
             Continue to Sign In
           </Button>
@@ -110,18 +110,18 @@ export function ResetPasswordForm() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 bg-white rounded-lg p-8 shadow-sm">
+      <div className="space-y-8 bg-background rounded-lg p-8 shadow-sm">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Reset Password</h1>
-          <p className="text-gray-600 leading-relaxed">Enter your new password below to reset your account.</p>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Reset Password</h1>
+          <p className="text-muted-foreground leading-relaxed">Enter your new password below to reset your account.</p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Password Field */}
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm text-gray-600">
+            <Label htmlFor="password" className="text-sm text-muted-foreground">
               New Password
             </Label>
             <div className="relative">
@@ -131,14 +131,14 @@ export function ResetPasswordForm() {
                 placeholder="Create a strong password"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="h-12 pr-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                className="h-12 pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
                 required
                 disabled={isLoading}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -148,7 +148,7 @@ export function ResetPasswordForm() {
 
           {/* Confirm Password Field */}
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="text-sm text-gray-600">
+            <Label htmlFor="confirmPassword" className="text-sm text-muted-foreground">
               Confirm Password
             </Label>
             <div className="relative">
@@ -158,14 +158,14 @@ export function ResetPasswordForm() {
                 placeholder="Re-enter your password"
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="h-12 pr-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                className="h-12 pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
                 required
                 disabled={isLoading}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 tabIndex={-1}
               >
                 {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -176,7 +176,7 @@ export function ResetPasswordForm() {
           {/* Submit Button */}
           <Button
             type="submit"
-            className="w-full h-12 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             disabled={isLoading || !token}
           >
             {isLoading ? "Resetting..." : "Reset Password"}
@@ -184,7 +184,7 @@ export function ResetPasswordForm() {
         </form>
 
         <div className="text-center">
-          <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+          <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Back to Sign In
           </Link>
         </div>

@@ -32,7 +32,7 @@ import {
   Flag,
   Pencil,
 } from "lucide-react"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { useAuth } from "@/contexts/auth-context"
@@ -227,7 +227,7 @@ export default function ArtisanPublicProfile() {
             <div className="flex flex-col items-start gap-6 md:flex-row md:items-end">
               <div className="relative -mt-16">
                 <Avatar className="h-28 w-28 border-4 border-background shadow-lg">
-                  <AvatarImage src={artisan.user.profilePicture || naviiAvatar(name, 128)} />
+                  <AvatarImage src={resolveAvatarUrl(artisan.user.profilePicture, name, 128)} />
                   <AvatarFallback><UserRound className="h-8 w-8" /></AvatarFallback>
                 </Avatar>
                 {artisan.isVerified && (
@@ -449,7 +449,7 @@ export default function ArtisanPublicProfile() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10">
-                              <AvatarImage src={avatar || naviiAvatar(reviewerName)} />
+                              <AvatarImage src={resolveAvatarUrl(avatar, reviewerName)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>
@@ -457,7 +457,7 @@ export default function ArtisanPublicProfile() {
                                 <p className="text-sm font-medium text-foreground">{reviewerName}</p>
                                 {review.verifiedBooking && <VerifiedBookingBadge />}
                                 {isUnderReview && (
-                                  <Badge variant="outline" className="border-yellow-200 bg-yellow-100 text-yellow-700">
+                                  <Badge variant="outline" className="border-warning/20 bg-warning/10 text-warning">
                                     Under review
                                   </Badge>
                                 )}
@@ -472,7 +472,7 @@ export default function ArtisanPublicProfile() {
                             {Array.from({ length: 5 }).map((_, i) => (
                               <Star
                                 key={`${review.id}-star-${i}`}
-                                className={`h-4 w-4 ${i < Number(review.rating) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+                                className={`h-4 w-4 ${i < Number(review.rating) ? "fill-rating text-rating" : "text-muted-foreground/30"}`}
                               />
                             ))}
                           </div>

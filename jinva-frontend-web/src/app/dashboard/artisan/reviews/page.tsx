@@ -14,7 +14,7 @@ import { RatingStars } from "@/components/ui/rating-stars"
 import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
 import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbnails"
 import { AlertTriangle, ExternalLink, Loader2, MessageSquare, Star, UserRound } from "lucide-react"
-import { naviiAvatar, cn } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { toast } from "sonner"
 import type { ApiReview } from "@/lib/types"
@@ -255,7 +255,7 @@ export default function ArtisanMyReviewsPage() {
                   )}
                 >
                   <button type="button" onClick={() => setRatingFilter(n)}>
-                    <Star className={cn("h-2.5 w-2.5", ratingFilter === n ? "fill-primary-foreground text-primary-foreground" : "fill-yellow-400 text-yellow-400")} />
+                    <Star className={cn("h-2.5 w-2.5", ratingFilter === n ? "fill-primary-foreground text-primary-foreground" : "fill-rating text-rating")} />
                     {n} ({counts[n]})
                   </button>
                 </Badge>
@@ -286,7 +286,7 @@ export default function ArtisanMyReviewsPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-9 w-9">
-                              <AvatarImage src={avatar || naviiAvatar(reviewerName)} />
+                              <AvatarImage src={resolveAvatarUrl(avatar, reviewerName)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>
@@ -302,7 +302,7 @@ export default function ArtisanMyReviewsPage() {
                             {Array.from({ length: 5 }).map((_, i) => (
                               <Star
                                 key={`${review.id}-star-${i}`}
-                                className={cn("h-3.5 w-3.5", i < Math.round(Number(review.rating)) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30")}
+                                className={cn("h-3.5 w-3.5", i < Math.round(Number(review.rating)) ? "fill-rating text-rating" : "text-muted-foreground/30")}
                               />
                             ))}
                           </div>

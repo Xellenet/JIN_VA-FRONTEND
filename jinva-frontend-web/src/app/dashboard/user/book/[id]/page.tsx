@@ -29,7 +29,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { ArrowLeft, CalendarDays, CreditCard, CheckCircle, Loader2, UserRound, AlertTriangle } from "lucide-react"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { toast } from "sonner"
@@ -558,7 +558,7 @@ export default function BookArtisanPage() {
                   <>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-16 w-16">
-                        <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                        <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div>
@@ -652,7 +652,7 @@ export default function BookArtisanPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Status</span>
-                    <Badge variant="outline" className="border-yellow-200 bg-yellow-100 text-yellow-700">Pending</Badge>
+                    <Badge variant="outline" className="border-warning/20 bg-warning/10 text-warning">Pending</Badge>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Date</span>

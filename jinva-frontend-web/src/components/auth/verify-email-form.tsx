@@ -87,7 +87,7 @@ export function VerifyEmailForm() {
 
   const emailPrompt = !searchParams.get("email") && (
     <div className="space-y-2 text-left">
-      <Label htmlFor="resend-email" className="text-sm text-gray-600">
+      <Label htmlFor="resend-email" className="text-sm text-muted-foreground">
         Your email address
       </Label>
       <Input
@@ -104,16 +104,16 @@ export function VerifyEmailForm() {
   if (state === "loading") {
     return (
       <AuthSplitLayout>
-        <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+        <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-[#1c4532]/10 rounded-full flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-[#1c4532] animate-spin" />
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">Verifying your email...</h1>
-            <p className="text-gray-600">Please wait while we verify your email address.</p>
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Verifying your email...</h1>
+            <p className="text-muted-foreground">Please wait while we verify your email address.</p>
           </div>
         </div>
       </AuthSplitLayout>
@@ -123,23 +123,23 @@ export function VerifyEmailForm() {
   if (state === "success") {
     return (
       <AuthSplitLayout>
-        <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+        <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-[#1c4532]/10 rounded-full flex items-center justify-center">
-              <CheckCircle2 className="w-8 h-8 text-[#1c4532]" />
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-primary" />
             </div>
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">Email Verified!</h1>
-            <p className="text-gray-600 leading-relaxed">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Email Verified!</h1>
+            <p className="text-muted-foreground leading-relaxed">
               Your email has been successfully verified. You can now sign in to your account.
             </p>
           </div>
 
           <Button
             onClick={() => (window.location.href = "/login")}
-            className="w-full h-12 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
           >
             Continue to Sign In
           </Button>
@@ -151,16 +151,16 @@ export function VerifyEmailForm() {
   if (state === "error") {
     return (
       <AuthSplitLayout>
-        <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+        <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-              <XCircle className="w-8 h-8 text-red-600" />
+            <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+              <XCircle className="w-8 h-8 text-destructive" />
             </div>
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">Verification Failed</h1>
-            <p className="text-gray-600 leading-relaxed">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Verification Failed</h1>
+            <p className="text-muted-foreground leading-relaxed">
               The verification link is invalid or has expired. Please request a new verification email.
             </p>
           </div>
@@ -170,7 +170,7 @@ export function VerifyEmailForm() {
             <Button
               onClick={handleResendEmail}
               disabled={isResending}
-              className="w-full h-12 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             >
               {isResending ? "Sending..." : "Resend Verification Email"}
             </Button>
@@ -178,7 +178,7 @@ export function VerifyEmailForm() {
             <Button
               onClick={() => (window.location.href = "/login")}
               variant="outline"
-              className="w-full h-12 border-gray-200 hover:bg-gray-50"
+              className="w-full h-12 border-input hover:bg-accent"
             >
               Back to Sign In
             </Button>
@@ -191,19 +191,19 @@ export function VerifyEmailForm() {
   // No token state
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+      <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-[#1c4532]/10 rounded-full flex items-center justify-center">
-            <Mail className="w-8 h-8 text-[#1c4532]" />
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+            <Mail className="w-8 h-8 text-primary" />
           </div>
         </div>
 
         <div className="space-y-3">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Verify Your Email</h1>
-          <p className="text-gray-600 leading-relaxed">
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Verify Your Email</h1>
+          <p className="text-muted-foreground leading-relaxed">
             We&apos;ve sent a verification email to your inbox. Please click the link in the email to verify your account.
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             If you don&apos;t see the email, check your spam folder or request a new one.
           </p>
         </div>
@@ -213,7 +213,7 @@ export function VerifyEmailForm() {
           <Button
             onClick={handleResendEmail}
             disabled={isResending}
-            className="w-full h-12 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
           >
             {isResending ? "Sending..." : "Resend Verification Email"}
           </Button>
@@ -221,7 +221,7 @@ export function VerifyEmailForm() {
           <Button
             onClick={() => (window.location.href = "/login")}
             variant="outline"
-            className="w-full h-12 border-gray-200 hover:bg-gray-50"
+            className="w-full h-12 border-input hover:bg-accent"
           >
             Back to Sign In
           </Button>

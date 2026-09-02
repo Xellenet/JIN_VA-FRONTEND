@@ -32,7 +32,7 @@ import {
   CreditCard,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dashboard/job-status-timeline"
 import { AttachmentGallery, type JobAttachment } from "@/components/dashboard/attachment-gallery"
@@ -304,13 +304,13 @@ export default function JobDetailPage() {
                   <>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-14 w-14">
-                        <AvatarImage src={job.acceptedArtisan.profilePicture || naviiAvatar(artisanName)} />
+                        <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture, artisanName)} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div>
                         <h4 className="font-semibold text-foreground">{artisanName}</h4>
                         <div className="mt-1 flex items-center gap-1">
-                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <Star className="h-3.5 w-3.5 fill-rating text-rating" />
                           <span className="text-sm font-medium">—</span>
                         </div>
                       </div>
@@ -405,7 +405,7 @@ export default function JobDetailPage() {
               <CardContent className="space-y-2 p-5">
                 {canConfirmCompletion && (
                   <Button
-                    className="w-full bg-green-600 text-white hover:bg-green-700"
+                    className="w-full bg-success text-success-foreground hover:bg-success/90"
                     onClick={handleConfirmCompletion}
                     disabled={isConfirming}
                   >

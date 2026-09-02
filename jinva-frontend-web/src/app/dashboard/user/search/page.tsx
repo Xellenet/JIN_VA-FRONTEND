@@ -40,7 +40,7 @@ import {
   ArrowUpDown,
   Wallet,
 } from "lucide-react"
-import { naviiAvatar, formatCurrency } from "@/lib/utils"
+import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { RatingStars } from "@/components/ui/rating-stars"
@@ -332,7 +332,7 @@ export default function SearchArtisansPage() {
                       className={minRating === opt.value ? "bg-accent text-accent-foreground" : ""}
                     >
                       <div className="flex items-center gap-2">
-                        {opt.value > 0 && <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />}
+                        {opt.value > 0 && <Star className="h-3.5 w-3.5 fill-rating text-rating" />}
                         {opt.label}
                       </div>
                     </DropdownMenuItem>
@@ -527,7 +527,7 @@ export default function SearchArtisansPage() {
                       <CardContent className="p-0">
                         <div className="relative h-32 bg-gradient-to-br from-primary to-primary/80">
                           <Avatar className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 border-4 border-background shadow-lg">
-                            <AvatarImage src={artisan.avatar || naviiAvatar(artisan.name)} />
+                            <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           {artisan.totalReviews > 0 && (

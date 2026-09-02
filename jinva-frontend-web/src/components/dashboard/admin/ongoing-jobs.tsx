@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, UserRound } from "lucide-react"
-import { naviiAvatar } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 import type { Order } from "@/lib/types"
 
 interface OngoingJobsProps {
@@ -12,10 +12,10 @@ interface OngoingJobsProps {
 
 const statusConfig = {
   "in-progress": { label: "In Progress", className: "bg-muted text-muted-foreground border-muted" },
-  completed: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
-  cancelled: { label: "Cancelled", className: "bg-red-100 text-red-700 border-red-200" },
-  pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  available: { label: "Available", className: "bg-blue-100 text-blue-700 border-blue-200" },
+  completed: { label: "Completed", className: "bg-success/10 text-success border-success/20" },
+  cancelled: { label: "Cancelled", className: "bg-destructive/10 text-destructive border-destructive/20" },
+  pending: { label: "Pending", className: "bg-warning/10 text-warning border-warning/20" },
+  available: { label: "Available", className: "bg-info/10 text-info border-info/20" },
 }
 
 export function OngoingJobs({ jobs }: OngoingJobsProps) {
@@ -47,7 +47,7 @@ export function OngoingJobs({ jobs }: OngoingJobsProps) {
                   <td className="py-4">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={job.clientAvatar || naviiAvatar(job.clientName)} />
+                        <AvatarImage src={resolveAvatarUrl(job.clientAvatar, job.clientName)} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <span className="text-sm font-medium">{job.clientName}</span>

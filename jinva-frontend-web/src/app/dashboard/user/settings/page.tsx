@@ -44,7 +44,7 @@ import {
   Receipt,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
@@ -93,18 +93,32 @@ function UserSettingsContent() {
   const [confirmPass, setConfirmPass] = useState("")
   const [isUpdatingPass, setIsUpdatingPass] = useState(false)
 
-  // ── Delete account (F4) ─────────────────────────────────────────────────
+  // ── Delete account (F4 / C1) ────────────────────────────────────────────
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  // C1.1: the backend refuses deletion with a 409 while the account still owes
+  // somebody something, and its message names every outstanding item. That has
+  // to be readable *in the open dialog* — a toast would vanish before the user
+  // finished reading a list of things to go and resolve.
+  const [deleteRefusal, setDeleteRefusal] = useState<string | null>(null)
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true)
+    setDeleteRefusal(null)
     try {
       await apiFetch("/users/me", { method: "DELETE" })
       toast.success("Account deleted. You have 30 days to restore it — just sign in again.")
       await logout()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      // Branch on the code, not the message text (api-contract.md). The
+      // account is untouched and the user is still logged in, so the dialog
+      // stays open with the confirm button live for a retry once they've
+      // resolved what it names.
+      if (err instanceof ApiError && err.status === 409) {
+        setDeleteRefusal(err.message)
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      }
       setIsDeleting(false)
     }
   }
@@ -904,7 +918,14 @@ function UserSettingsContent() {
         </Tabs>
       </div>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          if (isDeleting) return
+          if (!open) setDeleteRefusal(null)
+          setShowDeleteDialog(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete your account?</AlertDialogTitle>
@@ -915,6 +936,12 @@ function UserSettingsContent() {
               everything is permanently deleted and can&apos;t be recovered.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {/* C1.1: the refusal, rendered inline in the still-open dialog. */}
+          {deleteRefusal && (
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+              <p>{deleteRefusal}</p>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Keep my account</AlertDialogCancel>
             <AlertDialogAction

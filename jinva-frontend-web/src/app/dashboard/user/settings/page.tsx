@@ -101,7 +101,7 @@ function UserSettingsContent() {
     setIsDeleting(true)
     try {
       await apiFetch("/users/me", { method: "DELETE" })
-      toast.success("Your account has been deleted.")
+      toast.success("Account deleted. You have 30 days to restore it — just sign in again.")
       await logout()
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to delete account.")
@@ -881,7 +881,7 @@ function UserSettingsContent() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-destructive">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">Irreversible account actions</p>
+                    <p className="text-sm text-muted-foreground">Permanent account actions</p>
                   </div>
                 </div>
               </div>
@@ -890,7 +890,7 @@ function UserSettingsContent() {
                   <div>
                     <p className="font-medium">Delete Account</p>
                     <p className="text-sm text-muted-foreground">
-                      Permanently delete your account and all associated data
+                      Close your account and remove your profile from JinVa. You can restore it within 30 days.
                     </p>
                   </div>
                   <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
@@ -909,12 +909,14 @@ function UserSettingsContent() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete your account?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will deactivate your account immediately and log you out. This action cannot be undone from
-              within the app — contact support if you need to recover your account.
+              You&apos;ll be signed out straight away and your profile will no longer be visible on JinVa. You
+              have <span className="font-medium text-foreground">30 days</span> to change your mind — sign in
+              again before then and we&apos;ll restore your account and your booking history. After 30 days
+              everything is permanently deleted and can&apos;t be recovered.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Keep my account</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()

@@ -108,13 +108,20 @@ export function LoginForm() {
       if (!response.ok) {
         // 410 — the caller proved ownership but there is nothing left to
         // restore (window elapsed, or the purge job won the race). Both codes
-        // mean the same thing to the user: create a new account.
+        // mean the same thing to the user, so both get the same copy: state
+        // the fact, name the only remaining path, don't apologise for it.
+        //
+        // We say it in our own words rather than echoing `message`, because we
+        // can name the actual deletion date the server already gave us on the
+        // login rejection, and because the backend's phrasing opens with the
+        // same words as this banner's heading.
         if (response.status === 410) {
+          const deletedOn = formatWindowDate(pendingDeletion?.deletedAt)
           setRestoreWindowClosed(
-            data.message ||
-              (formatWindowDate(pendingDeletion?.deletedAt)
-                ? `This account was deleted on ${formatWindowDate(pendingDeletion?.deletedAt)} and the 30-day recovery window has closed. You'll need to create a new account.`
-                : "This account can no longer be restored. You'll need to create a new account."),
+            deletedOn
+              ? `This account was deleted on ${deletedOn} and the 30-day recovery window has closed. You'll need to create a new account.`
+              : (data.message ??
+                  "This account can no longer be restored. You'll need to create a new account."),
           )
           return
         }

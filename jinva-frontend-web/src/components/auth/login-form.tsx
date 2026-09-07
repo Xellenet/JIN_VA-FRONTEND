@@ -13,6 +13,27 @@ import { Eye, EyeOff } from "lucide-react"
 import { persistAuthTokens, dashboardPathForRole } from "@/lib/auth"
 import { AuthSplitLayout } from "./auth-split-layout"
 
+/**
+ * Both dates on the pending-deletion banner come from the server
+ * (`meta.details`) — a client-side "+30 days" would drift from the date the
+ * purge job actually enforces and from the one the deletion email states.
+ * Returns null for anything unparseable so the banner can drop the sentence
+ * rather than print "Invalid Date".
+ */
+function formatWindowDate(iso: string | undefined): string | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+}
+
+interface PendingDeletion {
+  deletedAt?: string
+  restorableUntil?: string
+  /** The backend's own message — the fallback if either date is unusable. */
+  message?: string
+}
+
 export function LoginForm() {
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
@@ -23,6 +44,15 @@ export function LoginForm() {
   // G10: distinct state for "this account signs in with Google" — kept
   // separate from the generic invalid-credentials toast per api-contract.md.
   const [socialOnlyError, setSocialOnlyError] = useState<string | null>(null)
+  // C1.4: the account is soft-deleted but still inside its recovery window.
+  // This is the only place a deleted-but-restorable user can find out their
+  // account is recoverable, so it is a banner with an action, never a toast.
+  const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
+  // Set when restore comes back 410 — the window closed (or the row was
+  // already purged) between the login rejection and the restore call. The
+  // banner swaps to this copy plus a way to sign up rather than dead-ending.
+  const [restoreWindowClosed, setRestoreWindowClosed] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -46,11 +76,79 @@ export function LoginForm() {
     }
   }
 
+  /**
+   * The post-authentication redirect, shared by password login and by a
+   * successful restore — a restore issues the same tokens and cookies as
+   * `POST /auth/login`, so it is treated as a completed login (api-contract.md).
+   */
+  const redirectAfterLogin = (role: string | undefined) => {
+    const redirectTarget = searchParams.get("redirect")
+    const roleDashboard = dashboardPathForRole(role ?? "")
+    const destination =
+      redirectTarget?.startsWith("/") && !redirectTarget.startsWith("//")
+        ? redirectTarget
+        : roleDashboard
+
+    globalThis.location.href = destination
+  }
+
+  const handleRestoreAccount = async () => {
+    setIsRestoring(true)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/restore-account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        // Email *and* password: the restore endpoint requires both, because an
+        // email-only endpoint would let anyone un-delete a stranger's account.
+        body: JSON.stringify(formData),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        // 410 — the caller proved ownership but there is nothing left to
+        // restore (window elapsed, or the purge job won the race). Both codes
+        // mean the same thing to the user: create a new account.
+        if (response.status === 410) {
+          setRestoreWindowClosed(
+            data.message ||
+              (formatWindowDate(pendingDeletion?.deletedAt)
+                ? `This account was deleted on ${formatWindowDate(pendingDeletion?.deletedAt)} and the 30-day recovery window has closed. You'll need to create a new account.`
+                : "This account can no longer be restored. You'll need to create a new account."),
+          )
+          return
+        }
+        throw new Error(data.message || "Failed to restore account")
+      }
+
+      // Restore takes precedence over S4's verification gate, and then the
+      // ordinary gate applies to the now-restored account — so branch on
+      // `requiresEmailVerification`, not on the status code, and hand off to
+      // the existing resend-verification prompt instead of reporting a failure.
+      if (data.requiresEmailVerification) {
+        setPendingDeletion(null)
+        setUnverifiedEmail(formData.email)
+        toast.success(data.message || "Your account has been restored. Verify your email address to sign in.")
+        return
+      }
+
+      persistAuthTokens(data.access_token)
+      toast.success("Welcome back — your account has been restored.")
+      redirectAfterLogin(data.data?.role)
+    } catch {
+      toast.error("We couldn't restore your account. Please try again, or contact support if this keeps happening.")
+    } finally {
+      setIsRestoring(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setUnverifiedEmail(null)
     setSocialOnlyError(null)
+    setPendingDeletion(null)
+    setRestoreWindowClosed(null)
 
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
@@ -65,6 +163,22 @@ export function LoginForm() {
       const data = await response.json()
 
       if (!response.ok) {
+        // C1.4: a soft-deleted-but-restorable account, rejected only *after*
+        // the submitted password verified — so this branch is unreachable
+        // without proving ownership and can't be used to enumerate accounts.
+        // Shares the 403 status with the unverified case, so it must be
+        // checked first and by `meta.error`, never by the message text.
+        if (response.status === 403 && data?.meta?.error === "ACCOUNT_PENDING_DELETION") {
+          const details = data?.meta?.details as
+            | { deletedAt?: string; restorableUntil?: string }
+            | undefined
+          setPendingDeletion({
+            deletedAt: details?.deletedAt,
+            restorableUntil: details?.restorableUntil,
+            message: data.message,
+          })
+          return
+        }
         // S4: unverified accounts are rejected with a distinct 403 (see auth.service.ts).
         // Surface a specific message plus a resend path instead of a generic error.
         if (response.status === 403) {
@@ -94,14 +208,7 @@ export function LoginForm() {
 
       toast.success("You have been logged in successfully.")
 
-      const redirectTarget = searchParams.get("redirect")
-      const roleDashboard = dashboardPathForRole(role ?? "")
-      const destination =
-        redirectTarget?.startsWith("/") && !redirectTarget.startsWith("//")
-          ? redirectTarget
-          : roleDashboard
-
-      globalThis.location.href = destination
+      redirectAfterLogin(role)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Invalid credentials");
     } finally {
@@ -231,6 +338,45 @@ export function LoginForm() {
           {socialOnlyError && (
             <div className="rounded-md border border-info/30 bg-info/10 p-3 text-sm text-foreground">
               <p>{socialOnlyError}</p>
+            </div>
+          )}
+
+          {/* C1.4: scheduled-for-deletion block — the primary recovery path.
+              Sits in the form's normal DOM order, so it lands in tab order
+              between the password field and Sign In, and its heading states the
+              situation in words rather than relying on the warning tint. */}
+          {pendingDeletion && (
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+              {restoreWindowClosed ? (
+                <>
+                  <p className="font-medium">This account can no longer be restored</p>
+                  <p className="mt-0.5">{restoreWindowClosed}</p>
+                  <Link
+                    href="/signup"
+                    className="mt-1 inline-block font-medium underline underline-offset-2 hover:text-warning"
+                  >
+                    Create an account
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium">This account is scheduled for deletion</p>
+                  <p className="mt-0.5">
+                    {formatWindowDate(pendingDeletion.deletedAt) && formatWindowDate(pendingDeletion.restorableUntil)
+                      ? `You deleted it on ${formatWindowDate(pendingDeletion.deletedAt)}. You can restore it until ${formatWindowDate(pendingDeletion.restorableUntil)} — after that it's gone for good.`
+                      : (pendingDeletion.message ??
+                        "You can still restore it before the recovery window closes.")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRestoreAccount}
+                    disabled={isRestoring}
+                    className="mt-1 font-medium underline underline-offset-2 hover:text-warning disabled:opacity-60"
+                  >
+                    {isRestoring ? "Restoring..." : "Restore my account"}
+                  </button>
+                </>
+              )}
             </div>
           )}
 

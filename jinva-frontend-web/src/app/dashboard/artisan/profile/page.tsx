@@ -39,6 +39,11 @@ import { resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
+import {
+  ProfileCompleteness,
+  SearchVisibilityBadge,
+  readProfileCompleteness,
+} from "@/components/artisan/profile-completeness"
 import type { ApiReview } from "@/lib/types"
 
 // RV2: reviews are paginated server-side (default limit 10, max 50) — always
@@ -64,6 +69,12 @@ interface BackendArtisanProfile {
   isVerified: boolean
   location?: string
   services?: { id: string; name: string }[]
+  // C2: the persisted search-visibility flag and the ordered list of
+  // still-missing required fields (api-contract.md, `GET`/`PATCH
+  // /users/me/artisan-profile`). Optional because a failed or legacy response
+  // may omit them, which the completeness component reads as "unknown".
+  isProfileComplete?: boolean
+  missingFields?: string[]
 }
 
 function formatDate(iso: string): string {
@@ -93,6 +104,32 @@ export default function ArtisanProfile() {
   const [reviewsTotalPages, setReviewsTotalPages] = useState(1)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+
+  // C2: controlled so a completeness row's action can switch to the About tab
+  // before scrolling to the input it points at — three of the four required
+  // fields live in that tab, and Tabs unmounts the inactive one.
+  const [activeTab, setActiveTab] = useState("about")
+
+  /**
+   * C2.4: the fix has to land in the viewport *and* the keyboard focus — an
+   * anchor alone moves the eye but not the caret. Retries across a few frames
+   * because the input may only mount once the About tab has switched in, so
+   * the row is never a dead action.
+   */
+  const focusProfileField = useCallback((anchorId: string) => {
+    setActiveTab("about")
+    let attempts = 0
+    const tryFocus = () => {
+      const el = document.getElementById(anchorId)
+      if (!el) {
+        if (attempts++ < 20) requestAnimationFrame(tryFocus)
+        return
+      }
+      el.scrollIntoView({ behavior: "smooth", block: "center" })
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.focus({ preventScroll: true })
+    }
+    requestAnimationFrame(tryFocus)
+  }, [])
 
   // Avatar upload
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -171,14 +208,16 @@ export default function ArtisanProfile() {
   }, [])
 
   const handleSaveProfile = async () => {
+    const wasIncomplete = readProfileCompleteness(artisanProfile).state === "incomplete"
+
     setIsSaving(true)
     try {
-      await Promise.all([
+      const [, savedProfile] = await Promise.all([
         apiFetch("/users/me", {
           method: "PATCH",
           body: JSON.stringify({ firstname, lastname, email, phoneNumber: phone }),
         }),
-        apiFetch("/users/me/artisan-profile", {
+        apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
           method: "PATCH",
           body: JSON.stringify({
             bio: bio || undefined,
@@ -189,8 +228,17 @@ export default function ArtisanProfile() {
           }),
         }),
       ])
+      // C2: the PATCH response carries fresh `isProfileComplete` +
+      // `missingFields` (api-contract.md), so the checklist and the hero badge
+      // update straight from the save — no follow-up GET, no hard refresh.
+      setArtisanProfile((prev) => (prev ? { ...prev, ...savedProfile } : savedProfile))
       await refreshUser()
-      toast.success("Profile updated successfully.")
+      const nowComplete = readProfileCompleteness(savedProfile).state === "complete"
+      toast.success(
+        wasIncomplete && nowComplete
+          ? "Profile updated — customers can now find you in search."
+          : "Profile updated successfully.",
+      )
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to save changes.")
     } finally {
@@ -251,6 +299,10 @@ export default function ArtisanProfile() {
                         {artisanProfile.availabilityStatus === "AVAILABLE" ? "Available" : "Busy"}
                       </Badge>
                     )}
+                    {/* C2/§3.4: search visibility, permanently visible in both
+                        states — the positive signal that replaces a dismissible
+                        "you're all set" panel. */}
+                    <SearchVisibilityBadge profile={artisanProfile} />
                   </div>
                   <p className="mt-1 text-muted-foreground">
                     {artisanProfile?.businessName || artisanProfile?.services?.[0]?.name || "Artisan"}
@@ -320,8 +372,17 @@ export default function ArtisanProfile() {
           </CardContent>
         </Card>
 
+        {/* C2/§3.2: the completeness checklist — between the hero and the tabs,
+            so the missing field and the input that fixes it are on one screen. */}
+        <ProfileCompleteness
+          variant="card"
+          profile={artisanProfile}
+          isLoading={isLoadingProfile}
+          onFixField={focusProfileField}
+        />
+
         {/* Tabs Section */}
-        <Tabs defaultValue="about" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-2 md:w-auto md:grid-cols-none md:inline-flex">
             <TabsTrigger value="about">About</TabsTrigger>
             <TabsTrigger value="reviews">Reviews</TabsTrigger>

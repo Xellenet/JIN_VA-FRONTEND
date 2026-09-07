@@ -13,6 +13,10 @@ import { Star, Calendar, DollarSign, Briefcase, Loader2, UserRound } from "lucid
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/contexts/auth-context"
 import { cn, resolveAvatarUrl } from "@/lib/utils"
+import {
+  ProfileCompleteness,
+  type ProfileCompletenessSource,
+} from "@/components/artisan/profile-completeness"
 
 interface BackendJob {
   id: string
@@ -38,6 +42,11 @@ export default function ArtisanDashboard() {
   const router = useRouter()
   const [jobs, setJobs] = useState<BackendJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  // C2.3: this is where an invisible artisan notices the symptom — an empty
+  // job list and no enquiries — so it's where the reason belongs. Stays null
+  // if the fetch fails, which the banner reads as "unknown" and renders
+  // nothing for rather than guessing.
+  const [completeness, setCompleteness] = useState<ProfileCompletenessSource | null>(null)
 
   useEffect(() => {
     apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs")
@@ -47,6 +56,12 @@ export default function ArtisanDashboard() {
       })
       .catch(() => setJobs([]))
       .finally(() => setIsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    apiFetch<ProfileCompletenessSource>("/users/me/artisan-profile")
+      .then(setCompleteness)
+      .catch(() => {})
   }, [])
 
   if (!user) return null
@@ -74,6 +89,9 @@ export default function ArtisanDashboard() {
             <Link href="/dashboard/artisan/jobs">View All Jobs</Link>
           </Button>
         </div>
+
+        {/* C2.3: hidden-from-search banner (nothing at all while it loads) */}
+        <ProfileCompleteness variant="compact" profile={completeness} actionLabel="Finish my profile" />
 
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

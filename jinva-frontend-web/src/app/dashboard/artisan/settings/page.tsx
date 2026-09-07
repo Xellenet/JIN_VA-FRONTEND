@@ -30,6 +30,7 @@ import {
   Briefcase,
   Camera,
   Mail,
+  Lock,
   Phone,
   MapPin,
   Trash2,
@@ -315,7 +316,11 @@ function ArtisanSettingsContent() {
     try {
       await apiFetch("/users/me", {
         method: "PATCH",
-        body: JSON.stringify({ firstname, lastname, email, phoneNumber: phone }),
+        // `email` is deliberately absent: `UpdateMeDto` doesn't accept it and the
+        // API's ValidationPipe rejects unknown properties, so including it made
+        // every save on this tab fail with "property email should not exist"
+        // before it ever reached the artisan-profile call below.
+        body: JSON.stringify({ firstname, lastname, phoneNumber: phone }),
       })
       // F6/F7: Service Area, Service Radius, and Cancellation Policy live on
       // the artisan profile, not the base user record.
@@ -475,10 +480,21 @@ function ArtisanSettingsContent() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
+                    {/* `PATCH /users/me` rejects `email` outright — changing it needs
+                        its own verified flow — so this matches the read-only
+                        treatment the customer settings page already uses rather
+                        than accepting edits nothing can save. */}
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input id="email" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} />
+                      <Lock className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                      <Input
+                        id="email"
+                        className="cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground"
+                        value={email}
+                        readOnly
+                      />
                     </div>
+                    <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone Number</Label>

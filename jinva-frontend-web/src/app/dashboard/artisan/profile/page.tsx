@@ -22,6 +22,7 @@ import {
 import {
   Star,
   Mail,
+  Lock,
   Phone,
   MapPin,
   Briefcase,
@@ -215,7 +216,13 @@ export default function ArtisanProfile() {
       const [, savedProfile] = await Promise.all([
         apiFetch("/users/me", {
           method: "PATCH",
-          body: JSON.stringify({ firstname, lastname, email, phoneNumber: phone }),
+          // `email` is deliberately absent: `UpdateMeDto` doesn't accept it and
+          // the API's ValidationPipe rejects unknown properties, so including it
+          // made every save on this page fail with "property email should not
+          // exist" — while the artisan-profile half of this Promise.all quietly
+          // succeeded, so fields saved but the page reported an error and never
+          // applied the response.
+          body: JSON.stringify({ firstname, lastname, phoneNumber: phone }),
         }),
         apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
           method: "PATCH",
@@ -423,16 +430,21 @@ export default function ArtisanProfile() {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="email">Email</Label>
+                          {/* `PATCH /users/me` rejects `email` outright — changing it
+                              needs its own verified flow — so this matches the
+                              read-only treatment the customer settings page already
+                              uses rather than accepting edits nothing can save. */}
                           <div className="relative">
                             <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Lock className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
                             <Input
                               id="email"
-                              className="pl-10"
+                              className="cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground"
                               value={email}
-                              onChange={(e) => setEmail(e.target.value)}
-                              placeholder="Email address"
+                              readOnly
                             />
                           </div>
+                          <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="phone">Phone</Label>

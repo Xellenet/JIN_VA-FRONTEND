@@ -45,6 +45,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
+import { SESSION_ENDED_PARAM } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
@@ -108,7 +109,16 @@ function UserSettingsContent() {
     try {
       await apiFetch("/users/me", { method: "DELETE" })
       toast.success("Account deleted. You have 30 days to restore it — just sign in again.")
+      // C1.2: clear this device's client state, then land the user on the
+      // login form deliberately. `logout()`'s own redirect can't be relied on
+      // here: its `POST /auth/logout` is 401 for a principal that no longer
+      // resolves, so it never gets to clear the httpOnly session cookie, and
+      // whichever redirect wins the race decides whether the user reaches the
+      // login form or bounces off middleware into the dashboard. The marker
+      // (see lib/auth.ts) is what keeps the restore path reachable while that
+      // cookie is still signed and unexpired.
       await logout()
+      globalThis.location.href = `/login?${SESSION_ENDED_PARAM}=1`
     } catch (err: unknown) {
       // Branch on the code, not the message text (api-contract.md). The
       // account is untouched and the user is still logged in, so the dialog

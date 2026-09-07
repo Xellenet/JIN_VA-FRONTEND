@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { verifyAuthSessionCookie } from "@/lib/session-cookie"
-import { mapBackendRole } from "@/lib/auth"
+import { mapBackendRole, SESSION_ENDED_PARAM } from "@/lib/auth"
 
 /**
  * S2: auth + role enforcement for /dashboard/*.
@@ -92,7 +92,17 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (isAuthPage && role) {
+  // A verifiable session cookie normally means "you're already signed in" and
+  // an auth page is pointless, so send them home. The one exception is a
+  // request the app itself redirected here after the API refused the session
+  // behind that cookie (lib/api.ts's 401 give-up path): the cookie is signed
+  // and unexpired, so it still verifies, but there is nothing alive behind it.
+  // Bouncing that request to the dashboard puts the two redirects in a loop
+  // and locks the user out of the login form entirely — which, for C1, means
+  // locking them out of restoring the account they just deleted. Letting the
+  // login form render costs nothing: the marker is not a credential, and the
+  // /dashboard/* checks above are untouched.
+  if (isAuthPage && role && request.nextUrl.searchParams.get(SESSION_ENDED_PARAM) !== "1") {
     const url = request.nextUrl.clone()
     url.pathname = ROLE_HOME[role] ?? "/dashboard/user"
     url.searchParams.delete("redirect")

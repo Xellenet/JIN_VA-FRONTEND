@@ -1,4 +1,4 @@
-import { persistAuthTokens, clearAuthTokens, getAccessToken } from "@/lib/auth"
+import { persistAuthTokens, clearAuthTokens, getAccessToken, SESSION_ENDED_PARAM } from "@/lib/auth"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -125,8 +125,22 @@ async function authedRequest(path: string, options: ApiFetchOptions = {}): Promi
         // silently losing the message even though the user still lands on
         // /login safely either way. Every other route still gets the
         // hard-redirect safety net.
+        //
+        // The marker matters: middleware (S2) routes any /login request that
+        // carries a *verifiable* `jinva_session` straight back to the role
+        // dashboard, and that cookie stays verifiable until its own exp even
+        // when the API has just told us the session behind it is dead. Without
+        // the marker, this redirect and that one chase each other — the
+        // dashboard mounts, 401s, hard-navigates here, and middleware bounces
+        // it back — and the user can never reach the login form. The C1
+        // deletion flow hits this every time (see the note in
+        // docs/team/auth-settings-closeout, backend item: `DELETE /users/me`
+        // does not clear the cookies it set, and `POST /auth/logout` can't be
+        // reached by a soft-deleted principal to do it), which would make the
+        // restore-on-login recovery path unreachable from the very browser the
+        // account was deleted in.
         if (window.location.pathname !== "/auth/callback") {
-          window.location.href = "/login"
+          window.location.href = `/login?${SESSION_ENDED_PARAM}=1`
         }
       }
       throw new ApiError("Session expired. Please log in again.", 401)

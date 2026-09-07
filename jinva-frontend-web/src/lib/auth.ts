@@ -1,5 +1,17 @@
 export const DEFAULT_AUTH_REDIRECT = "/dashboard/user"
 
+/**
+ * Query marker the API layer puts on its "this session is over" redirect to
+ * /login, and the one thing that stops middleware sending the request back to
+ * the dashboard.
+ *
+ * It is not a credential and grants nothing: all it does is let someone who
+ * still holds a signed `jinva_session` cookie see the login form. Every
+ * /dashboard/* decision in middleware, and every real authorization check on
+ * the API, is completely unaffected by it.
+ */
+export const SESSION_ENDED_PARAM = "session-ended"
+
 // ---------------------------------------------------------------------------
 // S1: in-memory access-token storage only.
 //

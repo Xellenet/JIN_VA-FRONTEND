@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { Toaster } from "sonner"
 import { ThemeProvider } from "@/components/theme-provider"
+import { FlashToast } from "@/components/flash-toast"
 
 /**
  * REQUIRED ENVIRONMENT VARIABLE — `NEXT_PUBLIC_SITE_URL`
@@ -75,6 +76,8 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           <Toaster />
+          {/* Deliberately after <Toaster /> — see components/flash-toast.tsx */}
+          <FlashToast />
           <Analytics />
         </ThemeProvider>
       </body>

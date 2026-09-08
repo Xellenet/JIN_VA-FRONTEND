@@ -10,7 +10,13 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Eye, EyeOff } from "lucide-react"
-import { persistAuthTokens, dashboardPathForRole } from "@/lib/auth"
+import {
+  persistAuthTokens,
+  dashboardPathForRole,
+  ACCOUNT_DELETED_PARAM,
+  RESTORABLE_UNTIL_PARAM,
+} from "@/lib/auth"
+import { setFlashToast } from "@/lib/flash"
 import { AuthSplitLayout } from "./auth-split-layout"
 
 /**
@@ -57,6 +63,16 @@ export function LoginForm() {
     email: "",
     password: "",
   })
+
+  // C1.3: the user arrived here straight from deleting their own account. The
+  // confirmation has to live on THIS page, because the deletion redirect is a
+  // hard navigation and a toast fired before it is torn down unseen
+  // (qa-report.md FE-1). Read from the URL rather than from state so it also
+  // survives a refresh of this page.
+  const justDeletedAccount = searchParams.get(ACCOUNT_DELETED_PARAM) === "1"
+  const deletionRestorableUntil = formatWindowDate(
+    searchParams.get(RESTORABLE_UNTIL_PARAM) ?? undefined,
+  )
 
   const handleResendVerification = async (email: string) => {
     setIsResending(true)
@@ -140,7 +156,11 @@ export function LoginForm() {
       }
 
       persistAuthTokens(data.access_token)
-      toast.success("Welcome back — your account has been restored.")
+      // Handed to the next page rather than shown here: `redirectAfterLogin` is
+      // a hard navigation, which destroys a toast raised on this page before it
+      // can be read (qa-report.md FE-1). lib/flash.ts parks it for the
+      // dashboard we're about to land on.
+      setFlashToast("Welcome back — your account has been restored.")
       redirectAfterLogin(data.data?.role)
     } catch {
       toast.error("We couldn't restore your account. Please try again, or contact support if this keeps happening.")
@@ -259,6 +279,23 @@ export function LoginForm() {
             </Link>
           </p>
         </div>
+
+        {/* C1.3: post-deletion confirmation. Above the form because it explains
+            why the user is looking at a login screen at all, and it is a banner
+            rather than a toast so it is still there to be read (and re-read)
+            after the hard navigation that brought them here. Suppressed once
+            the pending-deletion banner is up — that one says the same thing and
+            carries the restore action, so showing both would just be noise. */}
+        {justDeletedAccount && !pendingDeletion && (
+          <div className="rounded-md border border-info/30 bg-info/10 p-3 text-sm text-foreground">
+            <p className="font-medium">Account deleted</p>
+            <p className="mt-0.5">
+              {deletionRestorableUntil
+                ? `You can restore it until ${deletionRestorableUntil} — just sign in again below with the same email. After that it's gone for good.`
+                : "You have 30 days to restore it — just sign in again below with the same email."}
+            </p>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">

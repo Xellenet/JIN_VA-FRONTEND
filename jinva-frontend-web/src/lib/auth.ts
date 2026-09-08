@@ -12,6 +12,48 @@ export const DEFAULT_AUTH_REDIRECT = "/dashboard/user"
  */
 export const SESSION_ENDED_PARAM = "session-ended"
 
+/**
+ * Query markers the settings pages put on their post-deletion redirect to
+ * /login, so the confirmation the user just earned is still on screen when they
+ * land there.
+ *
+ * A toast cannot do this job: the redirect is a hard navigation
+ * (`location.href`), which tears the toast container down ~200ms after the
+ * click, so the confirmation was never actually readable (qa-report.md FE-1).
+ * The login form renders these as a banner instead — it persists, so a user who
+ * never receives the deletion email still learns the account is recoverable and
+ * how long they have.
+ *
+ * `RESTORABLE_UNTIL_PARAM` carries `purgeAt` from the `DELETE /users/me`
+ * response verbatim (ISO 8601). It is the server-computed date the purge job
+ * actually enforces and the same date the email states — never computed as
+ * "+30 days" on the client (api-contract.md). Neither marker is a credential
+ * and neither grants anything: the banner is plain copy about the caller's own
+ * just-completed action.
+ */
+export const ACCOUNT_DELETED_PARAM = "account-deleted"
+export const RESTORABLE_UNTIL_PARAM = "restorable-until"
+
+/**
+ * Where to land someone who has just deleted their own account: the login
+ * form, marked so that (a) middleware lets the request through even though the
+ * dead `jinva_session` cookie still verifies, and (b) the form shows the
+ * deletion confirmation and the real restore deadline.
+ *
+ * Lives here rather than in each settings page so the artisan and customer
+ * flows cannot drift apart on the markers.
+ *
+ * @param purgeAt `purgeAt` from the `DELETE /users/me` response, if present.
+ */
+export function loginUrlAfterAccountDeletion(purgeAt?: string): string {
+  const params = new URLSearchParams({
+    [SESSION_ENDED_PARAM]: "1",
+    [ACCOUNT_DELETED_PARAM]: "1",
+  })
+  if (purgeAt) params.set(RESTORABLE_UNTIL_PARAM, purgeAt)
+  return `/login?${params.toString()}`
+}
+
 // ---------------------------------------------------------------------------
 // S1: in-memory access-token storage only.
 //

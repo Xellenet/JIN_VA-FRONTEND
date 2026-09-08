@@ -45,7 +45,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
-import { SESSION_ENDED_PARAM } from "@/lib/auth"
+import { loginUrlAfterAccountDeletion } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
@@ -107,18 +107,23 @@ function UserSettingsContent() {
     setIsDeleting(true)
     setDeleteRefusal(null)
     try {
-      await apiFetch("/users/me", { method: "DELETE" })
-      toast.success("Account deleted. You have 30 days to restore it — just sign in again.")
-      // C1.2: clear this device's client state, then land the user on the
+      // `purgeAt` is the server-computed restore deadline (api-contract.md) —
+      // carried to the login form so the confirmation there can name the real
+      // date instead of a client-side "+30 days".
+      const deleted = await apiFetch<{ purgeAt?: string }>("/users/me", { method: "DELETE" })
+      // C1.2/C1.3: clear this device's client state, then land the user on the
       // login form deliberately. `logout()`'s own redirect can't be relied on
       // here: its `POST /auth/logout` is 401 for a principal that no longer
       // resolves, so it never gets to clear the httpOnly session cookie, and
       // whichever redirect wins the race decides whether the user reaches the
-      // login form or bounces off middleware into the dashboard. The marker
-      // (see lib/auth.ts) is what keeps the restore path reachable while that
-      // cookie is still signed and unexpired.
+      // login form or bounces off middleware into the dashboard. The markers
+      // (see lib/auth.ts) are what keep the restore path reachable while that
+      // cookie is still signed and unexpired, AND what put the "you have until
+      // <date> to restore it" confirmation on the page they land on. It is not
+      // a toast: this navigation tears the toast container down long before
+      // one could be read (qa-report.md FE-1).
       await logout()
-      globalThis.location.href = `/login?${SESSION_ENDED_PARAM}=1`
+      globalThis.location.href = loginUrlAfterAccountDeletion(deleted?.purgeAt)
     } catch (err: unknown) {
       // Branch on the code, not the message text (api-contract.md). The
       // account is untouched and the user is still logged in, so the dialog

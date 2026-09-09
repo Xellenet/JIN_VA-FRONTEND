@@ -44,7 +44,8 @@ import {
   Receipt,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
+import { loginUrlAfterAccountDeletion } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
@@ -93,18 +94,46 @@ function UserSettingsContent() {
   const [confirmPass, setConfirmPass] = useState("")
   const [isUpdatingPass, setIsUpdatingPass] = useState(false)
 
-  // ── Delete account (F4) ─────────────────────────────────────────────────
+  // ── Delete account (F4 / C1) ────────────────────────────────────────────
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  // C1.1: the backend refuses deletion with a 409 while the account still owes
+  // somebody something, and its message names every outstanding item. That has
+  // to be readable *in the open dialog* — a toast would vanish before the user
+  // finished reading a list of things to go and resolve.
+  const [deleteRefusal, setDeleteRefusal] = useState<string | null>(null)
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true)
+    setDeleteRefusal(null)
     try {
-      await apiFetch("/users/me", { method: "DELETE" })
-      toast.success("Your account has been deleted.")
+      // `purgeAt` is the server-computed restore deadline (api-contract.md) —
+      // carried to the login form so the confirmation there can name the real
+      // date instead of a client-side "+30 days".
+      const deleted = await apiFetch<{ purgeAt?: string }>("/users/me", { method: "DELETE" })
+      // C1.2/C1.3: clear this device's client state, then land the user on the
+      // login form deliberately. `logout()`'s own redirect can't be relied on
+      // here: its `POST /auth/logout` is 401 for a principal that no longer
+      // resolves, so it never gets to clear the httpOnly session cookie, and
+      // whichever redirect wins the race decides whether the user reaches the
+      // login form or bounces off middleware into the dashboard. The markers
+      // (see lib/auth.ts) are what keep the restore path reachable while that
+      // cookie is still signed and unexpired, AND what put the "you have until
+      // <date> to restore it" confirmation on the page they land on. It is not
+      // a toast: this navigation tears the toast container down long before
+      // one could be read (qa-report.md FE-1).
       await logout()
+      globalThis.location.href = loginUrlAfterAccountDeletion(deleted?.purgeAt)
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      // Branch on the code, not the message text (api-contract.md). The
+      // account is untouched and the user is still logged in, so the dialog
+      // stays open with the confirm button live for a retry once they've
+      // resolved what it names.
+      if (err instanceof ApiError && err.status === 409) {
+        setDeleteRefusal(err.message)
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      }
       setIsDeleting(false)
     }
   }
@@ -881,7 +910,7 @@ function UserSettingsContent() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-destructive">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">Irreversible account actions</p>
+                    <p className="text-sm text-muted-foreground">Permanent account actions</p>
                   </div>
                 </div>
               </div>
@@ -890,7 +919,7 @@ function UserSettingsContent() {
                   <div>
                     <p className="font-medium">Delete Account</p>
                     <p className="text-sm text-muted-foreground">
-                      Permanently delete your account and all associated data
+                      Close your account and remove your profile from JinVa. You can restore it within 30 days.
                     </p>
                   </div>
                   <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
@@ -904,17 +933,32 @@ function UserSettingsContent() {
         </Tabs>
       </div>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          if (isDeleting) return
+          if (!open) setDeleteRefusal(null)
+          setShowDeleteDialog(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete your account?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will deactivate your account immediately and log you out. This action cannot be undone from
-              within the app — contact support if you need to recover your account.
+              You&apos;ll be signed out straight away and your profile will no longer be visible on JinVa. You
+              have <span className="font-medium text-foreground">30 days</span> to change your mind — sign in
+              again before then and we&apos;ll restore your account and your booking history. After 30 days
+              everything is permanently deleted and can&apos;t be recovered.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {/* C1.1: the refusal, rendered inline in the still-open dialog. */}
+          {deleteRefusal && (
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+              <p>{deleteRefusal}</p>
+            </div>
+          )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Keep my account</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()

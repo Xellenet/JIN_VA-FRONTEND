@@ -30,6 +30,7 @@ import {
   Briefcase,
   Camera,
   Mail,
+  Lock,
   Phone,
   MapPin,
   Trash2,
@@ -42,11 +43,17 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
+import { loginUrlAfterAccountDeletion } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
 import { RETRYABLE_PAYOUT_STATUSES } from "@/lib/status-badges"
+import {
+  ProfileCompleteness,
+  readProfileCompleteness,
+  type ProfileCompletenessSource,
+} from "@/components/artisan/profile-completeness"
 
 function ArtisanSettingsContent() {
   const { user, refreshUser, logout } = useAuth()
@@ -76,6 +83,12 @@ function ArtisanSettingsContent() {
     setPhone(user.phone ?? "")
   }, [user])
 
+  // C2: Service Area on this page *is* `location`, one of the four fields the
+  // search gate reads — so the compact banner belongs on this tab too. Stays
+  // null if the fetch fails; the banner reads that as "unknown" and renders
+  // nothing.
+  const [completeness, setCompleteness] = useState<ProfileCompletenessSource | null>(null)
+
   useEffect(() => {
     apiFetch<{
       location?: string
@@ -85,11 +98,15 @@ function ArtisanSettingsContent() {
       payoutAccountName?: string
       payoutAccountNumber?: string // masked to last 4 chars server-side — never the full number
       payoutBankCode?: string
-    }>("/users/me/artisan-profile")
+    } & ProfileCompletenessSource>("/users/me/artisan-profile")
       .then((profile) => {
         setServiceArea(profile.location ?? "")
         setServiceRadiusKm(profile.serviceRadiusKm != null ? String(profile.serviceRadiusKm) : "")
         setCancellationPolicy(profile.cancellationPolicy ?? "")
+        setCompleteness({
+          isProfileComplete: profile.isProfileComplete,
+          missingFields: profile.missingFields,
+        })
         // A1: read back the artisan's actual saved payout status instead of
         // defaulting to unconfigured — this is the real, demonstrated bug
         // requirements.md calls out (a page refresh made a correctly
@@ -118,18 +135,46 @@ function ArtisanSettingsContent() {
 
   const [isSaving, setIsSaving] = useState(false)
 
-  // ── Delete account (F4) ─────────────────────────────────────────────────
+  // ── Delete account (F4 / C1) ────────────────────────────────────────────
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  // C1.1: the backend refuses deletion with a 409 while the account still owes
+  // somebody something, and its message names every outstanding item. That has
+  // to be readable *in the open dialog* — a toast would vanish before the user
+  // finished reading a list of things to go and resolve.
+  const [deleteRefusal, setDeleteRefusal] = useState<string | null>(null)
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true)
+    setDeleteRefusal(null)
     try {
-      await apiFetch("/users/me", { method: "DELETE" })
-      toast.success("Your account has been deleted.")
+      // `purgeAt` is the server-computed restore deadline (api-contract.md) —
+      // carried to the login form so the confirmation there can name the real
+      // date instead of a client-side "+30 days".
+      const deleted = await apiFetch<{ purgeAt?: string }>("/users/me", { method: "DELETE" })
+      // C1.2/C1.3: clear this device's client state, then land the user on the
+      // login form deliberately. `logout()`'s own redirect can't be relied on
+      // here: its `POST /auth/logout` is 401 for a principal that no longer
+      // resolves, so it never gets to clear the httpOnly session cookie, and
+      // whichever redirect wins the race decides whether the user reaches the
+      // login form or bounces off middleware into the dashboard. The markers
+      // (see lib/auth.ts) are what keep the restore path reachable while that
+      // cookie is still signed and unexpired, AND what put the "you have until
+      // <date> to restore it" confirmation on the page they land on. It is not
+      // a toast: this navigation tears the toast container down long before
+      // one could be read (qa-report.md FE-1).
       await logout()
+      globalThis.location.href = loginUrlAfterAccountDeletion(deleted?.purgeAt)
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      // Branch on the code, not the message text (api-contract.md). The
+      // account is untouched and the user is still logged in, so the dialog
+      // stays open with the confirm button live for a retry once they've
+      // resolved what it names.
+      if (err instanceof ApiError && err.status === 409) {
+        setDeleteRefusal(err.message)
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      }
       setIsDeleting(false)
     }
   }
@@ -276,11 +321,15 @@ function ArtisanSettingsContent() {
     try {
       await apiFetch("/users/me", {
         method: "PATCH",
-        body: JSON.stringify({ firstname, lastname, email, phoneNumber: phone }),
+        // `email` is deliberately absent: `UpdateMeDto` doesn't accept it and the
+        // API's ValidationPipe rejects unknown properties, so including it made
+        // every save on this tab fail with "property email should not exist"
+        // before it ever reached the artisan-profile call below.
+        body: JSON.stringify({ firstname, lastname, phoneNumber: phone }),
       })
       // F6/F7: Service Area, Service Radius, and Cancellation Policy live on
       // the artisan profile, not the base user record.
-      await apiFetch("/users/me/artisan-profile", {
+      const savedProfile = await apiFetch<ProfileCompletenessSource>("/users/me/artisan-profile", {
         method: "PATCH",
         body: JSON.stringify({
           location: serviceArea || undefined,
@@ -288,8 +337,23 @@ function ArtisanSettingsContent() {
           cancellationPolicy: cancellationPolicy || undefined,
         }),
       })
+      // C2: the save response carries fresh completeness (judged against the
+      // post-merge profile, so this page's partial payload never reports the
+      // fields the Profile page owns as missing) — the banner updates from it
+      // rather than needing a reload.
+      setCompleteness({
+        isProfileComplete: savedProfile.isProfileComplete,
+        missingFields: savedProfile.missingFields,
+      })
       await refreshUser()
-      toast.success("Profile updated successfully.")
+      const justBecameVisible =
+        readProfileCompleteness(completeness).state === "incomplete" &&
+        readProfileCompleteness(savedProfile).state === "complete"
+      toast.success(
+        justBecameVisible
+          ? "Profile updated — customers can now find you in search."
+          : "Profile updated successfully.",
+      )
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to save changes.")
     } finally {
@@ -360,6 +424,10 @@ function ArtisanSettingsContent() {
 
           {/* Account */}
           <TabsContent value="account" className="space-y-6">
+            {/* C2: the artisan is already in settings, so the CTA sends them to
+                the profile page rather than telling them to "finish" from here. */}
+            <ProfileCompleteness variant="compact" profile={completeness} actionLabel="Go to my profile" />
+
             <Card>
               <div className="border-b p-6">
                 <h3 className="font-semibold">Profile Photo</h3>
@@ -417,10 +485,21 @@ function ArtisanSettingsContent() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
+                    {/* `PATCH /users/me` rejects `email` outright — changing it needs
+                        its own verified flow — so this matches the read-only
+                        treatment the customer settings page already uses rather
+                        than accepting edits nothing can save. */}
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input id="email" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} />
+                      <Lock className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                      <Input
+                        id="email"
+                        className="cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground"
+                        value={email}
+                        readOnly
+                      />
                     </div>
+                    <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone Number</Label>
@@ -887,7 +966,7 @@ function ArtisanSettingsContent() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-destructive">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">Irreversible account actions</p>
+                    <p className="text-sm text-muted-foreground">Permanent account actions</p>
                   </div>
                 </div>
               </div>
@@ -896,7 +975,7 @@ function ArtisanSettingsContent() {
                   <div>
                     <p className="font-medium">Delete Account</p>
                     <p className="text-sm text-muted-foreground">
-                      Permanently delete your account and remove your profile from the platform
+                      Close your account and hide your profile from search. You can restore it within 30 days.
                     </p>
                   </div>
                   <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
@@ -910,17 +989,32 @@ function ArtisanSettingsContent() {
         </Tabs>
       </div>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          if (isDeleting) return
+          if (!open) setDeleteRefusal(null)
+          setShowDeleteDialog(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete your account?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will deactivate your account immediately and log you out. This action cannot be undone from
-              within the app — contact support if you need to recover your account.
+              You&apos;ll be signed out straight away and your profile will stop appearing in search. You have{" "}
+              <span className="font-medium text-foreground">30 days</span> to change your mind — sign in again
+              before then and we&apos;ll restore your account, your job history and your reviews. After 30 days
+              everything is permanently deleted and can&apos;t be recovered.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {/* C1.1: the refusal, rendered inline in the still-open dialog. */}
+          {deleteRefusal && (
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+              <p>{deleteRefusal}</p>
+            </div>
+          )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Keep my account</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()

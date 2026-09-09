@@ -18,9 +18,24 @@
  */
 
 export interface BackendContact {
+  /**
+   * Typed as required because every documented payload carries it, but the wire
+   * can omit it for a participant who has soft-deleted their account
+   * (qa-report.md B7) — so anything that *addresses* a contact guards on a
+   * finite id at runtime rather than trusting this.
+   */
   id: number
-  firstname: string
-  lastname: string
+  /**
+   * Optional because a soft-deleted participant's payload carries **no** name
+   * keys at all (qa-report.md FE-7 — the raw response is
+   * `"contact":{"profilePicture":null}`), and because a purged row's names are
+   * the anonymized placeholders. Never read these directly for display: go
+   * through `contactName()`, which is the only place the fallback lives.
+   */
+  firstname?: string | null
+  lastname?: string | null
+  /** Tolerated for a placeholder participant labelled with one name field. */
+  name?: string | null
   profilePicture: string | null
   /** `/messages` resolves this relative to the caller; absent on migrated rows. */
   role?: "CUSTOMER" | "ARTISAN" | "ADMIN"
@@ -54,7 +69,13 @@ export interface BackendDM {
   bookingId: number | null
   isRead: boolean
   createdAt: string
-  sender: BackendContact
+  /**
+   * `null` when the sender has soft-deleted their account — `GET /messages/:id`
+   * returns `"sender": null` on the departed party's messages (qa-report.md
+   * B7). Reading `sender.id` unguarded threw and took the whole thread render
+   * down with it, which is why every call site optional-chains this.
+   */
+  sender: BackendContact | null
 }
 
 /** `POST /messages` body (api-contract.md §3). */
@@ -66,8 +87,35 @@ export interface SendMessagePayload {
   bookingId?: number
 }
 
-export function contactName(c: BackendContact): string {
-  return `${c.firstname} ${c.lastname}`.trim()
+/**
+ * What a participant with no renderable name is called. C1.7 asks for "no blank
+ * name, no `null`, no crash" when the other party has left, and the deletion
+ * flow makes that a routine 30-day state rather than a rarity.
+ *
+ * Spelled to match the placeholder the purge writes onto the row itself
+ * (api-contract.md: names become `Deleted` / `User`, "so anything joining the
+ * row renders 'Deleted User'"). That matters because a `null` message sender
+ * has no placeholder to carry — it falls back to this string — while the
+ * conversation's `contact` does carry one, and the two must not disagree
+ * within a single screen.
+ */
+export const DELETED_PARTICIPANT_NAME = "Deleted User"
+
+/**
+ * The only place a messaging participant's display name is built.
+ *
+ * Both name parts are optional on the wire (see `BackendContact`), and the
+ * template-literal version of this used to print a literal `undefined undefined`
+ * as a person's name in the inbox row and the thread header (qa-report.md
+ * FE-7). Anything missing, null, or whitespace-only falls back to
+ * `DELETED_PARTICIPANT_NAME`; a half-present name renders the half that exists.
+ */
+export function contactName(c: BackendContact | null | undefined): string {
+  const clean = (part: string | null | undefined) => (typeof part === "string" ? part.trim() : "")
+  const fromParts = [clean(c?.firstname), clean(c?.lastname)].filter(Boolean).join(" ")
+  // `firstname`/`lastname` is the documented shape, so it wins; the
+  // single-field `name` is only consulted when neither part is present.
+  return fromParts || clean(c?.name) || DELETED_PARTICIPANT_NAME
 }
 
 /**
@@ -75,7 +123,9 @@ export function contactName(c: BackendContact): string {
  * image-only message, in which case api-contract.md §2 asks for something
  * derived from the attachment rather than an empty row.
  */
-export function lastMessagePreview(m: BackendLastMessage | null): string {
+export function lastMessagePreview(
+  m: Pick<BackendLastMessage, "content" | "attachmentUrl"> | null | undefined,
+): string {
   if (!m) return ""
   if (m.content?.trim()) return m.content
   if (m.attachmentUrl) return "📷 Photo"

@@ -181,20 +181,17 @@ function ReadyPanel({
 
       <div className="mt-2 space-y-1">
         {preview.map((msg) => {
-          const isCustomer = msg.sender.id === customer.id
+          const isCustomer = msg.sender?.id === customer.id
           return (
             <p key={msg.id} className="truncate text-xs text-muted-foreground">
               <span className="font-medium text-foreground/80">
                 {isCustomer ? roleLabel(customer, "Client") : roleLabel(artisan, "Artisan")}:
               </span>{" "}
-              {lastMessagePreview({
-                id: msg.id,
-                content: msg.content,
-                attachmentUrl: msg.attachmentUrl,
-                senderId: msg.sender.id,
-                createdAt: msg.createdAt,
-                isRead: msg.isRead,
-              })}
+              {/* `lastMessagePreview` only needs the two attachment/content
+                  fields a `BackendDM` already carries, so this no longer has
+                  to synthesise a whole last-message row (whose `senderId`
+                  isn't knowable for a departed sender anyway). */}
+              {lastMessagePreview(msg)}
             </p>
           )
         })}
@@ -230,7 +227,7 @@ function ReadyPanel({
               </p>
             )}
             {messages.map((msg, idx) => {
-              const isCustomer = msg.sender.id === customer.id
+              const isCustomer = msg.sender?.id === customer.id
               const prev = messages[idx - 1]
               const showDay =
                 !prev || new Date(prev.createdAt).toDateString() !== new Date(msg.createdAt).toDateString()
@@ -250,7 +247,7 @@ function ReadyPanel({
                     <div className="flex items-center gap-1.5">
                       <Avatar className="h-6 w-6">
                         <AvatarImage
-                          src={resolveAvatarUrl(msg.sender.profilePicture, senderName, 24)}
+                          src={resolveAvatarUrl(msg.sender?.profilePicture, senderName, 24)}
                           alt={senderName}
                         />
                         <AvatarFallback className="text-[10px]">{senderName[0]}</AvatarFallback>

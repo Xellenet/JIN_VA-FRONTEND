@@ -168,6 +168,17 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoadingConvs, setIsLoadingConvs] = useState(true)
   const [isLoadingMsgs, setIsLoadingMsgs] = useState(false)
+  /**
+   * FE-7 — "the fetch failed" and "the thread is genuinely empty" used to look
+   * identical: a failed `GET /messages/:id` fell through to the same
+   * "No messages yet. Say hello!" copy, telling the user their real
+   * conversation was empty. These two flags keep the failure visible (and
+   * retryable) instead of dressing it up as an empty inbox/thread.
+   */
+  const [threadError, setThreadError] = useState(false)
+  const [convsError, setConvsError] = useState(false)
+  /** Bumped by the thread's "Try again" control to re-run the load effect. */
+  const [threadReloadKey, setThreadReloadKey] = useState(0)
   const [isSending, setIsSending] = useState(false)
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
   const [context, setContext] = useState<MessageContext | null>(null)
@@ -217,8 +228,12 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
         )
         return [...pending, ...items]
       })
+      setConvsError(false)
       return items
     } catch {
+      // Only surfaced when there is nothing on screen to keep — a failed poll
+      // must not replace a list the user is already reading with an error.
+      setConvsError(true)
       return [] as BackendConversation[]
     } finally {
       setIsLoadingConvs(false)
@@ -314,6 +329,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   useEffect(() => {
     if (selectedId === null) return
     setMessages([])
+    setThreadError(false)
     setAttachment(null)
     setOldestLoadedPage(1)
     newestPageRef.current = 1
@@ -351,7 +367,13 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
           prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)),
         )
       } catch {
-        if (!cancelled) setMessages([])
+        // FE-7 — the thread did not load. Say so; do not fall through to the
+        // empty-thread copy, which would claim the conversation has no
+        // messages when the request is what failed.
+        if (!cancelled) {
+          setMessages([])
+          setThreadError(true)
+        }
       } finally {
         if (!cancelled) setIsLoadingMsgs(false)
       }
@@ -361,7 +383,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
     return () => {
       cancelled = true
     }
-  }, [selectedId])
+  }, [selectedId, threadReloadKey])
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
 
@@ -432,12 +454,17 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
         // `mergeThread` keeps them. MR2 depends on this poll for the sent → read
         // transition, so the server's copy of a row always wins.
         setMessages((prev) => mergeThread(prev, items))
+        // A thread that failed to open recovers on its own once the read
+        // succeeds — the user doesn't have to find the retry control.
+        setThreadError(false)
 
         // MR1 — a message that arrives while this thread is open is being
         // read right now, so mark it read too. Without this, NR1's new list
         // refresh would put an unread badge on the conversation the user is
         // actively looking at.
-        if (items.some((m) => m.sender.id !== currentUserId && !m.isRead)) {
+        // `sender` is null on a departed participant's messages (B7), and those
+        // still count as the other party's — so they are marked read too.
+        if (items.some((m) => m.sender?.id !== currentUserId && !m.isRead)) {
           apiFetch(`/messages/${selectedId}/read`, { method: "PATCH" }).catch(() => {})
           setConversations((prev) =>
             prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)),
@@ -460,6 +487,31 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
     if (!searchQuery) return true
     return contactName(c.contact).toLowerCase().includes(searchQuery.toLowerCase())
   })
+
+  /**
+   * FE-7 — an error is only worth showing while there is nothing else to show.
+   * With messages or conversations on screen, a failed poll stays quiet and the
+   * next tick heals it.
+   */
+  const showThreadError = threadError && messages.length === 0
+  const showConvsError = convsError && conversations.length === 0
+
+  /**
+   * A soft-deleted participant can arrive with no `id` (qa-report.md B7), and a
+   * reply addressed to `recipientId: NaN` would only fail as a 400 *after* the
+   * user has typed it out. Block the composer up front and say why.
+   */
+  const canReplyToSelected = !selected || Number.isFinite(Number(selected.contact.id))
+
+  const retryThread = () => {
+    setThreadError(false)
+    setThreadReloadKey((k) => k + 1)
+  }
+
+  const retryConversations = () => {
+    setIsLoadingConvs(true)
+    void loadConversations()
+  }
 
   // ── B1 — reach the rest of the thread ─────────────────────────────────────
 
@@ -533,10 +585,10 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
 
   // ── Send ──────────────────────────────────────────────────────────────────
 
-  const canSend = (!!newMessage.trim() || !!attachment) && !!selected && !isSending
+  const canSend = (!!newMessage.trim() || !!attachment) && !!selected && !isSending && canReplyToSelected
 
   const handleSend = async () => {
-    if (!selected || isSending) return
+    if (!selected || isSending || !canReplyToSelected) return
     const content = newMessage.trim()
     if (!content && !attachment) return
 
@@ -690,7 +742,9 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
             <p className="text-sm text-muted-foreground">
               {conversations.length > 0
                 ? `${conversations.length} conversation${conversations.length !== 1 ? "s" : ""}`
-                : "No conversations yet"}
+                : showConvsError
+                  ? "Couldn't load your conversations"
+                  : "No conversations yet"}
             </p>
           </div>
         </div>
@@ -719,6 +773,20 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
               {isLoadingConvs ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : showConvsError ? (
+                /* FE-7 — a failed list read is not an empty inbox. */
+                <div className="flex flex-col items-center justify-center gap-2 p-8 text-center">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-destructive/10">
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">Couldn&apos;t load your conversations</p>
+                  <p className="text-xs text-muted-foreground">
+                    Nothing has been lost — this is a problem loading them.
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-1 bg-transparent" onClick={retryConversations}>
+                    Try again
+                  </Button>
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-8 text-center">
@@ -840,6 +908,22 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     </div>
+                  ) : showThreadError ? (
+                    /* FE-7 — this used to render "No messages yet. Say hello!"
+                       after the thread read failed, which told the user their
+                       real conversation was empty. */
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+                        <AlertTriangle className="h-5 w-5 text-destructive" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">Couldn&apos;t load this conversation</p>
+                      <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                        Your messages haven&apos;t gone anywhere — they just didn&apos;t load. Try again in a moment.
+                      </p>
+                      <Button variant="outline" size="sm" className="mt-3 bg-transparent" onClick={retryThread}>
+                        Try again
+                      </Button>
+                    </div>
                   ) : messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                       <MessageSquare className="mb-3 h-8 w-8 text-muted-foreground/40" />
@@ -866,13 +950,18 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                         </div>
                       )}
                       {messages.map((msg, idx) => {
-                        const isOwn = msg.sender.id === Number(user.id)
+                        // `sender` is null once that participant has deleted
+                        // their account (B7), so every read of it is optional
+                        // — dereferencing it threw and blanked the whole
+                        // thread. A nameless sender is never "own", so their
+                        // messages correctly stay on the incoming side.
+                        const isOwn = msg.sender?.id === Number(user.id)
                         const prev = messages[idx - 1]
                         const next = messages[idx + 1]
-                        const isFirst = !prev || prev.sender.id !== msg.sender.id
-                        const isLast = !next || next.sender.id !== msg.sender.id
+                        const isFirst = !prev || prev.sender?.id !== msg.sender?.id
+                        const isLast = !next || next.sender?.id !== msg.sender?.id
                         const showAvatar = !isOwn && isLast
-                        const senderName = `${msg.sender.firstname} ${msg.sender.lastname}`.trim()
+                        const senderName = contactName(msg.sender)
                         // MR2 — sending -> sent -> read, own messages only.
                         // A negative id is an optimistic bubble the server
                         // hasn't confirmed yet.
@@ -891,7 +980,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                               {!isOwn && showAvatar && (
                                 <Avatar className="h-7 w-7">
                                   <AvatarImage
-                                    src={resolveAvatarUrl(msg.sender.profilePicture, senderName)}
+                                    src={resolveAvatarUrl(msg.sender?.profilePicture, senderName)}
                                     alt={senderName}
                                   />
                                   <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
@@ -1030,12 +1119,14 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                         size="icon"
                         className="h-9 w-9 flex-shrink-0 rounded-full text-muted-foreground"
                         onClick={() => fileInputRef.current?.click()}
+                        disabled={!canReplyToSelected}
                         aria-label="Attach an image"
                       >
                         <Paperclip className="h-4 w-4" />
                       </Button>
                       <Input
-                        placeholder="Message"
+                        placeholder={canReplyToSelected ? "Message" : "You can't reply to this conversation"}
+                        disabled={!canReplyToSelected}
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyDown={(e) => {
@@ -1061,7 +1152,11 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                         {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       </Button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">JPEG or PNG · max 5MB · one image per message</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {canReplyToSelected
+                        ? "JPEG or PNG · max 5MB · one image per message"
+                        : "This account is no longer active. The conversation stays here to read."}
+                    </p>
                   </div>
                 </div>
               </>

@@ -7,16 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -25,87 +15,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  AlertTriangle,
-  Search,
-  MessageSquare,
-  CheckCircle,
-  Loader2,
-  CreditCard,
-  ArrowRight,
-} from "lucide-react"
-import Link from "next/link"
+import { AlertTriangle, Search, MessageSquare, Loader2 } from "lucide-react"
 import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
-import { getPaymentStatusConfig, getDisputeStatusConfig } from "@/lib/status-badges"
+import { getDisputeOutcomeConfig, getDisputeStatusConfig } from "@/lib/status-badges"
 import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
-import { DisputeConversationPanel } from "@/components/admin/dispute-conversation-panel"
-
-// 3.6: GET /admin/disputes/:id (unlike the list endpoint) already returns
-// the dispute↔payment linkage the backend added for Ad3 — `jobId` and
-// `payment` are null when the underlying booking never produced a paid job
-// (a real, expected case, not an error).
-interface LinkedPayment {
-  id: number
-  amount: number
-  status: string
-  paidAt?: string
-  reference: string
-}
-
-type DisputeStatus = "OPEN" | "UNDER_REVIEW" | "RESOLVED" | "CLOSED"
-
-interface BackendDispute {
-  id: number
-  reason: string
-  status: DisputeStatus
-  resolution?: string
-  adminNotes?: string
-  resolvedAt?: string
-  createdAt: string
-  booking?: {
-    id: number
-    scheduledDate?: string
-    status?: string
-    agreedPrice?: number
-  }
-  raisedBy?: {
-    id: number
-    firstname: string
-    lastname: string
-    profilePicture?: string
-  }
-}
+import {
+  ResolveDisputeDialog,
+  type AdminDispute,
+  type AdminDisputeStatus,
+} from "@/components/admin/resolve-dispute-dialog"
 
 export default function DisputesPage() {
-  const [disputes, setDisputes] = useState<BackendDispute[]>([])
+  const [disputes, setDisputes] = useState<AdminDispute[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [active, setActive] = useState<BackendDispute | null>(null)
-  const [resolution, setResolution] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // 3.6: linked payment — fetched from the dispute detail endpoint the
-  // moment a dispute is opened, since the list endpoint doesn't carry it.
-  const [linkedPayment, setLinkedPayment] = useState<LinkedPayment | null | undefined>(undefined)
-  const [isLoadingPayment, setIsLoadingPayment] = useState(false)
-
-  const openDispute = (d: BackendDispute) => {
-    setActive(d)
-    setResolution(d.resolution ?? "")
-    setLinkedPayment(undefined)
-    setIsLoadingPayment(true)
-    apiFetch<{ jobId: number | null; payment: LinkedPayment | null }>(`/admin/disputes/${d.id}`)
-      .then((detail) => setLinkedPayment(detail.payment ?? null))
-      .catch(() => setLinkedPayment(null))
-      .finally(() => setIsLoadingPayment(false))
-  }
+  const [active, setActive] = useState<AdminDispute | null>(null)
 
   useEffect(() => {
-    apiFetch<BackendDispute[] | { items: BackendDispute[] }>("/admin/disputes?limit=100")
+    apiFetch<AdminDispute[] | { items: AdminDispute[] }>("/admin/disputes?limit=100")
       .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: BackendDispute[] }).items ?? []
+        const items = Array.isArray(r) ? r : (r as { items: AdminDispute[] }).items ?? []
         setDisputes(items)
       })
       .catch(() => toast.error("Could not load disputes."))
@@ -115,7 +46,7 @@ export default function DisputesPage() {
   const filtered = disputes.filter((d) => {
     const q = search.toLowerCase()
     const raiserName = d.raisedBy
-      ? `${d.raisedBy.firstname} ${d.raisedBy.lastname}`.toLowerCase()
+      ? `${d.raisedBy.firstname ?? ""} ${d.raisedBy.lastname ?? ""}`.toLowerCase()
       : ""
     return (
       String(d.id).includes(q) ||
@@ -131,39 +62,25 @@ export default function DisputesPage() {
     closed:   disputes.filter((d) => d.status === "CLOSED").length,
   }
 
+  /**
+   * DC1.5: a dispute's new state always comes from the server. The dialog
+   * re-reads `GET /admin/disputes/:id` after every resolve attempt and hands
+   * the result back here — a local patch from the request body cannot
+   * represent `outcome`, `moneyAction`, or a ruling the backend rolled back
+   * because the money action failed.
+   */
+  const applyServerState = (updated: AdminDispute) => {
+    setDisputes((prev) => prev.map((d) => (d.id === updated.id ? { ...d, ...updated } : d)))
+    setActive((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev))
+  }
+
   const markUnderReview = async (id: number) => {
     try {
       await apiFetch(`/admin/disputes/${id}/start-review`, { method: "PATCH" })
-      setDisputes((prev) => prev.map((d) => d.id === id ? { ...d, status: "UNDER_REVIEW" as DisputeStatus } : d))
+      setDisputes((prev) => prev.map((d) => d.id === id ? { ...d, status: "UNDER_REVIEW" as AdminDisputeStatus } : d))
       toast.success("Dispute marked as under review.")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Action failed.")
-    }
-  }
-
-  const resolveDispute = async () => {
-    if (!active) return
-    if (!resolution.trim()) { toast.error("Please enter a resolution note."); return }
-    setIsSubmitting(true)
-    try {
-      await apiFetch(`/admin/disputes/${active.id}/resolve`, {
-        method: "PATCH",
-        body: JSON.stringify({ resolution }),
-      })
-      setDisputes((prev) =>
-        prev.map((d) =>
-          d.id === active.id
-            ? { ...d, status: "RESOLVED" as DisputeStatus, resolution, resolvedAt: new Date().toISOString() }
-            : d,
-        ),
-      )
-      setActive(null)
-      setResolution("")
-      toast.success("Dispute resolved.")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to resolve dispute.")
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -172,7 +89,7 @@ export default function DisputesPage() {
       await apiFetch(`/admin/disputes/${id}/close`, { method: "PATCH", body: JSON.stringify({}) })
       setDisputes((prev) =>
         prev.map((d) =>
-          d.id === id ? { ...d, status: "CLOSED" as DisputeStatus, resolvedAt: new Date().toISOString() } : d,
+          d.id === id ? { ...d, status: "CLOSED" as AdminDisputeStatus, resolvedAt: new Date().toISOString() } : d,
         ),
       )
       toast.success("Dispute closed.")
@@ -246,8 +163,10 @@ export default function DisputesPage() {
                     filtered.map((d) => {
                       const cfg = getDisputeStatusConfig(d.status)
                       const StatusIcon = cfg.icon
+                      const outcomeCfg = d.outcome ? getDisputeOutcomeConfig(d.outcome) : null
+                      const OutcomeIcon = outcomeCfg?.icon
                       const raiserName = d.raisedBy
-                        ? `${d.raisedBy.firstname} ${d.raisedBy.lastname}`.trim()
+                        ? `${d.raisedBy.firstname ?? ""} ${d.raisedBy.lastname ?? ""}`.trim() || "a former JinVa user"
                         : "Unknown"
                       return (
                         <TableRow key={d.id} className="hover:bg-muted/30">
@@ -271,10 +190,21 @@ export default function DisputesPage() {
                             {fmtDate(d.createdAt)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("text-xs", cfg.className)}>
-                              <StatusIcon className="mr-1 h-3 w-3" />
-                              {cfg.label}
-                            </Badge>
+                            {/* DC1.8: a resolved row reflects the recorded
+                                verdict, not just the status. A CLOSED dispute
+                                carries no outcome, so it gets no second badge. */}
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge variant="outline" className={cn("text-xs", cfg.className)}>
+                                <StatusIcon className="mr-1 h-3 w-3" />
+                                {cfg.label}
+                              </Badge>
+                              {outcomeCfg && OutcomeIcon && (
+                                <Badge variant="outline" className={cn("text-xs", outcomeCfg.className)}>
+                                  <OutcomeIcon className="mr-1 h-3 w-3" />
+                                  {outcomeCfg.label}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1">
@@ -282,7 +212,7 @@ export default function DisputesPage() {
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7"
-                                onClick={() => openDispute(d)}
+                                onClick={() => setActive(d)}
                               >
                                 <MessageSquare className="h-3.5 w-3.5" />
                               </Button>
@@ -300,7 +230,7 @@ export default function DisputesPage() {
                                 <Button
                                   size="sm"
                                   className="h-7 bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90"
-                                  onClick={() => openDispute(d)}
+                                  onClick={() => setActive(d)}
                                 >
                                   Resolve
                                 </Button>
@@ -328,131 +258,12 @@ export default function DisputesPage() {
         </Card>
       </div>
 
-      <Dialog open={!!active} onOpenChange={(o) => { if (!o) { setActive(null); setResolution(""); setLinkedPayment(undefined) } }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {active?.status === "RESOLVED" || active?.status === "CLOSED"
-                ? "Dispute Details"
-                : "Resolve Dispute"}
-            </DialogTitle>
-            <DialogDescription>
-              #{active?.id} — {active?.reason}
-            </DialogDescription>
-          </DialogHeader>
-          {active && (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-muted/40 p-3">
-                <p className="text-xs text-muted-foreground">Raised By</p>
-                {active.raisedBy ? (
-                  <div className="mt-1 flex items-center gap-2">
-                    <Avatar className="h-6 w-6">
-                      <AvatarImage src={resolveAvatarUrl(active.raisedBy.profilePicture, `${active.raisedBy.firstname} ${active.raisedBy.lastname}`, 24)} />
-                      <AvatarFallback className="text-xs">{active.raisedBy.firstname[0]}</AvatarFallback>
-                    </Avatar>
-                    <p className="text-sm font-medium text-foreground">
-                      {`${active.raisedBy.firstname} ${active.raisedBy.lastname}`.trim()}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Unknown</p>
-                )}
-              </div>
-
-              {/* 3.6: Linked Payment panel (Ad3) */}
-              <div className="rounded-lg bg-muted/40 p-3">
-                <p className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <CreditCard className="h-3.5 w-3.5" />
-                  Linked Payment
-                </p>
-                {isLoadingPayment ? (
-                  <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Checking for a linked payment…
-                  </div>
-                ) : linkedPayment ? (
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{formatCurrency(linkedPayment.amount)}</p>
-                      <Badge variant="outline" className={cn("mt-1 text-xs", getPaymentStatusConfig(linkedPayment.status).className)}>
-                        {getPaymentStatusConfig(linkedPayment.status).label}
-                      </Badge>
-                      {linkedPayment.paidAt && (
-                        <p className="mt-1 text-xs text-muted-foreground">Paid {fmtDate(linkedPayment.paidAt)}</p>
-                      )}
-                    </div>
-                    <Link
-                      href="/dashboard/admin/transactions"
-                      className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
-                    >
-                      View in Transactions <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No payment on file for this booking.</p>
-                )}
-              </div>
-
-              {/* AD1/AD2: read-only, dispute-scoped conversation between the
-                  booking's two parties. Placed after Linked Payment so the
-                  dialog reads context -> evidence -> conversation -> action
-                  (design-spec.md §4). */}
-              <DisputeConversationPanel
-                disputeId={active.id}
-                disputeStatus={active.status}
-                bookingLabel={active.booking?.id ? `Booking #${active.booking.id}` : undefined}
-              />
-
-              {active.booking?.agreedPrice != null && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Amount at dispute:</span>
-                  <span className="font-semibold text-foreground">{formatCurrency(active.booking.agreedPrice)}</span>
-                </div>
-              )}
-
-              {active.status !== "RESOLVED" && active.status !== "CLOSED" ? (
-                <div className="space-y-1.5">
-                  <Label>Resolution Note</Label>
-                  <Textarea
-                    placeholder="Document the resolution and any actions taken…"
-                    rows={3}
-                    value={resolution}
-                    onChange={(e) => setResolution(e.target.value)}
-                  />
-                </div>
-              ) : (
-                active.resolution && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Resolution</p>
-                    <p className="mt-1 rounded-lg bg-primary/5 p-3 text-sm text-foreground">{active.resolution}</p>
-                    {active.resolvedAt && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Resolved {new Date(active.resolvedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                      </p>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-          )}
-          {active && active.status !== "RESOLVED" && active.status !== "CLOSED" && (
-            <DialogFooter className="gap-2">
-              <Button variant="outline" className="bg-transparent" onClick={() => { setActive(null); setResolution("") }}>
-                Cancel
-              </Button>
-              <Button
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={resolveDispute}
-                disabled={isSubmitting}
-              >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Mark as Resolved
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* DC1 — the three-step resolve flow (design-spec.md §10). */}
+      <ResolveDisputeDialog
+        dispute={active}
+        onOpenChange={(open) => { if (!open) setActive(null) }}
+        onDisputeUpdated={applyServerState}
+      />
     </DashboardLayout>
   )
 }

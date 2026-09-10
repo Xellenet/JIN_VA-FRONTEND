@@ -348,9 +348,15 @@ export function ResolveDisputeDialog({
     (outcome !== "REFUND_CLIENT" || refundMode === "full" || partialAmountValid)
 
   // Who is on which side. Either party can file, so the client is not
-  // necessarily the raiser — `counterparty.role` is what settles it.
+  // necessarily the raiser — `counterparty.role` is what settles it: a booking
+  // has exactly one customer and one artisan, so if the counterparty is the
+  // artisan then the raiser is the client, and vice versa.
+  //
+  // Getting this backwards is not a cosmetic error: it swaps the names in the
+  // consequence panel, so the surface would tell an admin it is refunding the
+  // artisan's payment method on a refund to the client.
   const counterpartyRole = detail?.counterparty?.role
-  const raiserIsClient = counterpartyRole ? counterpartyRole !== "ARTISAN" : undefined
+  const raiserIsClient = counterpartyRole ? counterpartyRole === "ARTISAN" : undefined
   const raiserName = partyName(current?.raisedBy)
   const counterpartyPerson = detail?.counterparty ?? null
   const counterpartyName = counterpartyPerson ? partyName(counterpartyPerson) : null
@@ -502,15 +508,39 @@ export function ResolveDisputeDialog({
    * `Escape`, the overlay and the close button must not silently discard a
    * typed resolution note (§8), and nothing can dismiss the dialog while a
    * resolve is in flight (DC1.4). Cancel stays explicit.
+   *
+   * The guard has to say so rather than just swallow the keypress: a dead
+   * `Escape` reads as a broken dialog. Note that `preventDefault()` on
+   * Radix's own escape/outside handlers stops it calling `onOpenChange` at
+   * all, so the explanation belongs here, not there.
    */
   const hasUnsavedNote = step >= 2 && trimmedResolution.length > 0
+  const dismissBlockedBy = (): "in-flight" | "unsaved-note" | null => {
+    if (isSubmitting) return "in-flight"
+    if (hasUnsavedNote && !isTerminal) return "unsaved-note"
+    return null
+  }
+  const explainBlockedDismiss = (reason: "in-flight" | "unsaved-note") => {
+    toast.info(
+      reason === "in-flight"
+        ? "Recording the outcome — please wait."
+        : "Your resolution note is still here — use Cancel if you want to discard it.",
+      { id: "resolve-dismiss-guard" },
+    )
+  }
+  /** For Radix's escape / outside-interaction handlers. */
+  const guardDismiss = (e: { preventDefault: () => void }) => {
+    const blocked = dismissBlockedBy()
+    if (!blocked) return
+    e.preventDefault()
+    explainBlockedDismiss(blocked)
+  }
+  /** For the header close button, which does not route through the above. */
   const requestClose = (next: boolean) => {
     if (next) return
-    if (isSubmitting) return
-    if (hasUnsavedNote && !isTerminal) {
-      toast.info("Your resolution note is still here — use Cancel if you want to discard it.", {
-        id: "resolve-note-guard",
-      })
+    const blocked = dismissBlockedBy()
+    if (blocked) {
+      explainBlockedDismiss(blocked)
       return
     }
     onOpenChange(false)
@@ -527,12 +557,8 @@ export function ResolveDisputeDialog({
       <DialogContent
         className="sm:max-w-2xl"
         showCloseButton={!isSubmitting}
-        onEscapeKeyDown={(e) => {
-          if (isSubmitting || (hasUnsavedNote && !isTerminal)) e.preventDefault()
-        }}
-        onInteractOutside={(e) => {
-          if (isSubmitting || (hasUnsavedNote && !isTerminal)) e.preventDefault()
-        }}
+        onEscapeKeyDown={guardDismiss}
+        onInteractOutside={guardDismiss}
       >
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
@@ -848,18 +874,41 @@ export function ResolveDisputeDialog({
                   const selected = outcome === value
 
                   return (
-                    <label
+                    /**
+                     * A `div` rather than the Transactions dialog's `label`,
+                     * because the refund branch nests its own `RadioGroup`
+                     * inside this card and a `<label>` cannot contain another
+                     * `<label>`. The association is kept explicitly instead —
+                     * `Label htmlFor` on the verdict name — so both levels of
+                     * radio still have a real label, and the whole card stays
+                     * a click target via the handler below.
+                     */
+                    <div
                       key={value}
+                      onClick={() => enabled && setOutcome(value)}
                       className={cn(
                         "flex items-start gap-3 rounded-lg border p-3",
                         enabled ? "cursor-pointer" : "cursor-not-allowed opacity-60",
                         selected && "border-primary bg-primary/5",
                       )}
                     >
-                      <RadioGroupItem value={value} className="mt-0.5" disabled={!enabled} />
+                      <RadioGroupItem
+                        id={`verdict-${value}`}
+                        value={value}
+                        className="mt-0.5"
+                        disabled={!enabled}
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-baseline justify-between gap-3">
-                          <p className="text-sm font-semibold text-foreground">{cfg.label}</p>
+                          <Label
+                            htmlFor={`verdict-${value}`}
+                            className={cn(
+                              "text-sm font-semibold text-foreground",
+                              enabled ? "cursor-pointer" : "cursor-not-allowed",
+                            )}
+                          >
+                            {cfg.label}
+                          </Label>
                           {enabled && (
                             <p
                               className={cn(
@@ -908,14 +957,18 @@ export function ResolveDisputeDialog({
                               onValueChange={(v) => setRefundMode(v as "full" | "partial")}
                               aria-label="Refund amount"
                             >
-                              <div
+                              <label
+                                htmlFor="refund-mode-full"
                                 className={cn(
                                   "flex cursor-pointer items-start gap-3 rounded-lg border p-2.5",
                                   refundMode === "full" && "border-primary bg-primary/5",
                                 )}
-                                onClick={() => setRefundMode("full")}
                               >
-                                <RadioGroupItem value="full" className="mt-0.5" />
+                                <RadioGroupItem
+                                  id="refund-mode-full"
+                                  value="full"
+                                  className="mt-0.5"
+                                />
                                 <div className="min-w-0">
                                   <p className="text-sm font-semibold text-foreground">
                                     Full refund
@@ -925,15 +978,19 @@ export function ResolveDisputeDialog({
                                     the client&apos;s original payment method.
                                   </p>
                                 </div>
-                              </div>
-                              <div
+                              </label>
+                              <label
+                                htmlFor="refund-mode-partial"
                                 className={cn(
                                   "flex cursor-pointer items-start gap-3 rounded-lg border p-2.5",
                                   refundMode === "partial" && "border-primary bg-primary/5",
                                 )}
-                                onClick={() => setRefundMode("partial")}
                               >
-                                <RadioGroupItem value="partial" className="mt-0.5" />
+                                <RadioGroupItem
+                                  id="refund-mode-partial"
+                                  value="partial"
+                                  className="mt-0.5"
+                                />
                                 <div className="min-w-0 flex-1">
                                   <p className="text-sm font-semibold text-foreground">
                                     Partial refund
@@ -963,12 +1020,12 @@ export function ResolveDisputeDialog({
                                     </div>
                                   )}
                                 </div>
-                              </div>
+                              </label>
                             </RadioGroup>
                           </div>
                         )}
                       </div>
-                    </label>
+                    </div>
                   )
                 })}
               </RadioGroup>

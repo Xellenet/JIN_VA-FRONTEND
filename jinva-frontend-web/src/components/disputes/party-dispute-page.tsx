@@ -40,6 +40,7 @@ import {
   Scale,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch, apiFetchWithMessage } from "@/lib/api"
 import { cn, formatCurrency } from "@/lib/utils"
 import {
@@ -70,10 +71,13 @@ import { PartyDisputeSkeleton } from "@/components/disputes/party-dispute-skelet
  *
  * Two rules this file exists to keep:
  *
- *  1. **Every string keys on `viewerRole`, never on the viewer's dashboard
- *     role.** Either party can file, so an artisan can be the raiser. Only the
- *     *money* lines legitimately key on which side of the booking the viewer
- *     is on — a refund goes to the client whoever filed.
+ *  1. **Every string keys on `viewerRole`, never on the route that mounted
+ *     this component.** Either party can file, so an artisan can be the
+ *     raiser. Only the *money* lines legitimately key on which side of the
+ *     booking the viewer is on — a refund goes to the client whoever filed —
+ *     and that side comes from the authenticated account the server returned,
+ *     never from the URL prefix (security-report.md F1). The `role` prop is
+ *     for navigation and nothing else.
  *  2. **Nothing is inferred that the payload doesn't carry.** The party read
  *     exposes no payment status and no counterparty summary, so there is no
  *     "the payment is Withheld" line and no Message button here. A party whose
@@ -154,6 +158,11 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
   // stay the two-line files the SupportPage precedent sets.
   const params = useParams<{ id: string }>()
   const disputeId = Array.isArray(params?.id) ? params.id[0] : params?.id
+
+  // The signed-in account as the *server* described it (`GET /users/me` via
+  // AuthContext) — the only trustworthy answer to "which side of this booking
+  // am I on?". See `viewerSide` below.
+  const { user: authUser } = useAuth()
 
   const [dispute, setDispute] = useState<PartyDispute | null>(null)
   const [state, setState] = useState<"loading" | "ready" | "unavailable" | "error">("loading")
@@ -266,9 +275,59 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
   // Which side of the *booking* the viewer is on. Used only for the money
   // lines — a refund goes to the client and a release to the artisan, whoever
   // happened to file.
-  const viewerIsClient = role === "user"
-  /** The other party's role, which is simply the opposite of the viewer's. */
-  const otherPartyRoleLabel = viewerIsClient ? "Artisan" : "Client"
+  //
+  // This used to read `role === "user"`, i.e. it took "was I the one refunded?"
+  // from the URL prefix of the route wrapper that mounted the component
+  // (security-report.md F1). The middleware role gate and the server-side
+  // scoping of the read both hold today, so it was never wrong — but the one
+  // sentence on this page whose whole job is telling someone whether they got
+  // their money back should not rest on a client-side fact that a third mount
+  // point or a relaxed guard could silently flip.
+  //
+  // So it comes from server-supplied facts only, and from two of them that
+  // have to agree:
+  //
+  //  - `authUser.role` — the signed-in account's own role from `/users/me`.
+  //    Only a CUSTOMER account can create a booking (`POST /bookings` is
+  //    `@Roles(Role.CUSTOMER)`), so on any booking the client is the customer
+  //    account and the other side is the artisan.
+  //  - `viewerRole` vs `raisedBy.id` — the server's answer to "did you file
+  //    this?" checked against its answer to "who filed it?". If those two
+  //    disagree, the account AuthContext is holding is not the account this
+  //    payload was scoped to, so no claim about *whose* money moved is safe.
+  //
+  // When either is missing or they disagree, the side is `unknown` and the
+  // money lines fall back to their impersonal phrasing, which is true for
+  // both parties. Nothing is guessed.
+  const authUserId = authUser ? Number(authUser.id) : null
+  const identityMatchesPayload =
+    authUserId != null &&
+    Number.isFinite(authUserId) &&
+    dispute.raisedBy?.id != null &&
+    (dispute.raisedBy.id === authUserId) === isRaiser
+
+  const viewerSide: "client" | "artisan" | "unknown" = !identityMatchesPayload
+    ? "unknown"
+    : authUser?.role === "user"
+      ? "client"
+      : authUser?.role === "artisan"
+        ? "artisan"
+        : "unknown"
+
+  const viewerIsClient = viewerSide === "client"
+
+  /**
+   * How to head the other party's response when we have no name for them —
+   * the party read carries no counterparty summary, so a purged or
+   * not-yet-responded counterparty has none. Keyed on the viewer's own side,
+   * with a side-neutral form for when that isn't known.
+   */
+  const otherPartyResponseHeading =
+    viewerSide === "client"
+      ? "Artisan's response"
+      : viewerSide === "artisan"
+        ? "Client's response"
+        : "Their response"
 
   const heading = isRaiser ? "Your dispute" : "Dispute filed against you"
   const claimHeading = isRaiser
@@ -331,6 +390,12 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
    * of the booking the viewer is on. The "to you" variants put the amount in
    * the emphasis position; the other side's variants read as a sentence, since
    * it is somebody else's money moving.
+   *
+   * Only a *known* side earns a "to you", and each side is asked for
+   * explicitly rather than inferred from the negation of the other: the
+   * impersonal line is factually true for either reader, so it is the right
+   * answer whenever `viewerSide` is `unknown`, and claiming a refund reached
+   * someone's account is not.
    */
   type MoneyLine =
     | { kind: "to-you"; label: string; amount: string }
@@ -345,9 +410,9 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
         : { kind: "about-them", amount: formatCurrency(amount), tail: " was refunded to the client" }
     }
     if (dispute.moneyAction === "RELEASE" && amount != null) {
-      return viewerIsClient
-        ? { kind: "about-them", amount: formatCurrency(amount), tail: " was released to the artisan" }
-        : { kind: "to-you", label: "Released to you:", amount: formatCurrency(amount) }
+      return viewerSide === "artisan"
+        ? { kind: "to-you", label: "Released to you:", amount: formatCurrency(amount) }
+        : { kind: "about-them", amount: formatCurrency(amount), tail: " was released to the artisan" }
     }
     // Includes every MUTUAL verdict, and a resolved dispute whose amount is
     // absent — no amount and no zero is ever shown.
@@ -588,7 +653,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
                   {isRaiser
                     ? responderFirst
                       ? `${responderFirst}'s response`
-                      : `${otherPartyRoleLabel}'s response`
+                      : otherPartyResponseHeading
                     : "Your response"}
                 </h3>
               </div>
@@ -599,7 +664,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
                     {isRaiser
                       ? responderFirst
                         ? `${responderFirst}'s response`
-                        : `${otherPartyRoleLabel}'s response`
+                        : otherPartyResponseHeading
                       : "Your response"}
                     <span className="font-normal text-muted-foreground">
                       · {fmtDate(dispute.respondedAt)}
@@ -623,7 +688,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
                   <MessageSquare className="h-4 w-4 text-primary" />
-                  {otherPartyRoleLabel}&apos;s response
+                  {otherPartyResponseHeading}
                 </h3>
               </div>
               <CardContent className="p-5">

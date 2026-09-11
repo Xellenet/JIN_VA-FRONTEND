@@ -688,7 +688,13 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
                   <MessageSquare className="h-4 w-4 text-primary" />
-                  {otherPartyResponseHeading}
+                  {/* Whose response is missing depends on who is reading. To a
+                      counterparty this block is about their own silence, so
+                      heading it with the other party's role told an artisan
+                      the *client* had failed to respond — when the client is
+                      the raiser and never had a response to give
+                      (qa-report.md QA-DC3-01). */}
+                  {isRaiser ? otherPartyResponseHeading : "Your response"}
                 </h3>
               </div>
               <CardContent className="p-5">
@@ -700,7 +706,13 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
                   <p className="text-sm text-muted-foreground">
                     {isTerminal
                       ? "No response was submitted before this dispute was decided."
-                      : `${raiserFirst && !isRaiser ? raiserFirst : "This person"} hasn't responded yet.`}
+                      : isRaiser
+                        ? // The party read carries no counterparty summary, so
+                          // the raiser has no name to put here until the other
+                          // side actually responds — the sanctioned name-free
+                          // variant of DC3.4's line (api-contract.md §3.2).
+                          "This person hasn't responded yet."
+                        : "You haven't responded yet."}
                   </p>
                 </div>
               </CardContent>

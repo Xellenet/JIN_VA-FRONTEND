@@ -204,35 +204,11 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
 
   if (state === "loading") return <PartyDisputeSkeleton />
 
-  if (state === "unavailable" || !dispute) {
-    return (
-      <div className="space-y-6">
-        {backButton}
-        <Card>
-          <Empty className="border-0 py-16">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Scale className="text-muted-foreground" />
-              </EmptyMedia>
-              <EmptyTitle>This dispute isn&apos;t available</EmptyTitle>
-              <EmptyDescription>
-                It may have been removed, or it isn&apos;t one of yours.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent className="flex-row justify-center gap-2">
-              <Button variant="outline" className="bg-transparent" asChild>
-                <Link href={backHref}>{backLabel}</Link>
-              </Button>
-              <Button variant="ghost" asChild>
-                <Link href={supportHref}>Get help</Link>
-              </Button>
-            </EmptyContent>
-          </Empty>
-        </Card>
-      </div>
-    )
-  }
-
+  // The load-failure state is checked BEFORE the unavailable one: on a first
+  // load `dispute` is always null, so the `|| !dispute` guard below used to
+  // swallow every 5xx and network error and tell a party their dispute was
+  // gone when the API had merely hiccuped — with the retry affordance DC3.7
+  // asks for sitting in a branch nothing could reach.
   if (state === "error") {
     return (
       <div className="space-y-6">
@@ -244,7 +220,12 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
                 <AlertTriangle className="text-muted-foreground" />
               </EmptyMedia>
               <EmptyTitle>Couldn&apos;t load this dispute</EmptyTitle>
-              <EmptyDescription>Something went wrong on our end.</EmptyDescription>
+              {/* Specific and actionable: names what failed and what to do
+                  about it. Never "Something went wrong" (DC3.7) — least of all
+                  on the page a party came to for news about their money. */}
+              <EmptyDescription>
+                We couldn&apos;t reach JinVa to load it. Check your connection and try again.
+              </EmptyDescription>
             </EmptyHeader>
             <EmptyContent className="flex-row justify-center gap-2">
               <Button
@@ -253,6 +234,35 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
                 onClick={() => disputeId && load(disputeId)}
               >
                 Try Again
+              </Button>
+              <Button variant="ghost" asChild>
+                <Link href={supportHref}>Get help</Link>
+              </Button>
+            </EmptyContent>
+          </Empty>
+        </Card>
+      </div>
+    )
+  }
+
+  if (state === "unavailable" || !dispute) {
+    return (
+      <div className="space-y-6">
+        {backButton}
+        <Card>
+          <Empty className="border-0 py-16">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Scale className="text-muted-foreground" />
+              </EmptyMedia>
+              <EmptyTitle>This dispute isn&apos;t available.</EmptyTitle>
+              <EmptyDescription>
+                It may have been removed, or it isn&apos;t one of yours.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent className="flex-row justify-center gap-2">
+              <Button variant="outline" className="bg-transparent" asChild>
+                <Link href={backHref}>{backLabel}</Link>
               </Button>
               <Button variant="ghost" asChild>
                 <Link href={supportHref}>Get help</Link>

@@ -31,7 +31,6 @@ import {
   ImageIcon,
   UserRound,
   Loader2,
-  DollarSign,
   MessageSquare,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
@@ -213,18 +212,26 @@ export default function ArtisanProfile() {
 
     setIsSaving(true)
     try {
-      const [, savedProfile] = await Promise.all([
-        apiFetch("/users/me", {
-          method: "PATCH",
-          // `email` is deliberately absent: `UpdateMeDto` doesn't accept it and
-          // the API's ValidationPipe rejects unknown properties, so including it
-          // made every save on this page fail with "property email should not
-          // exist" — while the artisan-profile half of this Promise.all quietly
-          // succeeded, so fields saved but the page reported an error and never
-          // applied the response.
-          body: JSON.stringify({ firstname, lastname, phoneNumber: phone }),
-        }),
-        apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
+      // FE-4: sequential, never `Promise.all`. Fired in parallel, a rejected
+      // user-record PATCH (the reported repro is a phone number already in use)
+      // still left the artisan-profile write committed — so the artisan was told
+      // the save failed while half of it had silently landed, possibly moving
+      // them into or out of customer search. Awaiting this one first means the
+      // second write is simply never sent when this one fails, which makes the
+      // common case genuinely all-or-nothing. Same shape as
+      // /dashboard/artisan/settings's handleSave, which is the in-repo precedent.
+      await apiFetch("/users/me", {
+        method: "PATCH",
+        // `email` is deliberately absent: `UpdateMeDto` doesn't accept it and
+        // the API's ValidationPipe rejects unknown properties, so including it
+        // made every save on this page fail with "property email should not
+        // exist".
+        body: JSON.stringify({ firstname, lastname, phoneNumber: phone }),
+      })
+
+      let savedProfile: BackendArtisanProfile
+      try {
+        savedProfile = await apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
           method: "PATCH",
           body: JSON.stringify({
             bio: bio || undefined,
@@ -233,8 +240,33 @@ export default function ArtisanProfile() {
             hourlyRate: hourlyRate ? Number(hourlyRate) : undefined,
             location: location || undefined,
           }),
-        }),
-      ])
+        })
+      } catch (profileErr: unknown) {
+        // The rarer reverse case: contact details are already committed, so this
+        // is not "the save failed" — it's half-saved, and the toast says so
+        // plainly (requirements.md Open Question 2). Deliberately no compensating
+        // write back to the previous contact details: a rollback can itself fail,
+        // and a failed rollback leaves a worse state than an honest message.
+        //
+        // `artisanProfile` is left untouched on purpose — the completeness
+        // checklist and the hero badge must keep reporting what is actually
+        // stored, so a failed save can never show the artisan as having moved
+        // into or out of search. `refreshUser` is still called: the contact half
+        // DID land, and the hero reads name/phone off the auth context.
+        //
+        // The professional inputs keep the artisan's typed values rather than
+        // being reverted, because the message asks them to try again and
+        // retyping is not a retry.
+        await refreshUser()
+        const reason = profileErr instanceof Error ? profileErr.message : ""
+        toast.error(
+          reason
+            ? `Your contact details were saved, but your professional details couldn't be: ${reason}`
+            : "Your contact details were saved, but your professional details couldn't be — please try again.",
+        )
+        return
+      }
+
       // C2: the PATCH response carries fresh `isProfileComplete` +
       // `missingFields` (api-contract.md), so the checklist and the hero badge
       // update straight from the save — no follow-up GET, no hard refresh.
@@ -247,6 +279,8 @@ export default function ArtisanProfile() {
           : "Profile updated successfully.",
       )
     } catch (err: unknown) {
+      // Only the user-record half can reach this now, so nothing was committed.
+      // The message is the backend's own (e.g. "Phone number already in use").
       toast.error(err instanceof Error ? err.message : "Failed to save changes.")
     } finally {
       setIsSaving(false)
@@ -507,18 +541,19 @@ export default function ArtisanProfile() {
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="hourlyRate">Hourly Rate (GH₵)</Label>
-                            <div className="relative">
-                              <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <Input
-                                id="hourlyRate"
-                                type="number"
-                                min="0"
-                                className="pl-10"
-                                value={hourlyRate}
-                                onChange={(e) => setHourlyRate(e.target.value)}
-                                placeholder="e.g., 50"
-                              />
-                            </div>
+                            {/* No currency icon: lucide's DollarSign renders a
+                                literal "$" next to a field that is in cedis.
+                                The label carries the unit instead — the same
+                                treatment as "Price (GH₵)" on the admin services
+                                form. */}
+                            <Input
+                              id="hourlyRate"
+                              type="number"
+                              min="0"
+                              value={hourlyRate}
+                              onChange={(e) => setHourlyRate(e.target.value)}
+                              placeholder="e.g., 50"
+                            />
                           </div>
                           <div className="space-y-2 md:col-span-2">
                             <Label htmlFor="businessName">Business Name</Label>

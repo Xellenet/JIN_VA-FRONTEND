@@ -208,6 +208,34 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
 }
 
 /**
+ * Same as `apiFetch`, but also surfaces the envelope's `message`.
+ *
+ * `apiFetch` returns `body.data`, which throws the envelope's `message` away.
+ * That is fine for most endpoints, but two dispute surfaces are required to
+ * display the server's own sentence **verbatim** rather than compose a
+ * competing one:
+ *   - `PATCH /admin/disputes/:id/resolve`, whose message already names the
+ *     amount in GH₵ and states that both parties were notified, so
+ *     re-composing it would double-format the money (requirements.md DC1.5);
+ *   - `POST /disputes/:id/respond`, whose success line is the confirmation the
+ *     responding party sees (DC3.4).
+ *
+ * Both return `{ message, data }` from the service, and the global
+ * `ResponseInterceptor` lifts that `message` to the envelope's top level —
+ * where neither `apiFetch` nor `apiFetchWithMeta` could reach it.
+ */
+export async function apiFetchWithMessage<T = unknown>(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<{ data: T; message?: string }> {
+  const body = await apiFetchEnvelope<T>(path, options)
+  return {
+    data: (body?.data !== undefined ? body.data : (body as unknown)) as T,
+    message: typeof body?.message === "string" ? body.message : undefined,
+  }
+}
+
+/**
  * Same as `apiFetch`, but also surfaces the envelope's `meta` block
  * (e.g. `{ total, page, limit, totalPages }` on paginated list endpoints)
  * instead of discarding it. Use this whenever a page needs real

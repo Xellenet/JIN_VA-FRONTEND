@@ -9,8 +9,28 @@ export function naviiAvatar(seed: string, size = 96): string {
   return `https://api.navii.dev/avatar/${encodeURIComponent(seed)}?size=${size}&packs=command-center&style=neutral&mood=serious&tileBg=auto`
 }
 
+/**
+ * The one way money is rendered in this app: GH₵ (Ghana Cedis), thousands
+ * separated, always two decimal places.
+ *
+ * Both options are load-bearing rather than cosmetic:
+ *
+ *  - **The pesewas are padded.** A bare `toLocaleString()` drops trailing
+ *    zeros, so a partial refund of 90.50 rendered on an irreversible confirm
+ *    button as "Refund GH₵ 90.5 to client" (qa-report.md QA-DC1-02). An amount
+ *    that is about to move someone's money has to read exactly as it will be
+ *    charged.
+ *  - **The locale is pinned.** A bare `toLocaleString()` follows whatever
+ *    locale the renderer happens to run under — which is the server's on the
+ *    first paint and the browser's afterwards, so the same cedi amount could
+ *    be grouped two different ways in one session. `en-GB` is the convention
+ *    the rest of the app already formats dates with.
+ */
 export function formatCurrency(amount: number | string): string {
-  return `GH₵ ${Number(amount).toLocaleString()}`
+  return `GH₵ ${Number(amount).toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1").replace(/\/api\/v1\/?$/, "")

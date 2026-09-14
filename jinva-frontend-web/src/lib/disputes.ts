@@ -42,14 +42,34 @@ export interface MyDisputeSummary {
   id: number
   status: string
   booking?: { id: number }
+  /**
+   * Which side of the dispute the caller is on. `GET /disputes/my` returns
+   * disputes filed **against** the caller as well as ones they filed, so this
+   * is what decides whether the strip may call it "your report".
+   */
+  viewerRole?: "RAISER" | "COUNTERPARTY"
+  /** True only when the caller is the counterparty and still owes a response. */
+  canRespond?: boolean
 }
 
 /**
- * Whether this user has already filed on a given booking. The backend enforces
- * one dispute per booking *per raiser* and rejects a second attempt with a
- * message rather than an id, so both the entry point (before offering the
- * action) and the dialog (recovering from that rejection) have to resolve it
- * the same way — from the user's own dispute list.
+ * Which dispute on a booking this viewer should be shown.
+ *
+ * The backend enforces one dispute per booking *per raiser* and rejects a
+ * second attempt with a message rather than an id, so both the entry point
+ * (before offering the action) and the raise dialog (recovering from that
+ * rejection) resolve it the same way — from the caller's own dispute list.
+ *
+ * The selection is deliberate rather than incidental. Both parties may each
+ * file on one booking, and since `GET /disputes/my` widened to include
+ * disputes filed against the caller, a bare `.find()` let **array order**
+ * decide which dispute a viewer was linked to — so a viewer could be sent to
+ * the other party's dispute. The order below is the one DC3.6 requires:
+ *
+ *   1. the dispute this viewer raised, if any;
+ *   2. otherwise the one they can respond to;
+ *   3. otherwise the most recent one they participate in (the list is already
+ *      `createdAt DESC`).
  */
 export async function findMyDisputeForBooking(
   fetcher: (path: string) => Promise<unknown>,
@@ -57,5 +77,13 @@ export async function findMyDisputeForBooking(
 ): Promise<MyDisputeSummary | undefined> {
   const mine = (await fetcher("/disputes/my")) as MyDisputeSummary[] | undefined
   if (!Array.isArray(mine)) return undefined
-  return mine.find((d) => Number(d.booking?.id) === Number(bookingId))
+
+  const onThisBooking = mine.filter((d) => Number(d.booking?.id) === Number(bookingId))
+  if (onThisBooking.length === 0) return undefined
+
+  return (
+    onThisBooking.find((d) => d.viewerRole === "RAISER") ??
+    onThisBooking.find((d) => d.canRespond === true) ??
+    onThisBooking[0]
+  )
 }

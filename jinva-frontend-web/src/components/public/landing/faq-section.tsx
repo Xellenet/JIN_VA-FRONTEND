@@ -13,7 +13,7 @@ import {
  *
  * NONE of the in-dashboard `support-page.tsx` FAQ copy is reused, and the word
  * "Plumbify" appears nowhere. That file also contains claims this page must not
- * repeat: a "10% platform fee", a "3–5 business day" refund window,
+ * repeat: a "10% platform fee", a "5–10 business day" refund window,
  * "insurance confirmation and background checks", and plumbing-only service
  * lists. All eight answers below are written fresh against the PRD.
  *

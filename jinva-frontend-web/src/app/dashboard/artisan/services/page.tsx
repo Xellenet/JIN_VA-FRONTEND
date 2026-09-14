@@ -8,7 +8,12 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search, Wrench, Plus, Minus, Loader2, CheckCircle2 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
+import { formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
+import {
+  readProfileCompleteness,
+  type ProfileCompletenessSource,
+} from "@/components/artisan/profile-completeness"
 
 interface BackendService {
   id: string
@@ -17,7 +22,11 @@ interface BackendService {
   price?: number
 }
 
-interface ArtisanProfile {
+// FE-3: `services` is one of the four fields the search gate reads, so both the
+// add and remove responses carry the recomputed completeness (api-contract.md,
+// C2) — the same two fields the profile and settings pages read off their own
+// save responses.
+interface ArtisanProfile extends ProfileCompletenessSource {
   id: string
   services?: { id: string; name: string }[]
 }
@@ -28,6 +37,10 @@ export default function ArtisanServicesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  // FE-3: what the search gate said about this artisan *before* the next add.
+  // Stays null if the profile fetch fails, which `readProfileCompleteness`
+  // reads as "unknown" — and unknown never earns a visibility claim.
+  const [completeness, setCompleteness] = useState<ProfileCompletenessSource | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -40,6 +53,10 @@ export default function ArtisanServicesPage() {
           : (servicesResult as { items: BackendService[] }).items ?? []
         setAllServices(services)
         setEnrolledIds(new Set(profile.services?.map((s) => s.id) ?? []))
+        setCompleteness({
+          isProfileComplete: profile.isProfileComplete,
+          missingFields: profile.missingFields,
+        })
       })
       .catch(() => toast.error("Could not load services."))
       .finally(() => setIsLoading(false))
@@ -57,10 +74,32 @@ export default function ArtisanServicesPage() {
 
   const handleAdd = async (serviceId: string) => {
     setActionLoading(serviceId)
+    // FE-3: read before the write, because the claim being made is about a
+    // transition — "you are now findable" is only true if they weren't before.
+    const wasIncomplete = readProfileCompleteness(completeness).state === "incomplete"
     try {
-      await apiFetch(`/artisans/me/services/${serviceId}`, { method: "POST" })
+      const saved = await apiFetch<ArtisanProfile>(`/artisans/me/services/${serviceId}`, {
+        method: "POST",
+      })
       setEnrolledIds((prev) => new Set([...prev, serviceId]))
-      toast.success("Service added to your profile.")
+      setCompleteness({
+        isProfileComplete: saved.isProfileComplete,
+        missingFields: saved.missingFields,
+      })
+
+      // Exactly one toast, never the ordinary one stacked with a second. The
+      // visibility variant needs completeness to be *known* on both sides of
+      // the write and to have actually flipped: other gaps still open, an
+      // artisan who was already complete, and a response that doesn't carry
+      // completeness all fall through to the ordinary toast. C2's "render
+      // nothing when unknown" rule applies to this claim too — never guess
+      // whether someone is in customer search.
+      const nowComplete = readProfileCompleteness(saved).state === "complete"
+      toast.success(
+        wasIncomplete && nowComplete
+          ? "Service added — customers can now find you in search."
+          : "Service added to your profile.",
+      )
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to add service.")
     } finally {
@@ -71,11 +110,21 @@ export default function ArtisanServicesPage() {
   const handleRemove = async (serviceId: string) => {
     setActionLoading(serviceId)
     try {
-      await apiFetch(`/artisans/me/services/${serviceId}`, { method: "DELETE" })
+      const saved = await apiFetch<ArtisanProfile>(`/artisans/me/services/${serviceId}`, {
+        method: "DELETE",
+      })
       setEnrolledIds((prev) => {
         const next = new Set(prev)
         next.delete(serviceId)
         return next
+      })
+      // No "you've dropped out of search" message this round (the hero badge and
+      // the checklist already carry that) — but the stored completeness is
+      // updated anyway, so that re-adding a service straight afterwards judges
+      // its transition against the real state rather than a stale one.
+      setCompleteness({
+        isProfileComplete: saved.isProfileComplete,
+        missingFields: saved.missingFields,
       })
       toast.success("Service removed from your profile.")
     } catch (err: unknown) {
@@ -106,7 +155,7 @@ export default function ArtisanServicesPage() {
           <div>
             <h3 className="font-semibold text-foreground">{service.name}</h3>
             {service.price !== undefined && (
-              <p className="text-sm text-muted-foreground">From GH₵ {service.price}</p>
+              <p className="text-sm text-muted-foreground">From {formatCurrency(service.price)}</p>
             )}
           </div>
           {service.description && (

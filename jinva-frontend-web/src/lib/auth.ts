@@ -112,3 +112,59 @@ export function dashboardPathForFrontendRole(role: "admin" | "artisan" | "user")
 export function dashboardPathForRole(role: string): string {
   return dashboardPathForFrontendRole(mapBackendRole(role))
 }
+
+/**
+ * F1: resolves a caller-supplied post-authentication target (`?redirect=`) to
+ * something that can only ever be a path on this origin, falling back to
+ * `fallback` (the role dashboard) for anything else.
+ *
+ * Lives here, beside `dashboardPathForRole`, because the pair *is* the
+ * post-login destination decision: any future surface that grows a `?redirect=`
+ * — signup, the OAuth callback — has to reuse this rather than re-derive a
+ * second, weaker version of it.
+ *
+ * Two independent layers, because the single `startsWith("/") &&
+ * !startsWith("//")` test this replaces was bypassable: browsers resolve a
+ * leading `/\` exactly like `//`, so `?redirect=/\evil.example` passed that
+ * test and then navigated straight off-site, on the one page where a user is
+ * most likely to trust what they are looking at.
+ *
+ *  1. **Textual** — the target must be a rooted path, must not be
+ *     protocol-relative, and must contain no backslash (`/\evil.example`,
+ *     `/\/evil.example`, `\\evil.example`) and no ASCII control character. The
+ *     control-character class is load-bearing, not defensive dressing: the URL
+ *     parser *strips* tab/CR/LF before resolving, so `"/\t/evil.example"` would
+ *     otherwise reach the browser as a protocol-relative URL having passed a
+ *     purely textual `//` check.
+ *  2. **Structural** — whatever survives is resolved against this page's origin
+ *     and its origin compared. An absolute `https://evil.example`, a
+ *     protocol-relative `//evil.example` and a `javascript:` URL all fail here
+ *     too, so a shape nobody enumerated is rejected on its own merits instead
+ *     of relying on layer 1 to have predicted it.
+ *
+ * The return value is rebuilt from the parsed URL rather than passed through,
+ * so the caller navigates to a normalised same-origin path and never to the raw
+ * attacker-controlled string.
+ */
+export function safeInternalRedirect(
+  target: string | null | undefined,
+  fallback: string,
+): string {
+  // Covers both "absent" and "empty" — neither is a destination.
+  if (!target) return fallback
+  if (!target.startsWith("/") || target.startsWith("//")) return fallback
+  if (/[\\\u0000-\u001F\u007F]/.test(target)) return fallback
+
+  // No `location` to compare against (SSR, or the edge middleware that also
+  // imports this module): layer 2 cannot run, so refuse rather than half-check.
+  if (typeof globalThis.location === "undefined") return fallback
+
+  try {
+    const origin = globalThis.location.origin
+    const resolved = new URL(target, origin)
+    if (resolved.origin !== origin) return fallback
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`
+  } catch {
+    return fallback
+  }
+}

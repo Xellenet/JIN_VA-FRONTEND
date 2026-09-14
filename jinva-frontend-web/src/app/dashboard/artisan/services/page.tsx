@@ -19,7 +19,8 @@ interface BackendService {
   id: string
   name: string
   description?: string
-  price?: number
+  /** Null, not absent, when no price is set — `GET /services` returns the column. */
+  price?: number | null
 }
 
 // FE-3: `services` is one of the four fields the search gate reads, so both the
@@ -154,7 +155,11 @@ export default function ArtisanServicesPage() {
         <div className="space-y-3 p-5">
           <div>
             <h3 className="font-semibold text-foreground">{service.name}</h3>
-            {service.price !== undefined && (
+            {/* `!= null` on purpose: the API returns `price: null` for a service
+                with no set price, and `!== undefined` let that through — which
+                formats as "From GH₵ 0.00" and states a price of zero that
+                nobody set. No price means no price line. */}
+            {service.price != null && (
               <p className="text-sm text-muted-foreground">From {formatCurrency(service.price)}</p>
             )}
           </div>

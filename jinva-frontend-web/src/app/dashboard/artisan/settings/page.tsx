@@ -374,7 +374,19 @@ function ArtisanSettingsContent() {
     try {
       await apiFetch("/auth/change-password", {
         method: "POST",
-        body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
+        // FE-1: `confirmNewPassword` is required by the endpoint's DTO
+        // (`ChangePasswordDto extends ResetPasswordDto`), which re-checks the
+        // match server-side. Omitting it made every attempt 400 with the
+        // validation array joined into a toast that blamed the password's
+        // strength, and the password never changed. The form already collects
+        // the value for the client-side check above — it just has to be sent.
+        // Kept identical to /dashboard/user/settings so the two pages can't
+        // drift on the request shape.
+        body: JSON.stringify({
+          currentPassword: currentPass,
+          newPassword: newPass,
+          confirmNewPassword: confirmPass,
+        }),
       })
       toast.success("Password updated.")
       setCurrentPass("")

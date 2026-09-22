@@ -162,6 +162,13 @@ interface DisputeDetail extends AdminDispute {
   work?: { service?: { id: number; name: string } | null } | null
   siblingDisputes?: SiblingDispute[]
   moneyOptions?: MoneyOptions
+  /**
+   * The admin who ruled or closed it. Admin-only by construction — the party
+   * DTO exposes no admin identity at all — and the one fact this surface was
+   * missing when a ruling is refused because another admin settled the dispute
+   * first (security-report.md F2).
+   */
+  resolvedBy?: DisputeParty | null
 }
 
 type Verdict = "REFUND_CLIENT" | "RELEASE_ARTISAN" | "MUTUAL"
@@ -183,6 +190,39 @@ const VERDICTS: { value: Verdict; sub: string }[] = [
 
 const RESOLUTION_MIN = 10
 const RESOLUTION_MAX = 2000
+
+/**
+ * The one resolve failure that means *the dispute moved on without you*:
+ * another admin resolved or closed it while this ruling was in flight, so
+ * their decision stands and this ruling was never applied. It is the only
+ * failure where the server state has definitely changed, so it is the only one
+ * that must refetch rather than invite a retry.
+ *
+ * Matched as a **code**, not by reading the message. The backend's prose for
+ * this case has already been reworded once, and the reword dropped the word
+ * the recovery branch below used to match on — which silently moved this case
+ * into the generic "nothing changed, try again" branch while the dispute had
+ * in fact been settled by someone else (security-report.md F2).
+ *
+ * Carried as `meta.error` on the error envelope, which `ApiError.code` reads —
+ * the same convention as `DISPUTE_RATE_LIMIT_EXCEEDED` (api-contract.md §6.5).
+ */
+const SETTLED_BY_OTHER_ADMIN_CODE = "DISPUTE_SETTLED_BY_OTHER_ADMIN"
+
+/**
+ * Prose fallback for the same class of failure, kept so the recovery works
+ * against a server that doesn't send the code above yet — and so the two older
+ * messages that never carried a code ("Another admin resolved it first — reload
+ * to see their ruling.", "Dispute is already CLOSED.") keep landing in the
+ * refetch branch exactly as they do today.
+ *
+ * The code is the contract; this is the bridge. Deliberately anchored on
+ * phrases that only ever describe another admin having settled the dispute, so
+ * it cannot swallow the ordinary rolled-back-cleanly failure, whose message
+ * says the dispute "has NOT been resolved and is still actionable".
+ */
+const SETTLED_BY_OTHER_ADMIN_PROSE =
+  /already\s+(resolved|closed)|another admin\s+(resolved|closed)|resolved or closed this dispute/i
 
 const STEP_LABELS: Record<1 | 2 | 3, string> = {
   1: "Review",
@@ -377,6 +417,16 @@ export function ResolveDisputeDialog({
   const raiserRoleLabel =
     raiserIsClient === undefined ? null : raiserIsClient ? "Client" : "Artisan"
 
+  /**
+   * Who settled it, for the read-only summary. This matters most on the one
+   * path that lands here involuntarily: a ruling refused because another admin
+   * resolved or closed the dispute mid-flight (security-report.md F2). Naming
+   * them turns "your decision wasn't applied" into "this is who decided, and
+   * when". Admin-only data on an admin-only surface — the party read carries no
+   * admin identity at all.
+   */
+  const settledByName = current?.resolvedBy ? partyName(current.resolvedBy) : null
+
   const categoryLabel = getDisputeCategoryLabel(current?.category) ?? "Other"
   const serviceName = detail?.work?.service?.name
   const statusCfg = getDisputeStatusConfig(current?.status ?? "OPEN")
@@ -477,12 +527,21 @@ export function ResolveDisputeDialog({
       await loadDetail(dispute.id, { notify: true })
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0
+      const code = err instanceof ApiError ? err.code : undefined
       const message = err instanceof Error ? err.message : ""
 
-      // Another admin won the conditional-claim race. Reload rather than
-      // retry — only the winner ever reached the money action (DC1.6).
-      if (status === 400 && /already\s+(resolved|closed)/i.test(message)) {
-        toast.error(message)
+      // Another admin settled this dispute — either they won the conditional
+      // claim before this ruling reached the money action (DC1.6), or they
+      // closed the dispute during the provider round-trip, in which case the
+      // rollback deliberately left their decision standing. Both mean the same
+      // thing to this dialog: the dispute really did change server-side and
+      // this ruling was not applied, so refetch and show the admin what it
+      // actually says now instead of offering a retry that can only fail.
+      if (
+        code === SETTLED_BY_OTHER_ADMIN_CODE ||
+        (status === 400 && SETTLED_BY_OTHER_ADMIN_PROSE.test(message))
+      ) {
+        toast.error(message || "Another admin settled this dispute first.")
         await loadDetail(dispute.id, { notify: true })
         return
       }
@@ -496,8 +555,11 @@ export function ResolveDisputeDialog({
       }
 
       // Everything else — including a money action that failed after the
-      // ruling was claimed and then rolled back — leaves the dispute
-      // unresolved and still actionable. No optimistic anything.
+      // ruling was claimed and was then rolled back cleanly — leaves the
+      // dispute exactly as it was before the attempt: unresolved, still
+      // actionable, and safe to retry from this dialog. The one case where
+      // that is *not* true is handled above, on its own code. No optimistic
+      // anything.
       toast.error(message || "Couldn't record the outcome. Please try again.")
     } finally {
       setIsSubmitting(false)
@@ -827,6 +889,7 @@ export function ResolveDisputeDialog({
                   )}
                   <p className="text-xs text-muted-foreground">
                     Resolved {fmtDate(current.resolvedAt)}
+                    {settledByName ? ` by ${settledByName}` : ""}
                   </p>
                 </>
               ) : (
@@ -843,6 +906,7 @@ export function ResolveDisputeDialog({
                   )}
                   <p className="text-xs text-muted-foreground">
                     Closed {fmtDate(current.resolvedAt)}
+                    {settledByName ? ` by ${settledByName}` : ""}
                   </p>
                 </>
               )}

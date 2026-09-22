@@ -13,6 +13,7 @@ import { Eye, EyeOff } from "lucide-react"
 import {
   persistAuthTokens,
   dashboardPathForRole,
+  safeInternalRedirect,
   ACCOUNT_DELETED_PARAM,
   RESTORABLE_UNTIL_PARAM,
 } from "@/lib/auth"
@@ -96,16 +97,17 @@ export function LoginForm() {
    * The post-authentication redirect, shared by password login and by a
    * successful restore — a restore issues the same tokens and cookies as
    * `POST /auth/login`, so it is treated as a completed login (api-contract.md).
+   *
+   * F1: the `?redirect=` target is attacker-controllable (it's just a link
+   * someone can send), so it is never navigated to as given — `safeInternalRedirect`
+   * reduces it to a same-origin path or discards it for the role dashboard. The
+   * guard lives in lib/auth.ts beside `dashboardPathForRole` so this decision
+   * can't be re-derived, differently and more weakly, by the next surface that
+   * grows a `?redirect=`.
    */
   const redirectAfterLogin = (role: string | undefined) => {
-    const redirectTarget = searchParams.get("redirect")
     const roleDashboard = dashboardPathForRole(role ?? "")
-    const destination =
-      redirectTarget?.startsWith("/") && !redirectTarget.startsWith("//")
-        ? redirectTarget
-        : roleDashboard
-
-    globalThis.location.href = destination
+    globalThis.location.href = safeInternalRedirect(searchParams.get("redirect"), roleDashboard)
   }
 
   const handleRestoreAccount = async () => {

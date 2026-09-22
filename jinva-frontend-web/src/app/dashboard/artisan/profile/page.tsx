@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -31,8 +31,8 @@ import {
   ImageIcon,
   UserRound,
   Loader2,
-  DollarSign,
   MessageSquare,
+  AlertTriangle,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
@@ -82,6 +82,33 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
 }
 
+/**
+ * FE-2: the fields `PATCH /users/me/artisan-profile` owns. When that half of
+ * the save is rejected while the contact half has already committed, these are
+ * the inputs holding a value the server does not have — so they are the ones
+ * that get marked.
+ */
+type ProfessionalField = "bio" | "location" | "experienceYears" | "hourlyRate" | "businessName"
+
+/**
+ * FE-2: an amber ring on an input whose value is not what is stored.
+ *
+ * Deliberately not `aria-invalid`: nothing the artisan typed is invalid, and a
+ * screen reader announcing "invalid entry" would be wrong. The state is "not
+ * saved", which the note below the field says in words and `aria-describedby`
+ * ties to the input.
+ */
+const UNSAVED_FIELD_CLASS = "border-warning focus-visible:border-warning focus-visible:ring-warning/30"
+
+function UnsavedFieldNote({ id }: { id: string }) {
+  return (
+    <p id={id} className="flex items-center gap-1.5 text-xs font-medium text-warning">
+      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+      Not saved yet
+    </p>
+  )
+}
+
 export default function ArtisanProfile() {
   const { user, refreshUser } = useAuth()
 
@@ -105,6 +132,13 @@ export default function ArtisanProfile() {
   const [reviewsTotalPages, setReviewsTotalPages] = useState(1)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+
+  // FE-2: set when the contact half of a save committed and the professional
+  // half was rejected. That is the only outcome where the page shows a MIX of
+  // stored and unstored values — on a first-half failure nothing is sent at
+  // all and the toast says so — so it is the only one that needs the fields
+  // themselves to carry the distinction. Cleared by the next successful save.
+  const [professionalHalfUnsaved, setProfessionalHalfUnsaved] = useState(false)
 
   // C2: controlled so a completeness row's action can switch to the About tab
   // before scrolling to the input it points at — three of the four required
@@ -208,23 +242,60 @@ export default function ArtisanProfile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /**
+   * FE-2: which professional inputs currently differ from what the server
+   * actually holds, judged against `artisanProfile` — which the failure path
+   * deliberately leaves untouched, so it is still the stored truth.
+   *
+   * Computed rather than captured at failure time, so editing a field back to
+   * its stored value clears that field's marker on its own, and a field the
+   * artisan never touched is never marked. The two numeric fields compare
+   * numerically: the API returns `hourlyRate` as `95.00` while the input holds
+   * `95`, which is the same rate and must not read as unsaved.
+   */
+  const unsavedFields = useMemo<Set<ProfessionalField>>(() => {
+    const marked = new Set<ProfessionalField>()
+    if (!professionalHalfUnsaved) return marked
+
+    const differsAsText = (typed: string, stored: string | undefined) => typed.trim() !== (stored ?? "").trim()
+    const differsAsNumber = (typed: string, stored: number | undefined) => {
+      if (typed.trim() === "") return stored != null
+      return stored == null || Number(typed) !== Number(stored)
+    }
+
+    if (differsAsText(bio, artisanProfile?.bio)) marked.add("bio")
+    if (differsAsText(location, artisanProfile?.location)) marked.add("location")
+    if (differsAsText(businessName, artisanProfile?.businessName)) marked.add("businessName")
+    if (differsAsNumber(experienceYears, artisanProfile?.experienceYears)) marked.add("experienceYears")
+    if (differsAsNumber(hourlyRate, artisanProfile?.hourlyRate)) marked.add("hourlyRate")
+    return marked
+  }, [professionalHalfUnsaved, artisanProfile, bio, location, businessName, experienceYears, hourlyRate])
+
   const handleSaveProfile = async () => {
     const wasIncomplete = readProfileCompleteness(artisanProfile).state === "incomplete"
 
     setIsSaving(true)
     try {
-      const [, savedProfile] = await Promise.all([
-        apiFetch("/users/me", {
-          method: "PATCH",
-          // `email` is deliberately absent: `UpdateMeDto` doesn't accept it and
-          // the API's ValidationPipe rejects unknown properties, so including it
-          // made every save on this page fail with "property email should not
-          // exist" — while the artisan-profile half of this Promise.all quietly
-          // succeeded, so fields saved but the page reported an error and never
-          // applied the response.
-          body: JSON.stringify({ firstname, lastname, phoneNumber: phone }),
-        }),
-        apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
+      // FE-4: sequential, never `Promise.all`. Fired in parallel, a rejected
+      // user-record PATCH (the reported repro is a phone number already in use)
+      // still left the artisan-profile write committed — so the artisan was told
+      // the save failed while half of it had silently landed, possibly moving
+      // them into or out of customer search. Awaiting this one first means the
+      // second write is simply never sent when this one fails, which makes the
+      // common case genuinely all-or-nothing. Same shape as
+      // /dashboard/artisan/settings's handleSave, which is the in-repo precedent.
+      await apiFetch("/users/me", {
+        method: "PATCH",
+        // `email` is deliberately absent: `UpdateMeDto` doesn't accept it and
+        // the API's ValidationPipe rejects unknown properties, so including it
+        // made every save on this page fail with "property email should not
+        // exist".
+        body: JSON.stringify({ firstname, lastname, phoneNumber: phone }),
+      })
+
+      let savedProfile: BackendArtisanProfile
+      try {
+        savedProfile = await apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
           method: "PATCH",
           body: JSON.stringify({
             bio: bio || undefined,
@@ -233,12 +304,45 @@ export default function ArtisanProfile() {
             hourlyRate: hourlyRate ? Number(hourlyRate) : undefined,
             location: location || undefined,
           }),
-        }),
-      ])
+        })
+      } catch (profileErr: unknown) {
+        // The rarer reverse case: contact details are already committed, so this
+        // is not "the save failed" — it's half-saved, and the toast says so
+        // plainly (requirements.md Open Question 2). Deliberately no compensating
+        // write back to the previous contact details: a rollback can itself fail,
+        // and a failed rollback leaves a worse state than an honest message.
+        //
+        // `artisanProfile` is left untouched on purpose — the completeness
+        // checklist and the hero badge must keep reporting what is actually
+        // stored, so a failed save can never show the artisan as having moved
+        // into or out of search. `refreshUser` is still called: the contact half
+        // DID land, and the hero reads name/phone off the auth context.
+        //
+        // The professional inputs keep the artisan's typed values rather than
+        // being reverted, because the message asks them to try again and
+        // retyping is not a retry. FE-2: they are marked instead — an amber
+        // ring and a "Not saved yet" note on each field that differs from
+        // what is stored — so the screen distinguishes the two committed
+        // contact fields from the uncommitted professional ones, and someone
+        // who reloads later cannot lose text they believed was saved.
+        setProfessionalHalfUnsaved(true)
+        await refreshUser()
+        const reason = profileErr instanceof Error ? profileErr.message : ""
+        toast.error(
+          reason
+            ? `Your contact details were saved, but your professional details couldn't be: ${reason}`
+            : "Your contact details were saved, but your professional details couldn't be — please try again.",
+        )
+        return
+      }
+
       // C2: the PATCH response carries fresh `isProfileComplete` +
       // `missingFields` (api-contract.md), so the checklist and the hero badge
       // update straight from the save — no follow-up GET, no hard refresh.
       setArtisanProfile((prev) => (prev ? { ...prev, ...savedProfile } : savedProfile))
+      // FE-2: everything on this form is now stored, so any marker from an
+      // earlier half-failure is cleared.
+      setProfessionalHalfUnsaved(false)
       await refreshUser()
       const nowComplete = readProfileCompleteness(savedProfile).state === "complete"
       toast.success(
@@ -247,6 +351,8 @@ export default function ArtisanProfile() {
           : "Profile updated successfully.",
       )
     } catch (err: unknown) {
+      // Only the user-record half can reach this now, so nothing was committed.
+      // The message is the backend's own (e.g. "Phone number already in use").
       toast.error(err instanceof Error ? err.message : "Failed to save changes.")
     } finally {
       setIsSaving(false)
@@ -460,18 +566,24 @@ export default function ArtisanProfile() {
                           </div>
                         </div>
                         <div className="space-y-2 md:col-span-2">
+                          {/* Lives in this card for layout reasons, but it is
+                              saved by the artisan-profile PATCH — so it is
+                              marked with the professional fields, not the
+                              contact ones. */}
                           <Label htmlFor="location">Service Area / Location</Label>
                           <div className="relative">
                             <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <Textarea
                               id="location"
-                              className="pl-10"
+                              className={`pl-10 ${unsavedFields.has("location") ? UNSAVED_FIELD_CLASS : ""}`}
                               value={location}
                               onChange={(e) => setLocation(e.target.value)}
                               placeholder="e.g., Accra, Greater Accra Region"
                               rows={2}
+                              aria-describedby={unsavedFields.has("location") ? "location-unsaved" : undefined}
                             />
                           </div>
+                          {unsavedFields.has("location") && <UnsavedFieldNote id="location-unsaved" />}
                         </div>
                       </div>
                     </CardContent>
@@ -487,11 +599,14 @@ export default function ArtisanProfile() {
                           <Label htmlFor="bio">Bio</Label>
                           <Textarea
                             id="bio"
+                            className={unsavedFields.has("bio") ? UNSAVED_FIELD_CLASS : undefined}
                             value={bio}
                             onChange={(e) => setBio(e.target.value)}
                             placeholder="Describe your experience, specializations, and what clients can expect..."
                             rows={4}
+                            aria-describedby={unsavedFields.has("bio") ? "bio-unsaved" : undefined}
                           />
+                          {unsavedFields.has("bio") && <UnsavedFieldNote id="bio-unsaved" />}
                         </div>
                         <div className="grid gap-5 md:grid-cols-2">
                           <div className="space-y-2">
@@ -500,34 +615,46 @@ export default function ArtisanProfile() {
                               id="experience"
                               type="number"
                               min="0"
+                              className={unsavedFields.has("experienceYears") ? UNSAVED_FIELD_CLASS : undefined}
                               value={experienceYears}
                               onChange={(e) => setExperienceYears(e.target.value)}
                               placeholder="e.g., 5"
+                              aria-describedby={
+                                unsavedFields.has("experienceYears") ? "experience-unsaved" : undefined
+                              }
                             />
+                            {unsavedFields.has("experienceYears") && <UnsavedFieldNote id="experience-unsaved" />}
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="hourlyRate">Hourly Rate (GH₵)</Label>
-                            <div className="relative">
-                              <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <Input
-                                id="hourlyRate"
-                                type="number"
-                                min="0"
-                                className="pl-10"
-                                value={hourlyRate}
-                                onChange={(e) => setHourlyRate(e.target.value)}
-                                placeholder="e.g., 50"
-                              />
-                            </div>
+                            {/* No currency icon: lucide's DollarSign renders a
+                                literal "$" next to a field that is in cedis.
+                                The label carries the unit instead — the same
+                                treatment as "Price (GH₵)" on the admin services
+                                form. */}
+                            <Input
+                              id="hourlyRate"
+                              type="number"
+                              min="0"
+                              className={unsavedFields.has("hourlyRate") ? UNSAVED_FIELD_CLASS : undefined}
+                              value={hourlyRate}
+                              onChange={(e) => setHourlyRate(e.target.value)}
+                              placeholder="e.g., 50"
+                              aria-describedby={unsavedFields.has("hourlyRate") ? "hourlyRate-unsaved" : undefined}
+                            />
+                            {unsavedFields.has("hourlyRate") && <UnsavedFieldNote id="hourlyRate-unsaved" />}
                           </div>
                           <div className="space-y-2 md:col-span-2">
                             <Label htmlFor="businessName">Business Name</Label>
                             <Input
                               id="businessName"
+                              className={unsavedFields.has("businessName") ? UNSAVED_FIELD_CLASS : undefined}
                               value={businessName}
                               onChange={(e) => setBusinessName(e.target.value)}
                               placeholder="e.g., John's Plumbing Services"
+                              aria-describedby={unsavedFields.has("businessName") ? "businessName-unsaved" : undefined}
                             />
+                            {unsavedFields.has("businessName") && <UnsavedFieldNote id="businessName-unsaved" />}
                           </div>
                         </div>
                       </div>

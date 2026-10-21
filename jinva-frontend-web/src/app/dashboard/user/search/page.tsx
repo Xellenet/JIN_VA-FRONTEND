@@ -530,11 +530,9 @@ export default function SearchArtisansPage() {
                             <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
-                          {artisan.totalReviews > 0 && (
-                            <div className="absolute right-3 top-3 rounded-full bg-background px-2.5 py-1 shadow-sm">
-                              <RatingStars rating={artisan.avgRating} totalReviews={artisan.totalReviews} size="sm" />
-                            </div>
-                          )}
+                          <div className="absolute right-3 top-3 rounded-full bg-background px-2.5 py-1 shadow-sm">
+                            <RatingStars rating={artisan.avgRating} totalReviews={artisan.totalReviews} size="sm" showEmptyState={false} />
+                          </div>
                           {artisan.isVerified && (
                             <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium text-primary shadow-sm">
                               <ShieldCheck className="h-3 w-3" />
@@ -559,11 +557,6 @@ export default function SearchArtisansPage() {
                           <div className="text-center">
                             <h3 className="font-semibold text-foreground">{artisan.name}</h3>
                             <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
-                            {artisan.totalReviews === 0 && (
-                              <div className="mt-1 flex justify-center">
-                                <RatingStars rating={0} totalReviews={0} size="sm" />
-                              </div>
-                            )}
                             <Badge
                               variant="outline"
                               className={
@@ -607,7 +600,8 @@ export default function SearchArtisansPage() {
                               <Link href={`/dashboard/user/artisan/${artisan.id}`}>View Profile</Link>
                             </Button>
                             <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                              <Link href={`/dashboard/user/book/${artisan.id}`}>Book Now</Link>
+                              {/* Carry the service filter through so booking opens on what was searched for. */}
+                              <Link href={`/dashboard/user/book/${artisan.id}${selectedServiceId ? `?service=${selectedServiceId}` : ""}`}>Book Now</Link>
                             </Button>
                           </div>
                         </div>

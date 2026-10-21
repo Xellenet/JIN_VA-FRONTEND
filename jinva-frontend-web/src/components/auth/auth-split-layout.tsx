@@ -45,11 +45,13 @@ export function AuthSplitLayout({ children }: Readonly<AuthSplitLayoutProps>) {
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Left side - Form */}
+      {/* google-signup-prefill design-spec §3.9 fix 1: p-4 on phones (was p-8,
+          which with the forms' own p-4 left 279px of a 375px screen). */}
       <div className="flex flex-col bg-background">
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           <Logo />
         </div>
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
           <div className="w-full max-w-md">{children}</div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { CheckCircle2, Circle, EyeOff } from "lucide-react"
+import { CheckCircle2, Circle, EyeOff, Lightbulb } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,8 +24,12 @@ import { Skeleton } from "@/components/ui/skeleton"
  * `PATCH /users/me/artisan-profile` section).
  */
 
-/** The four keys `computeProfileCompleteness()` can report (api-contract.md C2). */
-const FIELD_ORDER = ["bio", "hourlyRate", "location", "services"] as const
+/**
+ * The keys `computeProfileCompleteness()` can report (api-contract.md C2).
+ * B2/B3 (google-signup-prefill): bio is optional and no longer one of them; it
+ * gets the separate "Recommended" nudge below (`BioNudge`), never a required row.
+ */
+const FIELD_ORDER = ["hourlyRate", "location", "services"] as const
 
 type KnownFieldKey = (typeof FIELD_ORDER)[number]
 
@@ -49,14 +53,6 @@ interface FieldCopy {
 }
 
 const FIELD_COPY: Record<KnownFieldKey, FieldCopy> = {
-  bio: {
-    label: "About you",
-    why: "A short description of your work and experience",
-    actionLabel: "Add",
-    href: "/dashboard/artisan/profile#bio",
-    anchorId: "bio",
-    phrase: "a short bio",
-  },
   hourlyRate: {
     label: "Hourly rate",
     why: "Your starting rate in GH₵ — customers filter on price",
@@ -304,5 +300,31 @@ export function SearchVisibilityBadge({ profile }: { profile: ProfileCompletenes
       <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
       {isVisible ? "Visible in search" : "Not in search"}
     </Badge>
+  )
+}
+
+/**
+ * B3 (google-signup-prefill design-spec §5.1): bio is optional, so it is
+ * encouraged here, never counted. Dashed and badged "Recommended" so it can't
+ * be mistaken for one of the required checklist rows. The page decides when to
+ * show it (while the *stored* bio is empty).
+ */
+export function BioNudge({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-dashed p-4">
+      <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-2 font-medium">
+          Add a short bio
+          <Badge variant="outline">Recommended</Badge>
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Optional. Artisans with a bio are easier for customers to choose.
+        </p>
+      </div>
+      <Button size="sm" variant="outline" className="shrink-0 bg-transparent" onClick={onAdd}>
+        Add
+      </Button>
+    </div>
   )
 }

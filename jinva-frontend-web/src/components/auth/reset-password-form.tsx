@@ -6,10 +6,31 @@ import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { Eye, EyeOff, CheckCircle2 } from "lucide-react"
+import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
+import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { AuthSplitLayout } from "./auth-split-layout"
+import {
+  PASSWORD_HINT,
+  PASSWORD_MESSAGES,
+  validateNewPassword,
+  validatePasswordConfirmation,
+} from "./signup-fields"
+
+/*
+ * google-signup-prefill V1–V8 (design-spec §1, §6.3): the same new-password
+ * rules and copy as /signup, inline under each field. A missing or bad reset
+ * token is not about a field, so it stays a toast.
+ */
+type Field = "password" | "confirmPassword"
+
+const FIELDS: readonly Field[] = ["password", "confirmPassword"]
+
+const LABELS: Record<Field, string> = {
+  password: "New password",
+  confirmPassword: "Confirm password",
+}
 
 export function ResetPasswordForm() {
   const [isLoading, setIsLoading] = useState(false)
@@ -24,6 +45,15 @@ export function ResetPasswordForm() {
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
 
+  const validateField = (field: Field, mode: ValidationMode): string | null => {
+    const submit = mode === "submit"
+    return field === "password"
+      ? validateNewPassword(formData.password, submit)
+      : validatePasswordConfirmation(formData.confirmPassword, formData.password, submit)
+  }
+
+  const v = useFormValidation<Field>({ fields: FIELDS, values: formData, validate: validateField, labels: LABELS })
+
   useEffect(() => {
     if (!token) {
       toast.error("Invalid or missing reset token")
@@ -34,11 +64,7 @@ export function ResetPasswordForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match")
-
-      return
-    }
+    if (!v.validateAll()) return
 
     if (!token) {
       toast.error("Invalid or missing reset token")
@@ -67,7 +93,18 @@ export function ResetPasswordForm() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to reset password")
+        // V5: a 400 about the passwords lands on its field in the form's own
+        // words (V6). "Invalid or expired token" is not a field error: toast.
+        const message = Array.isArray(data?.message) ? data.message.join(" ") : String(data?.message ?? "")
+        if (response.status === 400 && /do not match/i.test(message)) {
+          v.setServerError("confirmPassword", PASSWORD_MESSAGES.mismatch)
+          return
+        }
+        if (response.status === 400 && /password/i.test(message) && !/token/i.test(message)) {
+          v.setServerError("password", PASSWORD_MESSAGES.rule)
+          return
+        }
+        throw new Error(message || "Failed to reset password")
       }
 
       setIsSuccess(true)
@@ -118,60 +155,64 @@ export function ResetPasswordForm() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Password Field */}
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm text-muted-foreground">
-              New Password
-            </Label>
-            <div className="relative">
-              <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="Create a strong password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="h-12 pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-                required
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
+        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
+          <FormAnnouncer message={v.announcement} />
 
-          {/* Confirm Password Field */}
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="text-sm text-muted-foreground">
-              Confirm Password
-            </Label>
-            <div className="relative">
-              <Input
-                id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"}
-                placeholder="Re-enter your password"
-                value={formData.confirmPassword}
-                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="h-12 pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-                required
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                tabIndex={-1}
-              >
-                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
+          <FormField id="password" label="New password" hint={PASSWORD_HINT} error={v.errors.password}>
+            {(control) => (
+              <div className="relative">
+                <Input
+                  {...control}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  enterKeyHint="next"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onBlur={() => v.handleBlur("password")}
+                  className={`${AUTH_INPUT_CLASS} h-12 pr-10`}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            )}
+          </FormField>
+
+          <FormField id="confirmPassword" label="Confirm password" error={v.errors.confirmPassword}>
+            {(control) => (
+              <div className="relative">
+                <Input
+                  {...control}
+                  type={showConfirmPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  enterKeyHint="done"
+                  value={formData.confirmPassword}
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  onBlur={() => v.handleBlur("confirmPassword")}
+                  className={`${AUTH_INPUT_CLASS} h-12 pr-10`}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            )}
+          </FormField>
 
           {/* Submit Button */}
           <Button

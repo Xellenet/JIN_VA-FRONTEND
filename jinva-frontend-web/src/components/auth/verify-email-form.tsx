@@ -1,13 +1,27 @@
 "use client"
 
+import type React from "react"
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { CheckCircle2, XCircle, Loader2, Mail } from "lucide-react"
+import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
+import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { AuthSplitLayout } from "./auth-split-layout"
+import { EMAIL_MESSAGES, validateEmail } from "./signup-fields"
+
+/*
+ * google-signup-prefill V1–V8 (design-spec §1, §6.3): the resend prompt's
+ * email is checked inline, like login's, instead of with a toast. The prompt
+ * is only shown when the link carried no `?email=`.
+ */
+type Field = "email"
+
+const FIELDS: readonly Field[] = ["email"]
+const LABELS: Record<Field, string> = { email: "Your email address" }
+const EMAIL_INPUT_ID = "resend-email"
 
 type VerificationState = "loading" | "success" | "error" | "no-token"
 
@@ -20,6 +34,17 @@ export function VerifyEmailForm() {
   // identify the account. Prefer it from the link's query string (wired up
   // in signup-form.tsx); fall back to asking the user for it.
   const [email, setEmail] = useState(searchParams.get("email") ?? "")
+  const askForEmail = !searchParams.get("email")
+
+  const validateField = (_field: Field, mode: ValidationMode) =>
+    askForEmail ? validateEmail(email, mode === "submit") : null
+  const v = useFormValidation<Field>({
+    fields: FIELDS,
+    values: { email },
+    validate: validateField,
+    labels: LABELS,
+    focusTarget: () => document.getElementById(EMAIL_INPUT_ID),
+  })
 
   useEffect(() => {
     if (!token) {
@@ -54,11 +79,9 @@ export function VerifyEmailForm() {
     }
   }
 
-  const handleResendEmail = async () => {
-    if (!email.trim()) {
-      toast.error("Enter the email address you registered with.")
-      return
-    }
+  const handleResendEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!v.validateAll()) return
 
     setIsResending(true)
 
@@ -74,6 +97,12 @@ export function VerifyEmailForm() {
       const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
+        // V5: a 400 can only be about the email. On the field when the user
+        // typed it; otherwise the link's own email was bad, which is a toast.
+        if (response.status === 400 && askForEmail) {
+          v.setServerError("email", EMAIL_MESSAGES.invalid)
+          return
+        }
         throw new Error(data.message || "Failed to resend email")
       }
 
@@ -85,20 +114,38 @@ export function VerifyEmailForm() {
     }
   }
 
-  const emailPrompt = !searchParams.get("email") && (
-    <div className="space-y-2 text-left">
-      <Label htmlFor="resend-email" className="text-sm text-muted-foreground">
-        Your email address
-      </Label>
-      <Input
-        id="resend-email"
-        type="email"
-        placeholder="you@example.com"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
+  // The resend action is a real form, so Enter in the email field submits it
+  // and the V treatment applies (noValidate, inline error, one live region).
+  const resendForm = (
+    <form onSubmit={handleResendEmail} noValidate aria-busy={isResending} className="space-y-4">
+      <FormAnnouncer message={v.announcement} />
+      {askForEmail && (
+        <FormField id={EMAIL_INPUT_ID} label="Your email address" error={v.errors.email} className="text-left">
+          {(control) => (
+            <Input
+              {...control}
+              type="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              enterKeyHint="send"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => v.handleBlur("email")}
+              className={AUTH_INPUT_CLASS}
+              required
+              disabled={isResending}
+            />
+          )}
+        </FormField>
+      )}
+      <Button
+        type="submit"
         disabled={isResending}
-      />
-    </div>
+        className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
+      >
+        {isResending ? "Sending..." : "Resend Verification Email"}
+      </Button>
+    </form>
   )
 
   if (state === "loading") {
@@ -166,14 +213,7 @@ export function VerifyEmailForm() {
           </div>
 
           <div className="space-y-4">
-            {emailPrompt}
-            <Button
-              onClick={handleResendEmail}
-              disabled={isResending}
-              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
-            >
-              {isResending ? "Sending..." : "Resend Verification Email"}
-            </Button>
+            {resendForm}
 
             <Button
               onClick={() => (window.location.href = "/login")}
@@ -209,14 +249,7 @@ export function VerifyEmailForm() {
         </div>
 
         <div className="space-y-4">
-          {emailPrompt}
-          <Button
-            onClick={handleResendEmail}
-            disabled={isResending}
-            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
-          >
-            {isResending ? "Sending..." : "Resend Verification Email"}
-          </Button>
+          {resendForm}
 
           <Button
             onClick={() => (window.location.href = "/login")}

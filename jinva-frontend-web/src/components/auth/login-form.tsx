@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Eye, EyeOff } from "lucide-react"
+import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
+import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import {
   persistAuthTokens,
   dashboardPathForRole,
@@ -19,6 +21,24 @@ import {
 } from "@/lib/auth"
 import { setFlashToast } from "@/lib/flash"
 import { AuthSplitLayout } from "./auth-split-layout"
+import { EMAIL_MESSAGES, PASSWORD_MESSAGES, validateEmail } from "./signup-fields"
+
+/*
+ * google-signup-prefill V1–V8 (design-spec §1, §6.3): inline errors under each
+ * field instead of native bubbles, no placeholders. Wrong credentials and the
+ * other account states keep their toast / banner treatment.
+ */
+type Field = "email" | "password"
+
+const FIELDS: readonly Field[] = ["email", "password"]
+
+const LABELS: Record<Field, string> = {
+  email: "Email",
+  password: "Password",
+}
+
+/** A 400 from the ValidationPipe is not about the credentials being wrong; never show its DTO text (V6). */
+const LOGIN_FAILED = "Check your email and password, then try again."
 
 /**
  * Both dates on the pending-deletion banner come from the server
@@ -32,6 +52,18 @@ function formatWindowDate(iso: string | undefined): string | null {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+}
+
+/**
+ * Copy for the `?error=` codes other auth screens redirect here with.
+ * `oauth_failed` comes from /auth/callback when no session could be
+ * established; `signup_expired` from /auth/complete-signup when the Google
+ * sign-up's 15-minute pending entry is gone (closed tab, expiry, or cancel).
+ * Unknown codes show nothing rather than a generic error.
+ */
+const LOGIN_ERROR_COPY: Record<string, string> = {
+  oauth_failed: "Something went wrong signing you in with Google. Please try again.",
+  signup_expired: "Your sign-up session expired. Please continue with Google again.",
 }
 
 interface PendingDeletion {
@@ -74,6 +106,21 @@ export function LoginForm() {
   const deletionRestorableUntil = formatWindowDate(
     searchParams.get(RESTORABLE_UNTIL_PARAM) ?? undefined,
   )
+  const redirectError = LOGIN_ERROR_COPY[searchParams.get("error") ?? ""] ?? null
+
+  // Login checks only that a password was entered: its strength rules belong
+  // to the moment it was created, and an older password may predate them.
+  const validateField = (field: Field, mode: ValidationMode): string | null => {
+    const submit = mode === "submit"
+    switch (field) {
+      case "email":
+        return validateEmail(formData.email, submit)
+      case "password":
+        return submit && !formData.password ? PASSWORD_MESSAGES.enter : null
+    }
+  }
+
+  const v = useFormValidation<Field>({ fields: FIELDS, values: formData, validate: validateField, labels: LABELS })
 
   const handleResendVerification = async (email: string) => {
     setIsResending(true)
@@ -173,6 +220,7 @@ export function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!v.validateAll()) return
     setIsLoading(true)
     setUnverifiedEmail(null)
     setSocialOnlyError(null)
@@ -223,6 +271,17 @@ export function LoginForm() {
             data.message ||
               'This account signs in with Google. Continue with Google, or use "Forgot password" to set a password for this account.',
           )
+          return
+        }
+        // V5: the only field-level answer login can give is a malformed
+        // email; anything else in a 400 is DTO text, not for the user (V6).
+        if (response.status === 400) {
+          const message = Array.isArray(data?.message) ? data.message.join(" ") : String(data?.message ?? "")
+          if (/email/i.test(message)) {
+            v.setServerError("email", EMAIL_MESSAGES.invalid)
+          } else {
+            toast.error(LOGIN_FAILED)
+          }
           return
         }
         throw new Error(data.message || "Login failed")
@@ -299,51 +358,61 @@ export function LoginForm() {
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email Field */}
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm text-muted-foreground">
-              E-mail
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="example@gmail.com"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="h-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-              required
-              disabled={isLoading}
-            />
+        {redirectError && (
+          <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+            <p>{redirectError}</p>
           </div>
+        )}
 
-          {/* Password Field */}
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm text-muted-foreground">
-              Password
-            </Label>
-            <div className="relative">
+        {/* Form */}
+        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
+          <FormAnnouncer message={v.announcement} />
+
+          <FormField id="email" label="Email" error={v.errors.email}>
+            {(control) => (
               <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="@#*%"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="h-10 pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
+                {...control}
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                enterKeyHint="next"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onBlur={() => v.handleBlur("email")}
+                className={AUTH_INPUT_CLASS}
                 required
                 disabled={isLoading}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
+            )}
+          </FormField>
+
+          <FormField id="password" label="Password" error={v.errors.password}>
+            {(control) => (
+              <div className="relative">
+                <Input
+                  {...control}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  enterKeyHint="go"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onBlur={() => v.handleBlur("password")}
+                  className={`${AUTH_INPUT_CLASS} pr-10`}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            )}
+          </FormField>
 
           {/* Remember Me & Forgot Password */}
           <div className="flex items-center justify-between">

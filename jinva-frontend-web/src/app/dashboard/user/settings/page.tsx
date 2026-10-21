@@ -31,7 +31,6 @@ import {
   Shield,
   Camera,
   Mail,
-  Phone,
   MapPin,
   Trash2,
   AlertTriangle,
@@ -45,6 +44,15 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
+import { PhoneField } from "@/components/forms/phone-field"
+import { PHONE_IN_USE_CODE } from "@/components/auth/signup-fields"
+import {
+  DEFAULT_PHONE_COUNTRY,
+  PHONE_MESSAGES,
+  phoneUpdateFor,
+  splitStoredPhone,
+  type SupportedPhoneCountry,
+} from "@/lib/phone"
 import { loginUrlAfterAccountDeletion } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
@@ -82,6 +90,8 @@ function UserSettingsContent() {
   const [lastname, setLastname] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
+  const [phoneCountry, setPhoneCountry] = useState<SupportedPhoneCountry>(DEFAULT_PHONE_COUNTRY)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [street, setStreet] = useState("")
   const [city, setCity] = useState("")
   const [country, setCountry] = useState("")
@@ -242,7 +252,10 @@ function UserSettingsContent() {
     setFirstname(parts[0] ?? "")
     setLastname(parts.slice(1).join(" "))
     setEmail(user.email ?? "")
-    setPhone(user.phone ?? "")
+    const storedPhone = splitStoredPhone(user.phone)
+    setPhone(storedPhone.national)
+    setPhoneCountry(storedPhone.country)
+    setPhoneError(null)
     setStreet(user.address?.street ?? "")
     setCity(user.address?.city ?? "")
     setCountry(user.address?.country ?? "")
@@ -253,6 +266,12 @@ function UserSettingsContent() {
   if (!user) return null
 
   const handleSaveProfile = async () => {
+    const phoneUpdate = phoneUpdateFor(user.phone, phone, phoneCountry)
+    if (phoneUpdate.error) {
+      setPhoneError(phoneUpdate.error)
+      document.getElementById("phone")?.focus()
+      return
+    }
     setIsSaving(true)
     try {
       await apiFetch("/users/me", {
@@ -260,7 +279,8 @@ function UserSettingsContent() {
         body: JSON.stringify({
           firstname,
           lastname,
-          phoneNumber: phone,
+          // PH11: E.164, and only when edited (see phoneUpdateFor).
+          ...(phoneUpdate.phoneNumber ? { phoneNumber: phoneUpdate.phoneNumber } : {}),
           addresses: [{ street, city, country, zipCode }],
           ...(nationalId && !user.nationalId ? { nationalId } : {}),
         }),
@@ -268,6 +288,10 @@ function UserSettingsContent() {
       await refreshUser()
       toast.success("Profile updated successfully.")
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.code === PHONE_IN_USE_CODE) {
+        setPhoneError(PHONE_MESSAGES.inUse)
+        return
+      }
       toast.error(err instanceof Error ? err.message : "Failed to save changes.")
     } finally {
       setIsSaving(false)
@@ -439,19 +463,22 @@ function UserSettingsContent() {
                     </div>
                     <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        id="phone"
-                        className="pl-10"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="Phone number"
-                      />
-                    </div>
-                  </div>
+                  <PhoneField
+                    id="phone"
+                    label="Phone Number"
+                    value={phone}
+                    country={phoneCountry}
+                    onChange={(value) => {
+                      setPhone(value)
+                      setPhoneError(null)
+                    }}
+                    onCountryChange={(next) => {
+                      setPhoneCountry(next)
+                      setPhoneError(null)
+                    }}
+                    error={phoneError}
+                    disabled={isSaving}
+                  />
                   <div className="space-y-2">
                     <Label htmlFor="nationalId">National Identification</Label>
                     <div className="relative">

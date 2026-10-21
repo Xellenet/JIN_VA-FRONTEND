@@ -1,16 +1,45 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { AuthSplitLayout } from "./auth-split-layout"
 import { Eye, EyeOff } from "lucide-react"
 import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AUTH_INPUT_CLASS,
+  AUTH_SELECT_TRIGGER_CLASS,
+  FormAnnouncer,
+  FormField,
+} from "@/components/forms/form-field"
+import { PhoneField } from "@/components/forms/phone-field"
+import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
+import { ApiError } from "@/lib/api"
+import {
+  DEFAULT_PHONE_COUNTRY,
+  PHONE_MESSAGES,
+  phoneToE164,
+  validatePhoneNumber,
+  type SupportedPhoneCountry,
+} from "@/lib/phone"
+import {
+  AUTH_FORM_CONTAINER_CLASS,
+  AUTH_HEADING_CLASS,
+  GENDER_OPTIONS,
+  GENDER_REQUIRED,
+  PASSWORD_HINT,
+  ROLE_REQUIRED,
+  isPhoneInUse,
+  serverFieldMessages,
+  validateEmail,
+  validateName,
+  validateNewPassword,
+  validatePasswordConfirmation,
+} from "./signup-fields"
 
 /**
  * The only two roles a visitor may self-select. ADMIN is deliberately absent:
@@ -36,10 +65,56 @@ function roleFromParam(requested: string | null): string {
   return (PREFILLABLE_ROLES as readonly string[]).includes(requested) ? requested : ""
 }
 
+/*
+ * google-signup-prefill (design-spec §1, §3.9, §6.2): inline V-treatment
+ * errors instead of toasts and native bubbles, no placeholders, sentence-case
+ * labels, the shared country-aware phone field (E.164 out), gender Male/Female
+ * only, and the same frame and Select sizing as "Complete your account".
+ */
+
+type Field =
+  | "firstname"
+  | "lastname"
+  | "username"
+  | "email"
+  | "phoneNumber"
+  | "gender"
+  | "role"
+  | "password"
+  | "confirmPassword"
+
+const FIELDS: readonly Field[] = [
+  "firstname",
+  "lastname",
+  "username",
+  "email",
+  "phoneNumber",
+  "gender",
+  "role",
+  "password",
+  "confirmPassword",
+]
+
+const LABELS: Record<Field, string> = {
+  firstname: "First name",
+  lastname: "Last name",
+  username: "Username",
+  email: "Email",
+  phoneNumber: "Phone number",
+  gender: "Gender",
+  role: "Role",
+  password: "Password",
+  confirmPassword: "Confirm password",
+}
+
+const EMAIL_TAKEN = "This email already has an account."
+const USERNAME_TAKEN = "That username is taken. Try another."
+
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [phoneCountry, setPhoneCountry] = useState<SupportedPhoneCountry>(DEFAULT_PHONE_COUNTRY)
 
   /**
    * Read `?role=` during render as the initial value, rather than applying it
@@ -65,89 +140,53 @@ export function SignupForm() {
     role: roleFromParam(searchParams.get("role")),
   })
 
-  const validatePassword = (password: string): boolean => {
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters long")
-      return false
-    }
+  const update = <K extends keyof typeof formData>(key: K, value: (typeof formData)[K]) =>
+    setFormData((prev) => ({ ...prev, [key]: value }))
 
-    const hasLetter = /[a-zA-Z]/.test(password)
-    const hasNumber = /[0-9]/.test(password)
-    const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password)
-
-    if (!hasLetter || !hasNumber || !hasSymbol) {
-      toast.error("Password must contain a mix of letters, numbers, and symbols")
-      return false
-    }
-
-    return true
-  }
-
-  const validatePhone = (phone: string): boolean => {
-    // Format: XXX-XXX-XXXX
-    const phoneRegex = /^\d{3}-\d{3}-\d{4}$/
-    if (!phoneRegex.test(phone)) {
-      toast.error("Phone number must be in the format XXX-XXX-XXXX")
-      return false
-    }
-    return true
-  }
-
-  const formatPhoneNumber = (value: string): string => {
-    // Remove all non-digits
-    const cleaned = value.replace(/\D/g, "")
-
-    // Format as XXX-XXX-XXXX
-    if (cleaned.length <= 3) {
-      return cleaned
-    } else if (cleaned.length <= 6) {
-      return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`
-    } else {
-      return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`
+  const validateField = (field: Field, mode: ValidationMode): string | null => {
+    const submit = mode === "submit"
+    switch (field) {
+      case "firstname":
+        return validateName(formData.firstname, "first", submit)
+      case "lastname":
+        return validateName(formData.lastname, "last", submit)
+      case "username":
+        return submit && !formData.username.trim() ? "Choose a username" : null
+      case "email":
+        return validateEmail(formData.email, submit)
+      case "phoneNumber":
+        return validatePhoneNumber(formData.phoneNumber, phoneCountry, { requireValue: submit })
+      case "gender":
+        return submit && !formData.gender ? GENDER_REQUIRED : null
+      case "role":
+        return submit && !formData.role ? ROLE_REQUIRED : null
+      case "password":
+        return validateNewPassword(formData.password, submit)
+      case "confirmPassword":
+        return validatePasswordConfirmation(formData.confirmPassword, formData.password, submit)
     }
   }
 
-  const handlePhoneChange = (value: string) => {
-    const formatted = formatPhoneNumber(value)
-    setFormData({ ...formData, phoneNumber: formatted })
-  }
+  const values = useMemo(() => ({ ...formData, phoneCountry }), [formData, phoneCountry])
+  const v = useFormValidation<Field>({ fields: FIELDS, values, validate: validateField, labels: LABELS })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!v.validateAll()) return
 
-    if (!validatePassword(formData.password)) {
-      return
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match")
-      return
-    }
-
-    if (!validatePhone(formData.phoneNumber)) {
-      return
-    }
-
-    if (!formData.gender || !["MALE", "FEMALE", "OTHER"].includes(formData.gender)) {
-      toast.error("Gender must be either MALE, FEMALE, or OTHER")
-      return
-    }
-
-    if (!formData.role || !["CUSTOMER", "ARTISAN"].includes(formData.role)) {
-      toast.error("Role must be either CUSTOMER or ARTISAN")
-      return
-    }
+    const phoneNumber = phoneToE164(formData.phoneNumber, phoneCountry)
+    if (!phoneNumber) return // unreachable: validateAll just accepted it
 
     setIsLoading(true)
 
     try {
       const payload = {
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
-        username: formData.username,
-        firstname: formData.firstname,
-        lastname: formData.lastname,
-        phoneNumber: formData.phoneNumber,
+        username: formData.username.trim(),
+        firstname: formData.firstname.trim(),
+        lastname: formData.lastname.trim(),
+        phoneNumber,
         gender: formData.gender,
         role: formData.role,
       }
@@ -160,17 +199,37 @@ export function SignupForm() {
         body: JSON.stringify(payload),
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
-        throw new Error(data.message || "Registration failed")
+        const message = Array.isArray(data.message) ? data.message.join(" ") : data.message
+        throw new ApiError(message || "Registration failed", response.status, data.meta?.error ?? data.error)
       }
 
       toast.success("Please check your email to verify your account.")
 
-      window.location.href = `/verify-email?email=${encodeURIComponent(formData.email)}`
+      window.location.href = `/verify-email?email=${encodeURIComponent(payload.email)}`
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Registration failed")
+      // V5: answers about one field land on that field.
+      const fieldErrors =
+        error instanceof ApiError && error.status === 400 ? serverFieldMessages(error.message, phoneCountry) : {}
+      if (isPhoneInUse(error)) {
+        v.setServerError("phoneNumber", PHONE_MESSAGES.inUse)
+      } else if (error instanceof ApiError && error.status === 409 && /username/i.test(error.message)) {
+        v.setServerError("username", USERNAME_TAKEN)
+      } else if (
+        error instanceof ApiError &&
+        error.status === 409 &&
+        (error.code === "UserAlreadyExists" || /email/i.test(error.message))
+      ) {
+        v.setServerError("email", EMAIL_TAKEN)
+      } else if (fieldErrors.phoneNumber) {
+        v.setServerError("phoneNumber", fieldErrors.phoneNumber)
+      } else if (fieldErrors.gender) {
+        v.setServerError("gender", fieldErrors.gender)
+      } else {
+        toast.error(error instanceof Error ? error.message : "Registration failed")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -201,11 +260,24 @@ export function SignupForm() {
     window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google${query}`
   }
 
+  const emailError =
+    v.errors.email === EMAIL_TAKEN ? (
+      <>
+        {EMAIL_TAKEN}{" "}
+        <Link href="/login" className="font-medium underline underline-offset-2">
+          Sign in
+        </Link>{" "}
+        instead.
+      </>
+    ) : (
+      v.errors.email
+    )
+
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 bg-background md:rounded-lg md:p-8  p-4 w-full md:w-auto">
+      <div className={AUTH_FORM_CONTAINER_CLASS}>
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">Create Account</h1>
+          <h1 className={AUTH_HEADING_CLASS}>Create account</h1>
           <p className="text-muted-foreground">
             {"Already have an account? "}
             <Link href="/login" className="text-foreground underline hover:text-muted-foreground transition-colors">
@@ -214,198 +286,206 @@ export function SignupForm() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstname" className="text-sm text-muted-foreground">
-                First Name
-              </Label>
-              <Input
-                id="firstname"
-                type="text"
-                placeholder="John"
-                value={formData.firstname}
-                onChange={(e) => setFormData({ ...formData, firstname: e.target.value })}
-                className="h-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastname" className="text-sm text-muted-foreground">
-                Last Name
-              </Label>
-              <Input
-                id="lastname"
-                type="text"
-                placeholder="Doe"
-                value={formData.lastname}
-                onChange={(e) => setFormData({ ...formData, lastname: e.target.value })}
-                className="h-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-                required
-                disabled={isLoading}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="username" className="text-sm text-muted-foreground">
-              Username
-            </Label>
-            <Input
-              id="username"
-              type="text"
-              placeholder="johndoe"
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              className="h-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm text-muted-foreground">
-              E-mail
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="example@gmail.com"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="h-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phoneNumber" className="text-sm text-muted-foreground">
-              Phone Number
-            </Label>
-            <Input
-              id="phoneNumber"
-              type="text"
-              placeholder="123-456-7890"
-              value={formData.phoneNumber}
-              onChange={(e) => handlePhoneChange(e.target.value)}
-              className="h-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-              required
-              disabled={isLoading}
-              maxLength={12}
-            />
-            <p className="text-xs text-muted-foreground">Format: XXX-XXX-XXXX</p>
-          </div>
+        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
+          <FormAnnouncer message={v.announcement} />
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="gender" className="text-sm text-muted-foreground">
-                Gender
-              </Label>
-              <Select
-                value={formData.gender}
-                onValueChange={(value) => setFormData({ ...formData, gender: value })}
-                disabled={isLoading}
-                required
-              >
-                {/* The `id` is what makes `<Label htmlFor="gender">` above
-                    actually work — without it, clicking the label text did
-                    nothing and no assistive technology could pair the two. */}
-                <SelectTrigger id="gender" className="h-10 bg-background border-input text-foreground">
-                  <SelectValue placeholder="Select gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MALE">Male</SelectItem>
-                  <SelectItem value="FEMALE">Female</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="role" className="text-sm text-muted-foreground">
-                Role
-              </Label>
-              <Select
-                value={formData.role}
-                onValueChange={(value) => setFormData({ ...formData, role: value })}
-                disabled={isLoading}
-                required
-              >
-                {/* Matches `<Label htmlFor="role">`. Also gives the LP13
-                    `?role=` prefill a stable hook — the two triggers were
-                    previously distinguishable only by DOM order. */}
-                <SelectTrigger id="role" className="h-10 bg-background border-input text-foreground">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CUSTOMER">Customer</SelectItem>
-                  <SelectItem value="ARTISAN">Artisan</SelectItem>
-                  {/* <SelectItem value="ADMIN">Admin</SelectItem> */}
-                </SelectContent>
-              </Select>
-            </div>
+            <FormField id="firstname" label="First name" error={v.errors.firstname}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="text"
+                  autoComplete="given-name"
+                  enterKeyHint="next"
+                  value={formData.firstname}
+                  onChange={(e) => update("firstname", e.target.value)}
+                  onBlur={() => v.handleBlur("firstname")}
+                  className={AUTH_INPUT_CLASS}
+                  required
+                  disabled={isLoading}
+                />
+              )}
+            </FormField>
+            <FormField id="lastname" label="Last name" error={v.errors.lastname}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="text"
+                  autoComplete="family-name"
+                  enterKeyHint="next"
+                  value={formData.lastname}
+                  onChange={(e) => update("lastname", e.target.value)}
+                  onBlur={() => v.handleBlur("lastname")}
+                  className={AUTH_INPUT_CLASS}
+                  required
+                  disabled={isLoading}
+                />
+              )}
+            </FormField>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm text-muted-foreground">
-              Password
-            </Label>
-            <div className="relative">
+          <FormField id="username" label="Username" error={v.errors.username}>
+            {(control) => (
               <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="Create a strong password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="h-10 pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
+                {...control}
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                enterKeyHint="next"
+                value={formData.username}
+                onChange={(e) => update("username", e.target.value)}
+                onBlur={() => v.handleBlur("username")}
+                className={AUTH_INPUT_CLASS}
                 required
                 disabled={isLoading}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">At least 8 characters with letters, numbers, and symbols</p>
-          </div>
+            )}
+          </FormField>
 
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="text-sm text-muted-foreground">
-              Confirm Password
-            </Label>
-            <div className="relative">
+          <FormField id="email" label="Email" error={emailError}>
+            {(control) => (
               <Input
-                id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"}
-                placeholder="Re-enter your password"
-                value={formData.confirmPassword}
-                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="h-10 pr-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
+                {...control}
+                type="email"
+                autoComplete="email"
+                enterKeyHint="next"
+                value={formData.email}
+                onChange={(e) => update("email", e.target.value)}
+                onBlur={() => v.handleBlur("email")}
+                className={AUTH_INPUT_CLASS}
                 required
                 disabled={isLoading}
               />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                tabIndex={-1}
-              >
-                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
+            )}
+          </FormField>
+
+          <PhoneField
+            value={formData.phoneNumber}
+            country={phoneCountry}
+            onChange={(value) => update("phoneNumber", value)}
+            onCountryChange={setPhoneCountry}
+            onBlur={() => v.handleBlur("phoneNumber")}
+            onAnnounce={v.announce}
+            error={v.errors.phoneNumber}
+            disabled={isLoading}
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormField id="gender" label="Gender" error={v.errors.gender}>
+              {(control) => (
+                <Select
+                  value={formData.gender}
+                  onValueChange={(value) => update("gender", value)}
+                  disabled={isLoading}
+                  required
+                >
+                  {/* The `id` is what makes `<Label htmlFor="gender">` above
+                      actually work — without it, clicking the label text did
+                      nothing and no assistive technology could pair the two. */}
+                  <SelectTrigger {...control} aria-required="true" className={AUTH_SELECT_TRIGGER_CLASS}>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GENDER_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </FormField>
+            <FormField id="role" label="Role" error={v.errors.role}>
+              {(control) => (
+                <Select
+                  value={formData.role}
+                  onValueChange={(value) => update("role", value)}
+                  disabled={isLoading}
+                  required
+                >
+                  {/* Matches `<Label htmlFor="role">`. Also gives the LP13
+                      `?role=` prefill a stable hook — the two triggers were
+                      previously distinguishable only by DOM order. */}
+                  <SelectTrigger {...control} aria-required="true" className={AUTH_SELECT_TRIGGER_CLASS}>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CUSTOMER">Customer</SelectItem>
+                    <SelectItem value="ARTISAN">Artisan</SelectItem>
+                    {/* <SelectItem value="ADMIN">Admin</SelectItem> */}
+                  </SelectContent>
+                </Select>
+              )}
+            </FormField>
           </div>
+
+          <FormField
+            id="password"
+            label="Password"
+            hint={PASSWORD_HINT}
+            error={v.errors.password}
+          >
+            {(control) => (
+              <div className="relative">
+                <Input
+                  {...control}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  enterKeyHint="next"
+                  value={formData.password}
+                  onChange={(e) => update("password", e.target.value)}
+                  onBlur={() => v.handleBlur("password")}
+                  className={`${AUTH_INPUT_CLASS} pr-10`}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            )}
+          </FormField>
+
+          <FormField id="confirmPassword" label="Confirm password" error={v.errors.confirmPassword}>
+            {(control) => (
+              <div className="relative">
+                <Input
+                  {...control}
+                  type={showConfirmPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  enterKeyHint="done"
+                  value={formData.confirmPassword}
+                  onChange={(e) => update("confirmPassword", e.target.value)}
+                  onBlur={() => v.handleBlur("confirmPassword")}
+                  className={`${AUTH_INPUT_CLASS} pr-10`}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            )}
+          </FormField>
 
           <Button
             type="submit"
             className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             disabled={isLoading}
           >
-            {isLoading ? "Creating account..." : "Create Account"}
+            {isLoading ? "Creating account…" : "Create account"}
           </Button>
 
           <div className="relative">

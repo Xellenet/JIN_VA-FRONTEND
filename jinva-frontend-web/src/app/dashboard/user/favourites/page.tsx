@@ -299,11 +299,9 @@ export default function FavouritesPage() {
                             Verified
                           </div>
                         )}
-                        {artisan.totalReviews > 0 && (
-                          <div className="absolute right-3 top-3 rounded-full bg-background/90 px-2.5 py-1 shadow-sm">
-                            <RatingStars rating={artisan.avgRating} totalReviews={artisan.totalReviews} size="sm" />
-                          </div>
-                        )}
+                        <div className="absolute right-3 top-3 rounded-full bg-background/90 px-2.5 py-1 shadow-sm">
+                          <RatingStars rating={artisan.avgRating} totalReviews={artisan.totalReviews} size="sm" showEmptyState={false} />
+                        </div>
                         <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
                           <div className="relative">
                             <Avatar className="h-20 w-20 border-4 border-background shadow-md">
@@ -332,11 +330,6 @@ export default function FavouritesPage() {
                             <p className="mt-0.5 text-xs text-muted-foreground">
                               Saved {formatDistanceToNow(new Date(artisan.favouritedAt), { addSuffix: true })}
                             </p>
-                          )}
-                          {artisan.totalReviews === 0 && (
-                            <div className="mt-1.5 flex justify-center">
-                              <RatingStars rating={0} totalReviews={0} size="sm" />
-                            </div>
                           )}
                           <Badge
                             variant="outline"

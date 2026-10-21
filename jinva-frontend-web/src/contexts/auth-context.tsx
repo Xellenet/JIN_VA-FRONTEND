@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, ensureAccessToken } from "@/lib/api"
 import { clearAuthTokens, mapBackendRole } from "@/lib/auth"
 import { unregisterPushToken } from "@/lib/push-notifications"
 import { resolveAvatarUrl } from "@/lib/utils"
@@ -88,6 +88,16 @@ function clearCache() {
   } catch {}
 }
 
+/**
+ * Drops any cached user for this tab. For flows that establish a brand-new
+ * session outside an `AuthProvider` (the Google "complete your account" step),
+ * so the dashboard they land on fetches the new account rather than serving
+ * whoever was cached in this tab before.
+ */
+export function clearCachedUser() {
+  clearCache()
+}
+
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
@@ -146,6 +156,14 @@ export function AuthProvider({
           setIsLoading(false)
           return
         }
+      }
+
+      // A forced-fresh fetch is a session bootstrap (e.g. /auth/callback right
+      // after Google sign-in): the cookies exist but the in-memory token never
+      // does, so refresh up front instead of letting /users/me 401 first. A
+      // failed refresh means no session — same outcome as the catch below.
+      if (forceFresh && !(await ensureAccessToken())) {
+        throw new Error("No session to bootstrap")
       }
 
       const data = await apiFetch<BackendUser>("/users/me")

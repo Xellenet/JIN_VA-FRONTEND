@@ -5,18 +5,30 @@ import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {toast} from "sonner"
 import { CheckCircle2, ArrowLeft } from "lucide-react"
+import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
+import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { AuthSplitLayout } from "./auth-split-layout"
+import { EMAIL_MESSAGES, validateEmail } from "./signup-fields"
+
+/* google-signup-prefill V1–V8 (design-spec §1, §6.3): email as on login. */
+type Field = "email"
+
+const FIELDS: readonly Field[] = ["email"]
+const LABELS: Record<Field, string> = { email: "Email" }
 
 export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [email, setEmail] = useState("")
   const [isSubmitted, setIsSubmitted] = useState(false)
 
+  const validateField = (_field: Field, mode: ValidationMode) => validateEmail(email, mode === "submit")
+  const v = useFormValidation<Field>({ fields: FIELDS, values: { email }, validate: validateField, labels: LABELS })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!v.validateAll()) return
     setIsLoading(true)
 
     try {
@@ -31,6 +43,11 @@ export function ForgotPasswordForm() {
       const data = await response.json()
 
       if (!response.ok) {
+        // V5: a 400 here can only be about the email; show it on the field.
+        if (response.status === 400) {
+          v.setServerError("email", EMAIL_MESSAGES.invalid)
+          return
+        }
         throw new Error(data.message || "Failed to send reset email")
       }
 
@@ -106,23 +123,26 @@ export function ForgotPasswordForm() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email Field */}
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm text-muted-foreground">
-              E-mail
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="example@gmail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-10 bg-background border-input text-foreground placeholder:text-muted-foreground"
-              required
-              disabled={isLoading}
-            />
-          </div>
+        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
+          <FormAnnouncer message={v.announcement} />
+
+          <FormField id="email" label="Email" error={v.errors.email}>
+            {(control) => (
+              <Input
+                {...control}
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                enterKeyHint="send"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => v.handleBlur("email")}
+                className={AUTH_INPUT_CLASS}
+                required
+                disabled={isLoading}
+              />
+            )}
+          </FormField>
 
           {/* Submit Button */}
           <Button

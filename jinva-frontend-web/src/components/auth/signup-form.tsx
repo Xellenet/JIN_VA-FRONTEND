@@ -32,6 +32,7 @@ import {
   GENDER_OPTIONS,
   GENDER_REQUIRED,
   PASSWORD_HINT,
+  PENDING_VERIFY_EMAIL_KEY,
   ROLE_REQUIRED,
   isPhoneInUse,
   serverFieldMessages,
@@ -208,7 +209,12 @@ export function SignupForm() {
 
       toast.success("Please check your email to verify your account.")
 
-      window.location.href = `/verify-email?email=${encodeURIComponent(payload.email)}`
+      try {
+        sessionStorage.setItem(PENDING_VERIFY_EMAIL_KEY, payload.email)
+      } catch {
+        // Storage blocked: /verify-email simply asks for the address.
+      }
+      window.location.href = "/verify-email"
     } catch (error) {
       // V5: answers about one field land on that field.
       const fieldErrors =
@@ -228,22 +234,14 @@ export function SignupForm() {
       } else if (fieldErrors.gender) {
         v.setServerError("gender", fieldErrors.gender)
       } else {
-        toast.error(error instanceof Error ? error.message : "Registration failed")
+        // QA VAL-11: a dropped connection used to toast "Failed to fetch".
+        toast.error(
+          error instanceof ApiError
+            ? error.message
+            : "We couldn't create your account. Check your connection and try again.",
+        )
       }
     } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSocialSignup = async (provider: string) => {
-    setIsLoading(true)
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/oauth/${provider}`)
-      const data = await response.json()
-
-      window.location.href = data.authUrl
-    } catch (error) {
-      toast.error("Failed to initiate social signup")
       setIsLoading(false)
     }
   }
@@ -512,18 +510,7 @@ export function SignupForm() {
               </svg>
               Continue with Google
             </Button>
-
-            <Button
-              type="button"
-              onClick={() => handleSocialSignup("facebook")}
-              disabled={isLoading}
-              className="w-full h-10 border border-input bg-background hover:bg-accent font-normal text-foreground hover:text-accent-foreground transition-colors"
-            >
-              <svg className="mr-3 h-5 w-5 text-muted-foreground" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
-              Continue with Facebook
-            </Button>
+            {/* QA AUTH-32: no Facebook sign-in on the backend, so no button. */}
           </div>
         </form>
       </div>

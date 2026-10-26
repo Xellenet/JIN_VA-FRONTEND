@@ -247,7 +247,7 @@ function ReadyPanel({
                     <div className="flex items-center gap-1.5">
                       <Avatar className="h-6 w-6">
                         <AvatarImage
-                          src={resolveAvatarUrl(msg.sender?.profilePicture, senderName, 24)}
+                          src={resolveAvatarUrl(msg.sender?.profilePicture)}
                           alt={senderName}
                         />
                         <AvatarFallback className="text-[10px]">{senderName[0]}</AvatarFallback>
@@ -269,7 +269,7 @@ function ReadyPanel({
                         <MessageImage url={msg.attachmentUrl} className="mb-1 max-w-[200px]" />
                       )}
                       {msg.content && (
-                        <p className="break-words text-[13px] leading-relaxed">{msg.content}</p>
+                        <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{msg.content}</p>
                       )}
                       <p className="mt-1 text-right text-[10px] text-muted-foreground">
                         {formatMessageTime(msg.createdAt)}

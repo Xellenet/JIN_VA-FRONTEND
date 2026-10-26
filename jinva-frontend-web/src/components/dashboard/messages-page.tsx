@@ -5,6 +5,7 @@ import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -158,6 +159,10 @@ interface MessageContext {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
+
+/** The API's limit on a message (SendMessageDto). */
+const MESSAGE_MAX_LENGTH = 2000
+const MESSAGE_COUNTER_FROM = 1800
 
 export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesPageProps) {
   const { user } = useAuth()
@@ -612,6 +617,9 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
       content: content || null,
       attachmentUrl: outgoing?.url ?? null,
       attachmentType: outgoing?.file.type ?? null,
+      // QA MSG-18: the server only serves the image once the message exists,
+      // so the bubble shows the local copy until the sent message replaces it.
+      localPreviewUrl: outgoing?.previewUrl,
       jobId: null,
       bookingId: null,
       isRead: false,
@@ -814,7 +822,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                     >
                       <div className="relative flex-shrink-0 mt-0.5">
                         <Avatar className="h-11 w-11">
-                          <AvatarImage src={resolveAvatarUrl(conv.contact.profilePicture, name)} alt={name} />
+                          <AvatarImage src={resolveAvatarUrl(conv.contact.profilePicture)} alt={name} />
                           <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                         </Avatar>
                         {conv.unreadCount > 0 && (
@@ -875,7 +883,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                         <ArrowLeft className="h-5 w-5 text-primary" />
                       </Button>
                       <Avatar className="h-10 w-10 flex-shrink-0">
-                        <AvatarImage src={resolveAvatarUrl(selected.contact.profilePicture, name)} alt={name} />
+                        <AvatarImage src={resolveAvatarUrl(selected.contact.profilePicture)} alt={name} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
@@ -980,7 +988,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                               {!isOwn && showAvatar && (
                                 <Avatar className="h-7 w-7">
                                   <AvatarImage
-                                    src={resolveAvatarUrl(msg.sender?.profilePicture, senderName)}
+                                    src={resolveAvatarUrl(msg.sender?.profilePicture)}
                                     alt={senderName}
                                   />
                                   <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
@@ -1015,6 +1023,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                               {msg.attachmentUrl && (
                                 <MessageImage
                                   url={msg.attachmentUrl}
+                                  previewSrc={msg.localPreviewUrl}
                                   className="mb-1 max-w-[240px]"
                                   // Re-scroll once it has height, so the newest
                                   // image bubble isn't left half below the fold.
@@ -1026,7 +1035,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                                 />
                               )}
                               {msg.content && (
-                                <p className="break-words text-[14px] leading-relaxed">{msg.content}</p>
+                                <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">{msg.content}</p>
                               )}
                               <div
                                 className={cn(
@@ -1124,19 +1133,38 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                       >
                         <Paperclip className="h-4 w-4" />
                       </Button>
-                      <Input
-                        placeholder={canReplyToSelected ? "Message" : "You can't reply to this conversation"}
-                        disabled={!canReplyToSelected}
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault()
-                            handleSend()
-                          }
-                        }}
-                        className="flex-1 rounded-full border-border bg-muted/40 text-sm focus-visible:ring-1 focus-visible:ring-ring"
-                      />
+                      {/* QA MSG-08: a textarea, so Shift+Enter starts a new line
+                          (Enter still sends). QA MSG-07: capped at the API's
+                          2,000 characters, with a count as the limit nears. */}
+                      <div className="relative flex-1">
+                        <Textarea
+                          rows={1}
+                          maxLength={MESSAGE_MAX_LENGTH}
+                          placeholder={canReplyToSelected ? "Message" : "You can't reply to this conversation"}
+                          aria-label="Message"
+                          disabled={!canReplyToSelected}
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                              e.preventDefault()
+                              handleSend()
+                            }
+                          }}
+                          className="field-sizing-content max-h-32 min-h-9 resize-none rounded-2xl border-border bg-muted/40 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                        {newMessage.length >= MESSAGE_COUNTER_FROM && (
+                          <span
+                            className={cn(
+                              "pointer-events-none absolute -top-5 right-2 text-[11px]",
+                              newMessage.length >= MESSAGE_MAX_LENGTH ? "text-destructive" : "text-muted-foreground",
+                            )}
+                            aria-live="polite"
+                          >
+                            {newMessage.length}/{MESSAGE_MAX_LENGTH}
+                          </span>
+                        )}
+                      </div>
                       <Button
                         size="icon"
                         className={cn(

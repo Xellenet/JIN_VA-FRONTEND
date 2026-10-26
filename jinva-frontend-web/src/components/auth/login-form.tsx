@@ -61,9 +61,12 @@ function formatWindowDate(iso: string | undefined): string | null {
  * sign-up's 15-minute pending entry is gone (closed tab, expiry, or cancel).
  * Unknown codes show nothing rather than a generic error.
  */
+const BANNED_MESSAGE = "This account has been banned. Contact support if you think this is a mistake."
+
 const LOGIN_ERROR_COPY: Record<string, string> = {
   oauth_failed: "Something went wrong signing you in with Google. Please try again.",
   signup_expired: "Your sign-up session expired. Please continue with Google again.",
+  account_banned: BANNED_MESSAGE,
 }
 
 interface PendingDeletion {
@@ -77,12 +80,17 @@ export function LoginForm() {
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  // QA AUTH-31: now sent with the login. Ticked by default, because every
+  // sign-in was remembered before the box did anything.
+  const [rememberMe, setRememberMe] = useState(true)
   const [isResending, setIsResending] = useState(false)
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
   // G10: distinct state for "this account signs in with Google" — kept
   // separate from the generic invalid-credentials toast per api-contract.md.
   const [socialOnlyError, setSocialOnlyError] = useState<string | null>(null)
+  // QA AUTH-17: a banned account's login is refused with its own code; say so
+  // plainly instead of offering "resend verification".
+  const [bannedError, setBannedError] = useState<string | null>(null)
   // C1.4: the account is soft-deleted but still inside its recovery window.
   // This is the only place a deleted-but-restorable user can find out their
   // account is recoverable, so it is a banner with an action, never a toast.
@@ -211,8 +219,15 @@ export function LoginForm() {
       // dashboard we're about to land on.
       setFlashToast("Welcome back — your account has been restored.")
       redirectAfterLogin(data.data?.role)
-    } catch {
-      toast.error("We couldn't restore your account. Please try again, or contact support if this keeps happening.")
+    } catch (err) {
+      // QA DEL-08: a wrong password gets the server's own answer ("Unable to
+      // restore this account with the provided credentials."), not a generic
+      // "try again". Only a network failure falls back to our copy.
+      toast.error(
+        err instanceof Error && err.message && !(err instanceof TypeError)
+          ? err.message
+          : "We couldn't restore your account. Please try again, or contact support if this keeps happening.",
+      )
     } finally {
       setIsRestoring(false)
     }
@@ -224,6 +239,7 @@ export function LoginForm() {
     setIsLoading(true)
     setUnverifiedEmail(null)
     setSocialOnlyError(null)
+    setBannedError(null)
     setPendingDeletion(null)
     setRestoreWindowClosed(null)
 
@@ -234,7 +250,7 @@ export function LoginForm() {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, rememberMe }),
       })
 
       const data = await response.json()
@@ -254,6 +270,10 @@ export function LoginForm() {
             restorableUntil: details?.restorableUntil,
             message: data.message,
           })
+          return
+        }
+        if (response.status === 403 && data?.meta?.error === "ACCOUNT_BANNED") {
+          setBannedError(data.message || BANNED_MESSAGE)
           return
         }
         // S4: unverified accounts are rejected with a distinct 403 (see auth.service.ts).
@@ -300,20 +320,6 @@ export function LoginForm() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Invalid credentials");
     } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSocialLogin = async (provider: string) => {
-    setIsLoading(true)
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/oauth/${provider}`)
-      const data = await response.json()
-
-      // Redirect to OAuth provider
-      globalThis.location.href = data.authUrl
-    } catch (error) {
-      toast.error("Failed to initiate social login" + (error instanceof Error ? `: ${error.message}` : ""));
       setIsLoading(false)
     }
   }
@@ -450,6 +456,11 @@ export function LoginForm() {
               purpose: the real "Continue with Google" button is already
               visible further down this same form, so this stays a message
               only rather than duplicating it. */}
+          {bannedError && (
+            <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-foreground">
+              <p>{bannedError}</p>
+            </div>
+          )}
           {socialOnlyError && (
             <div className="rounded-md border border-info/30 bg-info/10 p-3 text-sm text-foreground">
               <p>{socialOnlyError}</p>
@@ -530,18 +541,7 @@ export function LoginForm() {
               </svg>
               Continue with Google
             </Button>
-
-            <Button
-              type="button"
-              onClick={() => handleSocialLogin("facebook")}
-              disabled={isLoading}
-              className="w-full h-10 border border-input bg-background hover:bg-accent font-normal text-foreground hover:text-accent-foreground transition-colors"
-            >
-              <svg className="mr-3 h-5 w-5 text-muted-foreground" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
-              Continue with Facebook
-            </Button>
+            {/* QA AUTH-32: no Facebook sign-in on the backend, so no button. */}
           </div>
         </form>
       </div>

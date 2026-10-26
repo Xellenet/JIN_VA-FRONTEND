@@ -24,7 +24,7 @@ function DashboardSkeleton() {
           ))}
         </div>
       </aside>
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-16 items-center justify-between border-b border-border px-6">
           <Skeleton className="h-6 w-32" />
           <div className="flex items-center gap-3">
@@ -62,7 +62,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* PN1 — keeps this device's push token registered for the signed-in user */}
       <PushSync />
       <Sidebar role={user.role} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      {/* QA UI-01/UI-02: min-w-0 lets this column shrink to the screen; without
+          it a wide table stretched the column past the viewport and the outer
+          overflow-hidden clipped it, instead of the table scrolling. */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <DashboardHeader onMenuToggle={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>

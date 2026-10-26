@@ -5,8 +5,6 @@ import { toast } from "sonner"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -14,7 +12,6 @@ import {
   Shield,
   Bell,
   Globe,
-  Users,
   Wrench,
   Loader2,
 } from "lucide-react"
@@ -76,16 +73,43 @@ const ADMIN_EVENT_ROWS: { key: keyof AdminNotifPrefs; label: string; desc: strin
   { key: "artisanRegistered", label: "New Artisan Registered", desc: "Get notified when a new artisan creates an account on the platform" },
 ]
 
-/** The one field of `GET /payments/admin/all` this page needs (AT9). */
-interface FeeProbePayment {
-  amount: number | string
-  platformFee: number | string
+/**
+ * `GET /admin/platform-config` (AT9, QA ADM-20): the rules the backend really
+ * enforces. The General and Security tabs used to be editable fields and
+ * switches whose Save sent nothing, so every change was lost on reload; they
+ * now show these values as they are.
+ */
+interface PlatformConfig {
+  platformFeePercent: number
+  currency: string
+  timezone: string
+  supportEmail: string | null
+  bookingResponseHours: number
+  maxPendingBookingsPerArtisan: number
+  bookingReminderHours: number[]
+  agreedPriceTolerancePercent: number
+  jobAutoCompleteHours: number
+  emailVerificationRequired: boolean
+  passwordMinLength: number
+  passwordRule: string
+}
+
+function ConfigRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex flex-col gap-1 border-b py-3 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <div>
+        <p className="font-medium">{label}</p>
+        {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
+      </div>
+      <p className="shrink-0 text-sm font-medium text-foreground sm:text-right">{value}</p>
+    </div>
+  )
 }
 
 export default function AdminSettingsPage() {
-  // ── Applied platform fee (AT9) ──────────────────────────────────────────
-  const [appliedFeePercent, setAppliedFeePercent] = useState<number | null>(null)
-  const [isLoadingFee, setIsLoadingFee] = useState(true)
+  // ── Platform rules (AT9, QA ADM-20) ─────────────────────────────────────
+  const [config, setConfig] = useState<PlatformConfig | null>(null)
+  const [configFailed, setConfigFailed] = useState(false)
 
   // ── Notification preferences (PR3) ──────────────────────────────────────
   const [notifPrefs, setNotifPrefs] = useState<AdminNotifPrefs>(ADMIN_NOTIF_FALLBACK)
@@ -114,21 +138,9 @@ export default function AdminSettingsPage() {
   }, [])
 
   useEffect(() => {
-    // The newest payment carries both the amount and the fee taken from it, so
-    // the rate the platform is really applying is arithmetic over real data
-    // rather than a number typed into this file.
-    apiFetch<FeeProbePayment[]>("/payments/admin/all?page=1&limit=1")
-      .then((rows) => {
-        const latest = Array.isArray(rows) ? rows[0] : undefined
-        const amount = Number(latest?.amount)
-        const fee = Number(latest?.platformFee)
-        if (!latest || !Number.isFinite(amount) || !Number.isFinite(fee) || amount <= 0) return
-        setAppliedFeePercent(Math.round((fee / amount) * 10000) / 100)
-      })
-      .catch(() => {
-        // Leave it unknown rather than showing a number we can't stand behind.
-      })
-      .finally(() => setIsLoadingFee(false))
+    apiFetch<PlatformConfig>("/admin/platform-config")
+      .then(setConfig)
+      .catch(() => setConfigFailed(true))
   }, [])
 
   const toggleNotif = (key: keyof AdminNotifPrefs, val: boolean) => {
@@ -189,210 +201,60 @@ export default function AdminSettingsPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* General Settings */}
+          {/* General (QA ADM-20: read-only — these are fixed in the platform's configuration) */}
           <TabsContent value="general" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Globe className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Platform Configuration</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Control platform-wide settings and defaults
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                {/*
-                  AT9: these four shipped as `Plumbify` / `support@plumbify.com`
-                  / `UTC-5 (Eastern Time)` — a different product in a different
-                  country. Corrected to the real platform and to Ghana's
-                  timezone (GMT, UTC+0, no daylight saving), which is also what
-                  the GH₵ currency below already implied.
-                */}
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="platformName">Platform Name</Label>
-                    <Input id="platformName" defaultValue="JinVa" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="supportEmail">Support Email</Label>
-                    <Input id="supportEmail" defaultValue="support@jinva.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="currency">Default Currency</Label>
-                    <Input id="currency" defaultValue="GHS (GH₵)" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="timezone">Timezone</Label>
-                    <Input id="timezone" defaultValue="GMT (UTC+0) — Accra" />
-                  </div>
-                </div>
-
-                <div className="space-y-4 border-t pt-6">
-                  <h4 className="font-medium">System Controls</h4>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="font-medium">Maintenance Mode</p>
-                        <p className="text-sm text-muted-foreground">
-                          Temporarily disable the platform for maintenance
-                        </p>
-                      </div>
-                      <Switch />
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="font-medium">Allow New Registrations</p>
-                        <p className="text-sm text-muted-foreground">
-                          Enable or disable new user and artisan sign-ups
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="font-medium">Auto-Assign Artisans</p>
-                        <p className="text-sm text-muted-foreground">
-                          Automatically assign available artisans to new orders
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="font-medium">Enable Client Reviews</p>
-                        <p className="text-sm text-muted-foreground">
-                          Allow clients to leave ratings and reviews for artisans
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Users className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">User Management Defaults</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Set default policies for users and artisans
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Require Email Verification</p>
-                    <p className="text-sm text-muted-foreground">
-                      New accounts must verify their email before accessing the platform
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Require Artisan License Verification</p>
-                    <p className="text-sm text-muted-foreground">
-                      Artisan accounts need admin-approved license verification
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Auto-Deactivate Inactive Accounts</p>
-                    <p className="text-sm text-muted-foreground">
-                      Deactivate accounts with no activity for 90+ days
-                    </p>
-                  </div>
-                  <Switch />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Wrench className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Service & Order Defaults</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Configure default behavior for services and orders
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="cancellation">Cancellation Window (hours)</Label>
-                    <Input id="cancellation" type="number" defaultValue="24" />
-                  </div>
-                  {/*
-                    AT9: this shipped as an editable input reading 15 while the
-                    backend's platform fee default is 5 — a 3x disagreement an
-                    admin could reasonably have acted on, behind a Save button
-                    that discarded whatever they typed. The fee is an env var
-                    read at boot, and no endpoint exposes it, so the honest
-                    value available today is the one the ledger actually shows:
-                    platformFee / amount on the most recent real payment. Made
-                    read-only until the backend exposes the configured value
-                    (design-spec.md §11 item I); runtime configuration of the
-                    fee stays out of scope.
-                  */}
-                  <div className="space-y-2">
-                    <Label htmlFor="commission">Platform Commission (%)</Label>
-                    <Input
-                      id="commission"
-                      readOnly
-                      disabled
-                      value={
-                        isLoadingFee
-                          ? "Checking…"
-                          : appliedFeePercent != null
-                            ? `${appliedFeePercent}%`
-                            : "Not yet observable"
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {appliedFeePercent != null
-                        ? "The rate the platform actually applied on the most recent payment. Set on the server; not editable here."
-                        : "No payments have been taken yet, so there is no applied rate to read. Set on the server; not editable here."}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="maxBookings">Max Concurrent Bookings per Client</Label>
-                    <Input id="maxBookings" type="number" defaultValue="5" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="maxJobs">Max Concurrent Jobs per Artisan</Label>
-                    <Input id="maxJobs" type="number" defaultValue="3" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Settings
-              </Button>
-            </div>
+            <PlatformRulesCard
+              icon={<Globe className="h-5 w-5 text-foreground" />}
+              title="Platform"
+              description="How JinVa is set up"
+              config={config}
+              failed={configFailed}
+              rows={(c) => [
+                { label: "Currency", value: c.currency === "GHS" ? "Ghana cedi (GH₵)" : c.currency },
+                { label: "Timezone", value: c.timezone },
+                { label: "Support email", value: c.supportEmail ?? "Not set", hint: "Shown in every email JinVa sends" },
+                {
+                  label: "Platform commission",
+                  value: `${c.platformFeePercent}%`,
+                  hint: "Taken from each payment before the artisan is paid",
+                },
+              ]}
+            />
+            <PlatformRulesCard
+              icon={<Wrench className="h-5 w-5 text-foreground" />}
+              title="Bookings and jobs"
+              description="The rules every booking and job follows"
+              config={config}
+              failed={configFailed}
+              rows={(c) => [
+                {
+                  label: "Artisan response window",
+                  value: `${c.bookingResponseHours} hours`,
+                  hint: "A booking request the artisan doesn't answer in time expires",
+                },
+                {
+                  label: "Pending requests per artisan",
+                  value: `${c.maxPendingBookingsPerArtisan} per customer`,
+                  hint: "How many unanswered requests one customer can have with one artisan",
+                },
+                {
+                  label: "Appointment reminders",
+                  value: c.bookingReminderHours.map((h) => `${h}h`).join(" and ") + " before",
+                },
+                {
+                  label: "Agreed price range",
+                  value: `within ${c.agreedPriceTolerancePercent}% of the listed price`,
+                  hint: "When a service has a listed price",
+                },
+                {
+                  label: "Automatic job completion",
+                  value: `${c.jobAutoCompleteHours} hours`,
+                  hint: "After the artisan marks a job finished, if the customer doesn't respond",
+                },
+              ]}
+            />
           </TabsContent>
 
-          {/* Notifications (PR3, design-spec.md section 5) */}
           <TabsContent value="notifications" className="space-y-6">
             {isLoadingNotifs ? (
               <div className="flex justify-center py-12">
@@ -475,83 +337,77 @@ export default function AdminSettingsPage() {
 
           {/* Security */}
           <TabsContent value="security" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Shield className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Security Configuration</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Manage system-wide security and access policies
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">Two-Factor Authentication (System-wide)</p>
-                      <p className="text-sm text-muted-foreground">
-                        Require 2FA for all admin and artisan accounts
-                      </p>
-                    </div>
-                    <Switch />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">Session Timeout</p>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically log out inactive users after a set time
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">IP Whitelisting for Admin Panel</p>
-                      <p className="text-sm text-muted-foreground">
-                        Restrict admin access to specific IP addresses
-                      </p>
-                    </div>
-                    <Switch />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">Login Attempt Limits</p>
-                      <p className="text-sm text-muted-foreground">
-                        Lock accounts after 5 consecutive failed login attempts
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-
-                <div className="border-t pt-6">
-                  <h4 className="font-medium mb-4">Password Policy</h4>
-                  <div className="grid gap-6 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="minLength">Minimum Password Length</Label>
-                      <Input id="minLength" type="number" defaultValue="8" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="expiry">Password Expiry (days)</Label>
-                      <Input id="expiry" type="number" defaultValue="90" />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Security Settings
-              </Button>
-            </div>
+            <PlatformRulesCard
+              icon={<Shield className="h-5 w-5 text-foreground" />}
+              title="Accounts and sign-in"
+              description="Applied to every customer, artisan and admin account"
+              config={config}
+              failed={configFailed}
+              rows={(c) => [
+                {
+                  label: "Email verification",
+                  value: c.emailVerificationRequired ? "Required before first sign-in" : "Not required",
+                },
+                { label: "Password rule", value: `${c.passwordMinLength}+ characters`, hint: c.passwordRule },
+                {
+                  label: "Banned accounts",
+                  value: "Signed out everywhere",
+                  hint: "A ban ends every session and blocks sign-in until the account is unbanned",
+                },
+                {
+                  label: "Suspended accounts",
+                  value: "Can sign in, can't transact",
+                  hint: "Hidden from search; can't book, post jobs, apply or message",
+                },
+              ]}
+            />
           </TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>
+  )
+}
+
+function PlatformRulesCard({
+  icon,
+  title,
+  description,
+  config,
+  failed,
+  rows,
+}: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  config: PlatformConfig | null
+  failed: boolean
+  rows: (c: PlatformConfig) => Array<{ label: string; value: string; hint?: string }>
+}) {
+  return (
+    <Card>
+      <div className="border-b p-6">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-muted p-2">{icon}</div>
+          <div>
+            <h3 className="font-semibold">{title}</h3>
+            <p className="text-sm text-muted-foreground">{description}</p>
+          </div>
+        </div>
+      </div>
+      <CardContent className="p-6 pt-3">
+        {failed ? (
+          <p className="py-4 text-sm text-muted-foreground">Couldn&apos;t load these settings. Refresh to try again.</p>
+        ) : !config ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          rows(config).map((r) => <ConfigRow key={r.label} {...r} />)
+        )}
+        <p className="mt-4 text-xs text-muted-foreground">
+          These are set in the platform&apos;s configuration and can&apos;t be changed from this screen.
+        </p>
+      </CardContent>
+    </Card>
   )
 }

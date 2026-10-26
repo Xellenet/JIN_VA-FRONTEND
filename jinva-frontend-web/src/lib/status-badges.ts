@@ -69,6 +69,19 @@ export function getBookingStatusConfig(status: string): StatusBadgeConfig {
   return bookingStatusConfig[status] ?? { label: status, className: "" }
 }
 
+export const jobStatusConfig: Record<string, StatusBadgeConfig> = {
+  OPEN: { label: "Open", className: "bg-info/10 text-info border-info/20" },
+  PENDING: { label: "Awaiting start", className: "bg-warning/10 text-warning border-warning/20" },
+  IN_PROGRESS: { label: "In Progress", className: "bg-primary/10 text-primary border-primary/20" },
+  COMPLETED: { label: "Completed", className: "bg-success/10 text-success border-success/20" },
+  CANCELLED: { label: "Cancelled", className: "bg-destructive/10 text-destructive border-destructive/20" },
+  EXPIRED: { label: "Expired", className: "bg-muted text-muted-foreground border-border" },
+}
+
+export function getJobStatusConfig(status: string): StatusBadgeConfig {
+  return jobStatusConfig[status] ?? { label: status, className: "" }
+}
+
 /**
  * PaymentStatus badge map — Payments Integration (2026-08-20).
  *
@@ -107,6 +120,15 @@ export const paymentStatusConfig: Record<string, StatusBadgeConfig & { icon: Luc
 
 export function getPaymentStatusConfig(status: string): StatusBadgeConfig & { icon: LucideIcon } {
   return paymentStatusConfig[status] ?? { label: status, className: "", icon: AlertCircle }
+}
+
+/**
+ * QA PAY-20: the customer's view of a payment. A payout the artisan still has
+ * to sort out (PENDING_TRANSFER, TRANSFER_FAILED) is, for the customer, money
+ * JinVa is holding — "Payout Needs Attention" was the artisan's label.
+ */
+export function getCustomerPaymentStatusConfig(status: string): StatusBadgeConfig & { icon: LucideIcon } {
+  return getPaymentStatusConfig(RETRYABLE_PAYOUT_STATUSES.includes(status as never) ? "HELD" : status)
 }
 
 /**

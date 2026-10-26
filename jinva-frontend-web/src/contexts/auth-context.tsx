@@ -36,6 +36,8 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
   return {
     id: data.id,
     name: `${data.firstname} ${data.lastname}`.trim(),
+    firstname: data.firstname,
+    lastname: data.lastname,
     email: data.email,
     phone: data.phoneNumber,
     address: data.addresses?.[0],
@@ -45,7 +47,7 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
     // `<AvatarImage src>` by the dashboard header, sidebar, profile and settings
     // screens. A `profilePicture` stored as a relative `/uploads/avatars/…` path
     // was previously requested from the frontend's own origin and 404'd.
-    avatar: resolveAvatarUrl(data.profilePicture, data.email, 128),
+    avatar: resolveAvatarUrl(data.profilePicture),
     rating: artisanProfile?.averageRating != null ? Number(artisanProfile.averageRating) : undefined,
     reviews: artisanProfile?.totalReviews != null ? Number(artisanProfile.totalReviews) : undefined,
   }
@@ -59,7 +61,8 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
 // Bumped v3 → v4 when `avatar` started being resolved through
 // `resolveAvatarUrl()`. A cached v3 user carries the old unresolved relative
 // path, which would keep 404ing for the rest of the browser session.
-const CACHE_KEY = "jinva:user:v4"
+// v5: v4 entries may hold a third-party avatar URL built from the email.
+const CACHE_KEY = "jinva:user:v5"
 
 function readCache(): User | null {
   if (typeof window === "undefined") return null
@@ -85,6 +88,7 @@ function clearCache() {
     sessionStorage.removeItem(CACHE_KEY)
     sessionStorage.removeItem("jinva:user:v2") // clean up old keys
     sessionStorage.removeItem("jinva:user:v3")
+    sessionStorage.removeItem("jinva:user:v4")
   } catch {}
 }
 

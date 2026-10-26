@@ -431,6 +431,9 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
 
   const money = moneyLine()
   const viewerWasRefunded = dispute.moneyAction === "REFUND" && viewerIsClient
+  // QA DSP-20: a dispute ruled on and then closed keeps its verdict; only a
+  // dispute closed with no outcome was closed "without ruling".
+  const wasRuledOn = dispute.status === "RESOLVED" || !!dispute.outcome
 
   return (
     <div className="space-y-6">
@@ -472,15 +475,15 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
                   <Gavel className="h-4 w-4 text-primary" />
-                  {dispute.status === "RESOLVED" ? "The decision" : "This dispute was closed"}
+                  {wasRuledOn ? "The decision" : "This dispute was closed"}
                 </h3>
               </div>
               <CardContent className="space-y-3 p-5">
-                {dispute.status === "RESOLVED" ? (
+                {wasRuledOn ? (
                   <>
-                    {/* `close()` records no outcome, so a CLOSED dispute gets
-                        no badge and no money tile — an empty pill is worse
-                        than none. */}
+                    {/* `close()` records no outcome, so a dispute closed
+                        without a ruling gets no badge and no money tile — an
+                        empty pill is worse than none. */}
                     {dispute.outcome &&
                       (() => {
                         const cfg = getDisputeOutcomeConfig(dispute.outcome)

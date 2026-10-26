@@ -10,7 +10,7 @@ import { CheckCircle2, XCircle, Loader2, Mail } from "lucide-react"
 import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { AuthSplitLayout } from "./auth-split-layout"
-import { EMAIL_MESSAGES, validateEmail } from "./signup-fields"
+import { EMAIL_MESSAGES, PENDING_VERIFY_EMAIL_KEY, validateEmail } from "./signup-fields"
 
 /*
  * google-signup-prefill V1–V8 (design-spec §1, §6.3): the resend prompt's
@@ -31,10 +31,24 @@ export function VerifyEmailForm() {
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
   // F1: the backend's resend-verification endpoint requires an email to
-  // identify the account. Prefer it from the link's query string (wired up
-  // in signup-form.tsx); fall back to asking the user for it.
-  const [email, setEmail] = useState(searchParams.get("email") ?? "")
-  const askForEmail = !searchParams.get("email")
+  // identify the account. Sign-up leaves it in sessionStorage (QA SEC-16:
+  // never in the URL); an older link may still carry `?email=`. Otherwise
+  // ask the user for it.
+  const linkEmail = searchParams.get("email")
+  const [email, setEmail] = useState(linkEmail ?? "")
+  const [askForEmail, setAskForEmail] = useState(!linkEmail)
+  useEffect(() => {
+    if (linkEmail) return
+    try {
+      const pending = sessionStorage.getItem(PENDING_VERIFY_EMAIL_KEY)
+      if (pending) {
+        setEmail(pending)
+        setAskForEmail(false)
+      }
+    } catch {
+      // Storage blocked: keep asking.
+    }
+  }, [linkEmail])
 
   const validateField = (_field: Field, mode: ValidationMode) =>
     askForEmail ? validateEmail(email, mode === "submit") : null

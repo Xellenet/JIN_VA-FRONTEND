@@ -5,7 +5,7 @@ import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback  } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -35,7 +35,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react"
-import { naviiAvatar, resolveMediaUrl } from "@/lib/utils"
+import { resolveMediaUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
 import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
@@ -207,7 +207,6 @@ export default function PortfolioQueuePage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8 shrink-0">
-                            <AvatarImage src={naviiAvatar(item.artisanName, 32)} />
                             <AvatarFallback className="text-xs">{item.artisanName[0]}</AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">

@@ -21,6 +21,7 @@ import {
   mapNotification,
   readNotificationList,
   type BackendNotification,
+  type UnreadCountResponse,
 } from "@/lib/notifications"
 
 /**
@@ -45,9 +46,9 @@ function extractTotalPages(meta: Record<string, unknown> | undefined): number {
   return value > 0 ? value : 1
 }
 
-function fetchPage(page: number): Promise<{ items: Notification[]; totalPages: number }> {
+function fetchPage(page: number, unreadOnly = false): Promise<{ items: Notification[]; totalPages: number }> {
   return apiFetchWithMeta<BackendNotification[] | { items: BackendNotification[] }>(
-    `/notifications?page=${page}&limit=${PAGE_SIZE}`,
+    `/notifications?page=${page}&limit=${PAGE_SIZE}${unreadOnly ? "&isRead=false" : ""}`,
   ).then(({ data, meta }) => ({
     items: readNotificationList(data).map(mapNotification),
     totalPages: extractTotalPages(meta),
@@ -71,6 +72,18 @@ export function NotificationsPage() {
   const locallyRead = useRef<Set<string>>(new Set())
   /** How many pages are currently on screen, so a refresh re-fetches all of them. */
   const loadedPages = useRef(1)
+  /**
+   * QA NOT-03: the Unread filter asks the server (`isRead=false`) and the
+   * count comes from `/notifications/unread-count`. Both used to look only at
+   * the pages already loaded, so older unread items read as "all caught up".
+   */
+  const unreadOnly = useRef(false)
+  const [unreadTotal, setUnreadTotal] = useState<number | null>(null)
+  const refreshUnreadTotal = useCallback(() => {
+    apiFetch<UnreadCountResponse>("/notifications/unread-count")
+      .then((r) => setUnreadTotal(typeof r?.count === "number" ? r.count : null))
+      .catch(() => {})
+  }, [])
 
   const applyLocalReads = useCallback(
     (items: Notification[]) =>
@@ -81,15 +94,16 @@ export function NotificationsPage() {
   // NR2 — refresh every loaded page so "load more" state survives a poll.
   const refresh = useCallback(async () => {
     try {
+      refreshUnreadTotal()
       const pages = await Promise.all(
-        Array.from({ length: loadedPages.current }, (_, i) => fetchPage(i + 1)),
+        Array.from({ length: loadedPages.current }, (_, i) => fetchPage(i + 1, unreadOnly.current)),
       )
       setNotifications(applyLocalReads(pages.flatMap((p) => p.items)))
       setTotalPages(pages[pages.length - 1]?.totalPages ?? 1)
     } catch {
       // Keep what's on screen rather than blanking the feed on a transient error.
     }
-  }, [applyLocalReads])
+  }, [applyLocalReads, refreshUnreadTotal])
 
   useEffect(() => {
     refresh().finally(() => setIsLoading(false))
@@ -106,7 +120,7 @@ export function NotificationsPage() {
     setIsLoadingMore(true)
     try {
       const next = page + 1
-      const { items, totalPages: total } = await fetchPage(next)
+      const { items, totalPages: total } = await fetchPage(next, unreadOnly.current)
       setNotifications((prev) => [...prev, ...applyLocalReads(items)])
       setPage(next)
       setTotalPages(total)
@@ -120,12 +134,23 @@ export function NotificationsPage() {
 
   if (!user) return null
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length
+  const unreadCount = unreadTotal ?? notifications.filter((n) => !n.isRead).length
   const displayed = filter === "unread" ? notifications.filter((n) => !n.isRead) : notifications
+
+  const changeFilter = (next: "all" | "unread") => {
+    if (next === filter) return
+    setFilter(next)
+    unreadOnly.current = next === "unread"
+    loadedPages.current = 1
+    setPage(1)
+    setIsLoading(true)
+    refresh().finally(() => setIsLoading(false))
+  }
 
   const markAllRead = async () => {
     notifications.forEach((n) => locallyRead.current.add(n.id))
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+    setUnreadTotal(0)
     try {
       await apiFetch("/notifications/read-all", { method: "PATCH" })
     } catch {
@@ -136,6 +161,7 @@ export function NotificationsPage() {
   const markRead = async (id: string) => {
     locallyRead.current.add(id)
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
+    setUnreadTotal((c) => (c == null ? c : Math.max(c - 1, 0)))
     try {
       await apiFetch(`/notifications/${id}/read`, { method: "PATCH" })
     } catch {
@@ -165,7 +191,7 @@ export function NotificationsPage() {
             <Button
               variant={filter === "all" ? "default" : "outline"}
               size="sm"
-              onClick={() => setFilter("all")}
+              onClick={() => changeFilter("all")}
               className={filter === "all" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-transparent"}
             >
               All ({notifications.length})
@@ -173,7 +199,7 @@ export function NotificationsPage() {
             <Button
               variant={filter === "unread" ? "default" : "outline"}
               size="sm"
-              onClick={() => setFilter("unread")}
+              onClick={() => changeFilter("unread")}
               className={filter === "unread" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-transparent"}
             >
               Unread ({unreadCount})

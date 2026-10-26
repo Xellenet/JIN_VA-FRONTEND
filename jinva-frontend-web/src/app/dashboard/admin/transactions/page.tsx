@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -110,10 +110,36 @@ export default function TransactionsPage() {
   const [refundAmount, setRefundAmount] = useState("")
   const [isRefunding, setIsRefunding] = useState(false)
 
+  // QA PAY-21: search and status filter run on the server over the whole
+  // ledger, and the tiles are whole-ledger totals.
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+  const [summary, setSummary] = useState<{
+    totalRevenue: number
+    totalFees: number
+    totalPayouts: number
+    needsReview: number
+  } | null>(null)
+  const loadSummary = () =>
+    apiFetch<{ totalRevenue: number; totalFees: number; totalPayouts: number; needsReview: number }>(
+      "/payments/admin/summary",
+    )
+      .then(setSummary)
+      .catch(() => setSummary(null))
+  useEffect(() => {
+    void loadSummary()
+  }, [])
+
   const load = (p: number) => {
     setIsLoading(true)
     setLoadError(false)
-    apiFetchWithMeta<BackendPayment[]>(`/payments/admin/all?page=${p}&limit=${PAGE_SIZE}`)
+    const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) })
+    if (debouncedSearch) params.set("search", debouncedSearch)
+    if (statusFilter !== "ALL") params.set("status", statusFilter)
+    apiFetchWithMeta<BackendPayment[]>(`/payments/admin/all?${params.toString()}`)
       .then(({ data, meta }) => {
         setPayments(data)
         const pagination = meta?.pagination as { total?: number; totalPages?: number } | undefined
@@ -124,36 +150,12 @@ export default function TransactionsPage() {
       .finally(() => setIsLoading(false))
   }
 
-  useEffect(() => { load(page) }, [page])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(page) }, [page, debouncedSearch, statusFilter])
+  useEffect(() => setPage(1), [debouncedSearch, statusFilter])
 
-  // Ad1: `GET /payments/admin/all` takes only page/limit — no server-side
-  // search or status filtering exists today. These filters therefore only
-  // narrow the current page of results, called out explicitly below rather
-  // than silently implying a full-ledger search.
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return payments.filter((p) => {
-      const customerName = p.customer ? `${p.customer.firstname} ${p.customer.lastname}`.toLowerCase() : ""
-      const matchSearch =
-        !q ||
-        p.reference.toLowerCase().includes(q) ||
-        customerName.includes(q) ||
-        (p.job?.title ?? "").toLowerCase().includes(q)
-      const matchStatus = statusFilter === "ALL" || p.status === statusFilter
-      return matchSearch && matchStatus
-    })
-  }, [payments, search, statusFilter])
-
-  // Ad1: stat tiles are computed from the current page only (no dedicated
-  // summary endpoint exists — see requirements.md's open question). Labelled
-  // accordingly so they never read as full-ledger totals.
-  const stats = useMemo(() => {
-    const totalRevenue = payments.filter((p) => p.status === "HELD" || p.status === "RELEASED").reduce((s, p) => s + Number(p.amount), 0)
-    const totalPayouts = payments.filter((p) => p.status === "RELEASED").reduce((s, p) => s + Number(p.artisanAmount), 0)
-    const totalFees = payments.filter((p) => p.status === "HELD" || p.status === "RELEASED").reduce((s, p) => s + Number(p.platformFee), 0)
-    const needsReview = payments.filter((p) => p.status === "PENDING_TRANSFER" || p.status === "TRANSFER_FAILED").length
-    return { totalRevenue, totalPayouts, totalFees, needsReview }
-  }, [payments])
+  const filtered = payments
+  const stats = summary ?? { totalRevenue: 0, totalPayouts: 0, totalFees: 0, needsReview: 0 }
 
   const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
 
@@ -193,6 +195,7 @@ export default function TransactionsPage() {
       // logic — a partial refund adds to `refundedAmount` and only flips
       // `status` to the terminal REFUNDED once the cumulative total reaches
       // the full amount; a full refund always closes out whatever remained.
+      void loadSummary()
       const amountJustRefunded = refundMode === "partial" ? Number(refundAmount) : remainingRefundable(refundPayment)
       setPayments((prev) => prev.map((p) => {
         if (p.id !== refundPayment.id) return p
@@ -241,10 +244,10 @@ export default function TransactionsPage() {
         {/* Ad1: stat tiles are current-page arithmetic, not a full-ledger summary */}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: "Revenue (this page)", value: formatCurrency(stats.totalRevenue), icon: DollarSign, iconBg: "bg-primary/10", iconColor: "text-primary" },
-            { label: "Payouts (this page)", value: formatCurrency(stats.totalPayouts), icon: ArrowDownRight, iconBg: "bg-muted", iconColor: "text-foreground" },
-            { label: "Fees (this page)", value: formatCurrency(stats.totalFees), icon: ArrowUpRight, iconBg: "bg-primary/10", iconColor: "text-primary" },
-            { label: "Needs Review (this page)", value: String(stats.needsReview), icon: AlertTriangle, iconBg: "bg-attention/10", iconColor: "text-attention" },
+            { label: "Revenue", value: formatCurrency(stats.totalRevenue), icon: DollarSign, iconBg: "bg-primary/10", iconColor: "text-primary" },
+            { label: "Payouts", value: formatCurrency(stats.totalPayouts), icon: ArrowDownRight, iconBg: "bg-muted", iconColor: "text-foreground" },
+            { label: "Fees", value: formatCurrency(stats.totalFees), icon: ArrowUpRight, iconBg: "bg-primary/10", iconColor: "text-primary" },
+            { label: "Needs Review", value: String(stats.needsReview), icon: AlertTriangle, iconBg: "bg-attention/10", iconColor: "text-attention" },
           ].map(({ label, value, icon: Icon, iconBg, iconColor }) => (
             <Card key={label} className="transition-shadow hover:shadow-md">
               <CardContent className="p-4">
@@ -265,7 +268,7 @@ export default function TransactionsPage() {
             <div className="relative max-w-xs flex-1">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search this page by ref, customer, job…"
+                placeholder="Search by reference, customer, job or job ID…"
                 className="h-8 pl-9 text-sm"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -337,7 +340,7 @@ export default function TransactionsPage() {
                             <TableCell>
                               <div className="flex items-center gap-1.5">
                                 <Avatar className="h-6 w-6 shrink-0">
-                                  <AvatarImage src={resolveAvatarUrl(p.customer?.profilePicture, customerName, 24)} />
+                                  <AvatarImage src={resolveAvatarUrl(p.customer?.profilePicture)} />
                                   <AvatarFallback className="text-xs">{customerName[0]}</AvatarFallback>
                                 </Avatar>
                                 <span className="text-sm text-foreground">{customerName}</span>
@@ -403,7 +406,7 @@ export default function TransactionsPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-1.5">
                             <Avatar className="h-6 w-6 shrink-0">
-                              <AvatarImage src={resolveAvatarUrl(p.customer?.profilePicture, customerName, 24)} />
+                              <AvatarImage src={resolveAvatarUrl(p.customer?.profilePicture)} />
                               <AvatarFallback className="text-xs">{customerName[0]}</AvatarFallback>
                             </Avatar>
                             <span className="text-sm text-foreground">{customerName}</span>
@@ -459,7 +462,7 @@ export default function TransactionsPage() {
               </div>
               <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-xs text-muted-foreground">
-                  Showing {filtered.length} of {total} transactions{search || statusFilter !== "ALL" ? " (filtered within this page)" : ""}
+                  Showing {filtered.length} of {total} transaction{total === 1 ? "" : "s"}
                 </span>
                 {totalPages > 1 && (
                   <Pagination>
@@ -614,17 +617,28 @@ export default function TransactionsPage() {
                       Return part of the payment — the rest stays held or paid to the artisan.
                     </p>
                     {refundMode === "partial" && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className="text-xs font-semibold text-muted-foreground">GH₵</span>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={remainingRefundable(refundPayment)}
-                          className="h-8 max-w-[140px] text-sm"
-                          value={refundAmount}
-                          onChange={(e) => setRefundAmount(e.target.value)}
-                        />
-                      </div>
+                      <>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-xs font-semibold text-muted-foreground">GH₵</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={remainingRefundable(refundPayment)}
+                            className="h-8 max-w-[140px] text-sm"
+                            value={refundAmount}
+                            onChange={(e) => setRefundAmount(e.target.value)}
+                            aria-invalid={refundAmount.trim() !== "" && !partialAmountValid()}
+                            aria-describedby="refund-amount-error"
+                          />
+                        </div>
+                        {/* QA PAY-18: say why the button is disabled. */}
+                        {refundAmount.trim() !== "" && !partialAmountValid() && (
+                          <p id="refund-amount-error" className="mt-1 text-xs text-destructive">
+                            Enter an amount above 0 and no more than{" "}
+                            {formatCurrency(remainingRefundable(refundPayment))}, the refundable balance.
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                 </label>

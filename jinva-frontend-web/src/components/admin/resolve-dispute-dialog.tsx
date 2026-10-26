@@ -670,11 +670,7 @@ export function ResolveDisputeDialog({
                   <div className="flex flex-wrap items-center gap-2">
                     <Avatar className="h-6 w-6 shrink-0">
                       <AvatarImage
-                        src={resolveAvatarUrl(
-                          current.raisedBy?.profilePicture,
-                          raiserName,
-                          24,
-                        )}
+                        src={resolveAvatarUrl(current.raisedBy?.profilePicture)}
                       />
                       <AvatarFallback className="text-xs">{raiserName[0]}</AvatarFallback>
                     </Avatar>
@@ -728,11 +724,7 @@ export function ResolveDisputeDialog({
                       <div className="flex flex-wrap items-center gap-2">
                         <Avatar className="h-6 w-6 shrink-0">
                           <AvatarImage
-                            src={resolveAvatarUrl(
-                              (detail ?? current).respondedBy?.profilePicture,
-                              partyName((detail ?? current).respondedBy),
-                              24,
-                            )}
+                            src={resolveAvatarUrl((detail ?? current).respondedBy?.profilePicture)}
                           />
                           <AvatarFallback className="text-xs">
                             {partyName((detail ?? current).respondedBy)[0]}

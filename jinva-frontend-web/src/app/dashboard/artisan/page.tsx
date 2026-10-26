@@ -168,7 +168,7 @@ export default function ArtisanDashboard() {
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-2.5">
                               <Avatar className="h-8 w-8">
-                                <AvatarImage src={resolveAvatarUrl(job.customer?.profilePicture, clientName)} />
+                                <AvatarImage src={resolveAvatarUrl(job.customer?.profilePicture)} />
                                 <AvatarFallback><UserRound className="h-3.5 w-3.5" /></AvatarFallback>
                               </Avatar>
                               <span className="font-medium text-foreground">{clientName}</span>

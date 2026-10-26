@@ -1,10 +1,9 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Loader2, Paperclip, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiFetch } from "@/lib/api"
-import { resolveMediaUrl } from "@/lib/utils"
 import { toast } from "sonner"
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -24,6 +23,12 @@ function validateFile(file: File): string | null {
 interface UploadedAttachment {
   url: string
   name: string
+  /**
+   * QA MSG-18: a local object URL for the thumbnail. Job photos are private,
+   * and the server only shows one to people on the job it belongs to, which
+   * doesn't exist yet while the form is being filled in.
+   */
+  previewUrl: string
 }
 
 /**
@@ -73,7 +78,7 @@ export function AttachmentUploader({
           body: formData,
         })
         newUrls.push(res.url)
-        newItems.push({ url: res.url, name: file.name })
+        newItems.push({ url: res.url, name: file.name, previewUrl: URL.createObjectURL(file) })
       } catch (e) {
         toast.error(e instanceof Error ? e.message : `Failed to upload ${file.name}.`)
       }
@@ -88,8 +93,15 @@ export function AttachmentUploader({
 
   const removeAt = (url: string) => {
     onChange(value.filter((u) => u !== url))
-    setItems((prev) => prev.filter((i) => i.url !== url))
+    setItems((prev) => {
+      prev.filter((i) => i.url === url).forEach((i) => URL.revokeObjectURL(i.previewUrl))
+      return prev.filter((i) => i.url !== url)
+    })
   }
+
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  useEffect(() => () => itemsRef.current.forEach((i) => URL.revokeObjectURL(i.previewUrl)), [])
 
   return (
     <div className="space-y-3">
@@ -126,7 +138,7 @@ export function AttachmentUploader({
             >
               <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={resolveMediaUrl(item.url)} alt="" className="h-6 w-6 rounded object-cover" />
+              <img src={item.previewUrl} alt="" className="h-6 w-6 rounded object-cover" />
               <span className="max-w-[120px] truncate">{item.name}</span>
               <button
                 type="button"

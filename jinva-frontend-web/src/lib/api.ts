@@ -169,6 +169,15 @@ async function authedRequest(path: string, options: ApiFetchOptions = {}): Promi
     } = await res.json().catch(() => ({ message: "Request failed" }))
     // A ValidationPipe rejection returns `message` as an array of strings.
     const message = Array.isArray(err.message) ? err.message.join(" ") : err.message
+    // QA AUTH-17: an account banned mid-session is refused on its next request.
+    // End the session and say why on the login page, instead of leaving the
+    // user on a dashboard where every action fails.
+    if (res.status === 403 && (err.meta?.error ?? err.error) === "ACCOUNT_BANNED" && !skipAuth) {
+      clearAuthTokens()
+      if (typeof window !== "undefined") {
+        window.location.href = `/login?${SESSION_ENDED_PARAM}=1&error=account_banned`
+      }
+    }
     // api-contract.md §3.1: the error code and retry hint live in `meta`
     // (`meta.error`, `meta.retryAfterSeconds`) — the top-level reading was an
     // earlier, corrected version of that contract, kept only as a fallback.

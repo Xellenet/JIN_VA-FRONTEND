@@ -5,10 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function naviiAvatar(seed: string, size = 96): string {
-  return `https://api.navii.dev/avatar/${encodeURIComponent(seed)}?size=${size}&packs=command-center&style=neutral&mood=serious&tileBg=auto`
-}
-
 /**
  * The one way money is rendered in this app: GH₵ (Ghana Cedis), thousands
  * separated, always two decimal places.
@@ -50,19 +46,28 @@ export function resolveMediaUrl(url?: string | null): string {
 /**
  * The one way to turn a stored `profilePicture` into an `<AvatarImage src>`.
  *
- * Every avatar in the app used to be written as
- * `user.profilePicture || naviiAvatar(name)`, which skipped `resolveMediaUrl()`
- * — so a picture stored as a relative `/uploads/avatars/…` path (what the local
- * storage provider returns) was requested from the FRONTEND's own origin and
- * 404'd. It was invisible because `AvatarImage` silently falls back to the
- * `AvatarFallback` initials, so the only symptom was a failed request in the
- * network tab.
+ * It resolves relative `/uploads/…` paths against the API origin (a bare
+ * relative path 404s on the frontend's own origin). With no picture it returns
+ * `""`, and every `<Avatar>` shows its `<AvatarFallback>` (initials or icon).
  *
- * Combining both steps in one helper is deliberate: the two-expression idiom is
- * what made it easy to forget the resolution, and the fallback has to come
- * second because `resolveMediaUrl()` returns `""` for a missing picture.
- * `naviiAvatar()` already returns an absolute URL, so it needs no resolution.
+ * There is deliberately no generated placeholder: the previous one fetched
+ * `api.navii.dev/avatar/<name or email>`, sending users' names and emails to a
+ * third party on every dashboard (QA SEC-15 / UI-11).
  */
-export function resolveAvatarUrl(url: string | null | undefined, seed: string, size?: number): string {
-  return resolveMediaUrl(url) || naviiAvatar(seed, size)
+export function resolveAvatarUrl(url: string | null | undefined): string {
+  return resolveMediaUrl(url)
+}
+
+/**
+ * The API returns booking and slot times as 'HH:MM:SS' but accepts 'HH:MM'.
+ * `toClockTime` gives the full form for building dates (an 'HH:MM:SS' value
+ * plus ':00' made an Invalid Date, so "has this ended?" was never true);
+ * `formatClockTime` gives 'HH:MM' for display.
+ */
+export function toClockTime(time: string): string {
+  return time.length === 5 ? `${time}:00` : time
+}
+
+export function formatClockTime(time: string | null | undefined): string {
+  return time ? time.slice(0, 5) : ""
 }

@@ -10,9 +10,37 @@ import { RevenueChart } from "@/components/dashboard/admin/revenue-chart"
 import { RecentActivities } from "@/components/dashboard/admin/recent-activities"
 import { TopArtisans } from "@/components/dashboard/admin/top-artisans"
 import { OngoingJobs } from "@/components/dashboard/admin/ongoing-jobs"
-import { Users, Clock, CheckCircle2, Briefcase, Loader2, ShieldCheck, ArrowRight } from "lucide-react"
+import { Users, Clock, CheckCircle2, Briefcase, ShieldCheck, ArrowRight } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { mockActivities, mockArtisans, mockOrders } from "@/lib/data/mock-data"
+import { fillSeries, type AdminAnalytics } from "@/lib/admin-analytics"
+import type { Activity } from "@/components/dashboard/admin/recent-activities"
+import type { OngoingJob } from "@/components/dashboard/admin/ongoing-jobs"
+import { Skeleton } from "@/components/ui/skeleton"
+
+interface AdminPerson {
+  firstname?: string
+  lastname?: string
+  profilePicture?: string | null
+}
+interface AdminJobRow {
+  id: number
+  title: string
+  status: string
+  deadline?: string | null
+  createdAt: string
+  bookingId?: number | null
+  service?: { name: string } | null
+  customer?: AdminPerson | null
+}
+interface AdminBookingRow {
+  id: number
+  status: string
+  createdAt: string
+  service?: { name: string } | null
+  customer?: AdminPerson | null
+}
+
+const personName = (p?: AdminPerson | null) => `${p?.firstname ?? ""} ${p?.lastname ?? ""}`.trim() || "Customer"
 
 interface AdminStats {
   users: { total: number; artisans: number; customers: number; banned: number }
@@ -24,12 +52,68 @@ interface AdminStats {
 export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  // QA ADM-02: the chart, activity, top artisans and ongoing jobs used to be
+  // sample data; they now come from the last 30 days of real activity.
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null)
+  const [analyticsFailed, setAnalyticsFailed] = useState(false)
+  const [ongoing, setOngoing] = useState<OngoingJob[] | null>(null)
+  const [activity, setActivity] = useState<Activity[] | null>(null)
 
   useEffect(() => {
     apiFetch<AdminStats>("/admin/stats")
       .then(setStats)
       .catch(() => {})
       .finally(() => setIsLoading(false))
+    apiFetch<AdminAnalytics>("/admin/analytics?range=30d")
+      .then(setAnalytics)
+      .catch(() => setAnalyticsFailed(true))
+    apiFetch<AdminJobRow[]>("/admin/jobs?status=IN_PROGRESS&limit=6")
+      .then((rows) =>
+        setOngoing(
+          rows.map((j) => ({
+            id: j.id,
+            title: j.title,
+            service: j.service?.name ?? null,
+            status: j.status,
+            deadline: j.deadline ?? null,
+            customerName: personName(j.customer),
+            customerPicture: j.customer?.profilePicture ?? null,
+          })),
+        ),
+      )
+      .catch(() => setOngoing([]))
+    Promise.all([
+      apiFetch<AdminBookingRow[]>("/admin/bookings?limit=8").catch(() => [] as AdminBookingRow[]),
+      apiFetch<AdminJobRow[]>("/admin/jobs?limit=8").catch(() => [] as AdminJobRow[]),
+    ]).then(([bookings, jobs]) =>
+      setActivity(
+        [
+          ...bookings.map<Activity>((b) => ({
+            kind: "booking",
+            id: b.id,
+            title: b.service?.name ?? "Booking",
+            status: b.status,
+            at: b.createdAt,
+            customerName: personName(b.customer),
+            customerPicture: b.customer?.profilePicture ?? null,
+          })),
+          // A booking's job is the same piece of work; list it once.
+          ...jobs
+            .filter((j) => !j.bookingId)
+            .map<Activity>((j) => ({
+              kind: "job",
+              id: j.id,
+              title: j.title,
+              status: j.status,
+              at: j.createdAt,
+              customerName: personName(j.customer),
+              customerPicture: j.customer?.profilePicture ?? null,
+            })),
+        ]
+          .sort((a, b) => b.at.localeCompare(a.at))
+          .slice(0, 8),
+      ),
+    )
   }, [])
 
   return (
@@ -46,8 +130,12 @@ export default function AdminDashboard() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          // QA UI-12: placeholders the size of the cards, so the page doesn't
+          // jump when the numbers arrive.
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[118px] rounded-xl" />
+            ))}
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -114,14 +202,35 @@ export default function AdminDashboard() {
           </Card>
         )}
 
+        {!isLoading && stats && (
+          <p className="text-sm text-muted-foreground">
+            {stats.users.total} accounts in total ({stats.users.banned} banned) · {stats.jobs.total} jobs posted ·{" "}
+            {stats.bookings.total} bookings made
+          </p>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <RevenueChart />
-          <RecentActivities activities={mockActivities} />
+          {analyticsFailed ? (
+            <RevenueChart series={null} total={null} periodLabel="last 30 days" />
+          ) : !analytics ? (
+            <Skeleton className="h-[400px] rounded-xl" />
+          ) : (
+            <RevenueChart
+              series={analytics.series.revenue ? fillSeries(analytics.series.revenue, analytics, { gross: 0, net: 0, refunded: 0 }) : null}
+              total={analytics.kpis?.netRevenue ?? null}
+              periodLabel="last 30 days"
+            />
+          )}
+          {activity ? <RecentActivities activities={activity} /> : <Skeleton className="h-[400px] rounded-xl" />}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
-          <TopArtisans artisans={mockArtisans} />
-          <OngoingJobs jobs={mockOrders} />
+          {analytics?.topArtisans ? (
+            <TopArtisans artisans={analytics.topArtisans} />
+          ) : (
+            <Skeleton className="h-[260px] rounded-xl" />
+          )}
+          {ongoing ? <OngoingJobs jobs={ongoing} /> : <Skeleton className="h-[260px] rounded-xl" />}
         </div>
       </div>
     </DashboardLayout>

@@ -123,15 +123,20 @@ export default function PostJobPage() {
     setIsGettingLocation(true)
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
+        // QA JOB-04: looked up through JinVa, which passes on only a rounded
+        // point. The browser used to send the exact coordinates straight to a
+        // third-party geocoder.
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json`,
-            { headers: { "Accept-Language": "en" } },
+          const res = await apiFetch<{ label: string | null; available: boolean }>(
+            `/locations/reverse?lat=${coords.latitude}&lon=${coords.longitude}`,
           )
-          const data = await res.json()
-          setAddress(data.display_name ?? `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`)
+          if (res.label) {
+            setAddress(res.label)
+          } else {
+            toast.info("We couldn't find an address for your location. Please type it in.")
+          }
         } catch {
-          setAddress(`${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`)
+          toast.info("We couldn't find an address for your location. Please type it in.")
         }
         setTouched((t) => ({ ...t, address: true }))
         setIsGettingLocation(false)
@@ -175,6 +180,10 @@ export default function PostJobPage() {
         // GHS is the only currency the platform supports in-app; hardcoded
         // since no currency picker is wanted (backend requires this field).
         currency: "GHS",
+        // QA JOB-20: the preferred date is also the posting's deadline. If
+        // nobody has been accepted by the end of that day (Ghana time), the
+        // posting expires instead of staying open for a date that's passed.
+        ...(date ? { deadline: `${date}T23:59:59.000Z` } : {}),
       }
       const job = await apiFetch<{ id: string }>("/jobs", {
         method: "POST",
@@ -328,6 +337,9 @@ export default function PostJobPage() {
                         onChange={(e) => setDate(e.target.value)}
                       />
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      If no artisan is accepted by this date, the posting closes.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="time">Preferred Time</Label>

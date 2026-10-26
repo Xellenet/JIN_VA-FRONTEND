@@ -33,7 +33,7 @@ import {
   Pencil,
 } from "lucide-react"
 import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
-import { apiFetch, apiFetchWithMeta } from "@/lib/api"
+import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { useAuth } from "@/contexts/auth-context"
 import { PortfolioGallery } from "@/components/portfolio/portfolio-gallery"
@@ -43,6 +43,7 @@ import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbna
 import { ReviewReasonDialog } from "@/components/reviews/review-reason-dialog"
 import type { ApiPortfolioItem, ApiReview } from "@/lib/types"
 import { toast } from "sonner"
+import { availabilityLabel } from "@/lib/availability"
 
 // RE1 — matches `REVIEW_EDIT_WINDOW_HOURS` in api-contract.md §1.
 const REVIEW_EDIT_WINDOW_HOURS = 48
@@ -127,7 +128,14 @@ export default function ArtisanPublicProfile() {
         setReviewsPage(1)
         setReviewsTotalPages(reviewData.totalPages)
       })
-      .catch(() => setError("Could not load artisan profile."))
+      .catch((err) =>
+        setError(
+          // QA SRCH-15: hidden artisans (suspended, banned, unfinished) answer 404.
+          err instanceof ApiError && err.status === 404
+            ? "This artisan isn't available right now."
+            : "Could not load artisan profile.",
+        ),
+      )
       .finally(() => setIsLoading(false))
   }, [id])
 
@@ -227,7 +235,7 @@ export default function ArtisanPublicProfile() {
             <div className="flex flex-col items-start gap-6 md:flex-row md:items-end">
               <div className="relative -mt-16">
                 <Avatar className="h-28 w-28 border-4 border-background shadow-lg">
-                  <AvatarImage src={resolveAvatarUrl(artisan.user.profilePicture, name, 128)} />
+                  <AvatarImage src={resolveAvatarUrl(artisan.user.profilePicture)} />
                   <AvatarFallback><UserRound className="h-8 w-8" /></AvatarFallback>
                 </Avatar>
                 {artisan.isVerified && (
@@ -248,7 +256,7 @@ export default function ArtisanPublicProfile() {
                         : "border-border bg-muted text-muted-foreground"}
                     >
                       <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
-                      {isAvailable ? "Available" : "Busy"}
+                      {availabilityLabel(artisan.availabilityStatus)}
                     </Badge>
                   </div>
                   <p className="mt-1 text-muted-foreground">{specialization}</p>
@@ -455,7 +463,7 @@ export default function ArtisanPublicProfile() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10">
-                              <AvatarImage src={resolveAvatarUrl(avatar, reviewerName)} />
+                              <AvatarImage src={resolveAvatarUrl(avatar)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>

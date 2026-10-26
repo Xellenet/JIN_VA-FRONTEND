@@ -1,26 +1,31 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchBody } from "@/lib/api"
 import { toast } from "sonner"
 
 interface FavouriteArtisanRef {
   id: string
 }
 
-// FB1: the real `GET /favourites` response is `{ message, data, pagination }`
-// — there is no `items` field. Defensively also accept a bare array in case
-// the shape is ever simplified server-side (matches the dual-shape check
-// pattern used for other paginated list endpoints across the app).
-interface FavouritesEnvelope {
-  message?: string
-  data?: FavouriteArtisanRef[]
-  pagination?: { total: number; page: number; limit: number; totalPages: number }
-}
+/** The API's largest page size for GET /favourites. */
+const FAVOURITES_PAGE_SIZE = 50
 
-function extractFavouriteIds(response: FavouriteArtisanRef[] | FavouritesEnvelope): string[] {
-  const items = Array.isArray(response) ? response : response?.data ?? []
-  return items.map((a) => a.id)
+/**
+ * QA FAV-04: every saved artisan, across all pages. A single unpaged call
+ * returned the first 10, so the page and the search hearts stopped there.
+ */
+export async function fetchAllFavourites<T>(): Promise<T[]> {
+  const all: T[] = []
+  for (let page = 1; ; page++) {
+    const body = await apiFetchBody<
+      T[] | { data?: T[]; meta?: { pagination?: { totalPages?: number } } }
+    >(`/favourites?page=${page}&limit=${FAVOURITES_PAGE_SIZE}`)
+    const items = Array.isArray(body) ? body : body?.data ?? []
+    all.push(...items)
+    const totalPages = Array.isArray(body) ? 1 : (body?.meta?.pagination?.totalPages ?? 1)
+    if (page >= totalPages || items.length < FAVOURITES_PAGE_SIZE) return all
+  }
 }
 
 export function useFavouriteIds() {
@@ -28,8 +33,8 @@ export function useFavouriteIds() {
   const [pendingId, setPendingId] = useState<string | null>(null)
 
   useEffect(() => {
-    apiFetch<FavouriteArtisanRef[] | FavouritesEnvelope>("/favourites")
-      .then((r) => setFavouriteIds(new Set(extractFavouriteIds(r))))
+    fetchAllFavourites<FavouriteArtisanRef>()
+      .then((items) => setFavouriteIds(new Set(items.map((a) => a.id))))
       .catch(() => {})
   }, [])
 

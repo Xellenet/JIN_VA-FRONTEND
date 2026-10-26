@@ -15,6 +15,7 @@ import { AuthSplitLayout } from "./auth-split-layout"
 const ERROR_COPY: Record<string, string> = {
   access_denied: "Sign-in with Google was cancelled.",
   oauth_failed: "Something went wrong signing you in with Google. Please try again.",
+  account_banned: "This account has been banned. Contact support if you think this is a mistake.",
 }
 
 function ErrorState({ error }: { error: string }) {

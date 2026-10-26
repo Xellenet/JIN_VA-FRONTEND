@@ -1,8 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { ImageOff, Loader2 } from "lucide-react"
 import { Lightbox } from "@/components/ui/lightbox"
-import { cn, resolveMediaUrl } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+import { usePrivateMedia } from "@/hooks/use-private-media"
 
 /**
  * MC4 read side — an image attachment rendered inline in a message bubble,
@@ -16,13 +18,19 @@ import { cn, resolveMediaUrl } from "@/lib/utils"
  *
  * Used by both surfaces that show message images: the chat thread and the
  * admin dispute-conversation viewer.
+ *
+ * QA MSG-18: the image is private to the conversation, so it's loaded with
+ * the signed-in request (see `usePrivateMedia`), not a plain `<img src>`.
  */
 export function MessageImage({
   url,
+  previewSrc,
   className,
   onLoad,
 }: Readonly<{
   url: string
+  /** A local object URL to show instead, for a message still being sent. */
+  previewSrc?: string
   className?: string
   /**
    * Fired once the thumbnail has actually painted. The thread auto-scrolls when
@@ -32,7 +40,31 @@ export function MessageImage({
   onLoad?: () => void
 }>) {
   const [isOpen, setIsOpen] = useState(false)
-  const src = resolveMediaUrl(url)
+  const remote = usePrivateMedia(previewSrc ? null : url)
+  const src = previewSrc ?? remote.src
+  const status = previewSrc ? "ready" : remote.status
+
+  if (status !== "ready" || !src) {
+    return (
+      <div
+        className={cn(
+          "flex h-32 w-[200px] max-w-full items-center justify-center rounded-lg border border-border/40 bg-muted text-muted-foreground",
+          className,
+        )}
+        role="img"
+        aria-label={status === "loading" ? "Loading image" : "Image unavailable"}
+      >
+        {status === "loading" ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : (
+          <span className="flex items-center gap-1.5 text-xs">
+            <ImageOff className="h-4 w-4" />
+            Image unavailable
+          </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <>

@@ -286,7 +286,7 @@ export default function ArtisanMyReviewsPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-9 w-9">
-                              <AvatarImage src={resolveAvatarUrl(avatar, reviewerName)} />
+                              <AvatarImage src={resolveAvatarUrl(avatar)} />
                               <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                             </Avatar>
                             <div>

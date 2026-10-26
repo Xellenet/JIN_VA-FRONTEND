@@ -117,7 +117,8 @@ export default function AdminServicesPage() {
     const payload = {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
-      price: form.price.trim() ? Number(form.price) : undefined,
+      // An emptied price on edit clears it; on create it's simply left out.
+      price: form.price.trim() ? Number(form.price) : editingId != null ? null : undefined,
       estimatedDurationMins: duration,
     }
     try {
@@ -264,7 +265,7 @@ export default function AdminServicesPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="svc-price">Price (GH₵)</Label>
-                <Input id="svc-price" type="number" min="0" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} />
+                <Input id="svc-price" type="number" min="0.01" step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="svc-duration">Est. Duration (mins)</Label>

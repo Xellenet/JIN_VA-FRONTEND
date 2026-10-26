@@ -353,9 +353,15 @@ export default function ArtisanPublicProfile() {
               <CardContent className="p-6 space-y-6">
                 <div>
                   <h3 className="mb-3 text-lg font-semibold text-foreground">About {name}</h3>
-                  <p className="leading-relaxed text-muted-foreground">
-                    {artisan.bio || `Professional artisan specializing in ${specialization.toLowerCase()}. Committed to quality workmanship and customer satisfaction.`}
-                  </p>
+                  {/* B4: never a bio the artisan didn't write. Bio is optional
+                      (B1), so an empty one gets an honest line instead. */}
+                  {artisan.bio?.trim() ? (
+                    <p className="leading-relaxed text-muted-foreground">{artisan.bio}</p>
+                  ) : (
+                    <p className="italic text-muted-foreground">
+                      {artisan.user.firstname?.trim() || "This artisan"} hasn&apos;t added a bio yet.
+                    </p>
+                  )}
                 </div>
                 {artisan.services && artisan.services.length > 0 && (
                   <div>

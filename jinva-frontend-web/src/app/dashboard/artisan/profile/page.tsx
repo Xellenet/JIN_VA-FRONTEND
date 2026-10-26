@@ -35,12 +35,22 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch, apiFetchWithMeta } from "@/lib/api"
+import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api"
+import { PhoneField } from "@/components/forms/phone-field"
+import { PHONE_IN_USE_CODE } from "@/components/auth/signup-fields"
+import {
+  DEFAULT_PHONE_COUNTRY,
+  PHONE_MESSAGES,
+  phoneUpdateFor,
+  splitStoredPhone,
+  type SupportedPhoneCountry,
+} from "@/lib/phone"
 import { resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { VerifiedBookingBadge } from "@/components/reviews/verified-booking-badge"
 import {
+  BioNudge,
   ProfileCompleteness,
   SearchVisibilityBadge,
   readProfileCompleteness,
@@ -60,7 +70,7 @@ function extractTotalPages(meta: Record<string, unknown> | undefined): number {
 
 interface BackendArtisanProfile {
   id: string
-  bio?: string
+  bio?: string | null
   experienceYears?: number
   hourlyRate?: number
   businessName?: string
@@ -117,6 +127,8 @@ export default function ArtisanProfile() {
   const [lastname, setLastname] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
+  const [phoneCountry, setPhoneCountry] = useState<SupportedPhoneCountry>(DEFAULT_PHONE_COUNTRY)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
 
   // Artisan profile form
   const [bio, setBio] = useState("")
@@ -208,7 +220,10 @@ export default function ArtisanProfile() {
     setFirstname(parts[0] ?? "")
     setLastname(parts.slice(1).join(" "))
     setEmail(user.email ?? "")
-    setPhone(user.phone ?? "")
+    const storedPhone = splitStoredPhone(user.phone)
+    setPhone(storedPhone.national)
+    setPhoneCountry(storedPhone.country)
+    setPhoneError(null)
   }, [user])
 
   // RV2: paginated so reviews 11+ stay reachable — reused by the pager below.
@@ -257,7 +272,7 @@ export default function ArtisanProfile() {
     const marked = new Set<ProfessionalField>()
     if (!professionalHalfUnsaved) return marked
 
-    const differsAsText = (typed: string, stored: string | undefined) => typed.trim() !== (stored ?? "").trim()
+    const differsAsText = (typed: string, stored: string | null | undefined) => typed.trim() !== (stored ?? "").trim()
     const differsAsNumber = (typed: string, stored: number | undefined) => {
       if (typed.trim() === "") return stored != null
       return stored == null || Number(typed) !== Number(stored)
@@ -273,6 +288,12 @@ export default function ArtisanProfile() {
 
   const handleSaveProfile = async () => {
     const wasIncomplete = readProfileCompleteness(artisanProfile).state === "incomplete"
+    const phoneUpdate = phoneUpdateFor(user?.phone, phone, phoneCountry)
+    if (phoneUpdate.error) {
+      setPhoneError(phoneUpdate.error)
+      document.getElementById("phone")?.focus()
+      return
+    }
 
     setIsSaving(true)
     try {
@@ -290,7 +311,12 @@ export default function ArtisanProfile() {
         // the API's ValidationPipe rejects unknown properties, so including it
         // made every save on this page fail with "property email should not
         // exist".
-        body: JSON.stringify({ firstname, lastname, phoneNumber: phone }),
+        // PH11: phone is E.164, and sent only when edited (see phoneUpdateFor).
+        body: JSON.stringify({
+          firstname,
+          lastname,
+          ...(phoneUpdate.phoneNumber ? { phoneNumber: phoneUpdate.phoneNumber } : {}),
+        }),
       })
 
       let savedProfile: BackendArtisanProfile
@@ -298,7 +324,11 @@ export default function ArtisanProfile() {
         savedProfile = await apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
           method: "PATCH",
           body: JSON.stringify({
-            bio: bio || undefined,
+            // B5: bio is optional, so clearing it is allowed. A blank bio is
+            // sent as null (the DTO's @IsOptional accepts it, the column is
+            // nullable); `undefined` would leave the old bio stored while the
+            // field shows empty.
+            bio: bio.trim() ? bio : null,
             experienceYears: experienceYears ? Number(experienceYears) : undefined,
             businessName: businessName || undefined,
             hourlyRate: hourlyRate ? Number(hourlyRate) : undefined,
@@ -352,7 +382,10 @@ export default function ArtisanProfile() {
       )
     } catch (err: unknown) {
       // Only the user-record half can reach this now, so nothing was committed.
-      // The message is the backend's own (e.g. "Phone number already in use").
+      if (err instanceof ApiError && err.code === PHONE_IN_USE_CODE) {
+        setPhoneError(PHONE_MESSAGES.inUse)
+        return
+      }
       toast.error(err instanceof Error ? err.message : "Failed to save changes.")
     } finally {
       setIsSaving(false)
@@ -428,7 +461,7 @@ export default function ArtisanProfile() {
                     {user.phone && (
                       <span className="flex items-center gap-1.5">
                         <Phone className="h-3.5 w-3.5" />
-                        {user.phone}
+                        {splitStoredPhone(user.phone).national}
                       </span>
                     )}
                     {artisanProfile?.location && (
@@ -494,6 +527,12 @@ export default function ArtisanProfile() {
           onFixField={focusProfileField}
         />
 
+        {/* B3: bio is optional, so it is a "Recommended" nudge rather than a
+            checklist row. Driven by the stored bio, not the typed one. */}
+        {!isLoadingProfile && artisanProfile && !artisanProfile.bio?.trim() && (
+          <BioNudge onAdd={() => focusProfileField("bio")} />
+        )}
+
         {/* Tabs Section */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-2 md:w-auto md:grid-cols-none md:inline-flex">
@@ -552,19 +591,22 @@ export default function ArtisanProfile() {
                           </div>
                           <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Phone</Label>
-                          <div className="relative">
-                            <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              id="phone"
-                              className="pl-10"
-                              value={phone}
-                              onChange={(e) => setPhone(e.target.value)}
-                              placeholder="Phone number"
-                            />
-                          </div>
-                        </div>
+                        <PhoneField
+                          id="phone"
+                          label="Phone"
+                          value={phone}
+                          country={phoneCountry}
+                          onChange={(value) => {
+                            setPhone(value)
+                            setPhoneError(null)
+                          }}
+                          onCountryChange={(next) => {
+                            setPhoneCountry(next)
+                            setPhoneError(null)
+                          }}
+                          error={phoneError}
+                          disabled={isSaving}
+                        />
                         <div className="space-y-2 md:col-span-2">
                           {/* Lives in this card for layout reasons, but it is
                               saved by the artisan-profile PATCH — so it is
@@ -596,7 +638,9 @@ export default function ArtisanProfile() {
                     <CardContent className="p-5">
                       <div className="space-y-5">
                         <div className="space-y-2">
-                          <Label htmlFor="bio">Bio</Label>
+                          <Label htmlFor="bio">
+                            Bio <span className="font-normal">(optional)</span>
+                          </Label>
                           <Textarea
                             id="bio"
                             className={unsavedFields.has("bio") ? UNSAVED_FIELD_CLASS : undefined}

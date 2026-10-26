@@ -1,0 +1,25 @@
+{
+  "_about": "First-level subdivisions for one country, used by the Region field on Complete your account (LOC5, LOC7). Data from GeoNames, CC BY 4.0: credit GeoNames (https://www.geonames.org/) on the credits page. Regenerate with `node scripts/generate-regions.mjs <path to admin1CodesASCII.txt>`; nothing here is fetched at runtime.",
+  "source": "https://download.geonames.org/export/dump/admin1CodesASCII.txt",
+  "licence": "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), GeoNames",
+  "retrieved": "2026-10-19",
+  "country": "GH",
+  "regions": [
+    "Ahafo",
+    "Ashanti",
+    "Bono",
+    "Bono East",
+    "Central",
+    "Eastern",
+    "Greater Accra",
+    "North East",
+    "Northern",
+    "Oti",
+    "Savannah",
+    "Upper East",
+    "Upper West",
+    "Volta",
+    "Western",
+    "Western North"
+  ]
+}

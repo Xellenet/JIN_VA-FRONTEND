@@ -48,7 +48,7 @@ interface BackendArtisan {
   averageRating: number
   totalReviews: number
   availabilityStatus: string
-  services?: { id: string; name: string }[]
+  services?: BackendService[]
   user: { id: string; firstname: string; lastname: string; profilePicture?: string }
 }
 
@@ -149,14 +149,19 @@ export default function BookArtisanPage() {
   const [createdBooking, setCreatedBooking] = useState<BackendBooking | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      apiFetch<BackendService[] | { items: BackendService[] }>("/services").then((r) =>
-        Array.isArray(r) ? r : (r as { items: BackendService[] }).items ?? []
-      ),
-      apiFetch<BackendArtisan>(`/artisans/${id}`),
-    ])
-      .then(([svcList, profile]) => {
-        setServices(svcList)
+    apiFetch<BackendArtisan>(`/artisans/${id}`)
+      .then((profile) => {
+        // Only what this artisan offers — not the whole platform catalogue,
+        // which let a customer book a plumber for hair braiding. The public
+        // profile already carries each service's price and duration.
+        const offered = profile.services ?? []
+        setServices(offered)
+        // Always open with one of the artisan's services selected: the one the
+        // customer searched for (?service=, from Find Artisans) when this
+        // artisan offers it, otherwise their first. Still changeable.
+        const requested = new URLSearchParams(window.location.search).get("service")
+        const preselect = offered.find((s) => String(s.id) === requested) ?? offered[0]
+        if (preselect) setSelectedService(String(preselect.id))
         setArtisan({
           name: `${profile.user.firstname} ${profile.user.lastname}`.trim(),
           specialization: profile.businessName || profile.services?.[0]?.name || "General Service",
@@ -398,7 +403,14 @@ export default function BookArtisanPage() {
                     <Label htmlFor="service">Service Type <span className="text-destructive">*</span></Label>
                     <Select
                       value={selectedService}
-                      onValueChange={(v) => { setSelectedService(v); setSelectedStartTime(null) }}
+                      onValueChange={(v) => {
+                        // Radix emits "" when a value arrives in the same render
+                        // as its items (the prefill below the fetch), wiping the
+                        // prefilled service. A user can never pick "", so ignore it.
+                        if (!v) return
+                        setSelectedService(v)
+                        setSelectedStartTime(null)
+                      }}
                     >
                       <SelectTrigger>
                         {/* Explicit children instead of relying on Radix's

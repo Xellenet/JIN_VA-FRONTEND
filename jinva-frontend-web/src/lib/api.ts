@@ -34,6 +34,16 @@ async function tryRefresh(): Promise<boolean> {
   return refreshPromise
 }
 
+/**
+ * Ensures an access token is in memory, refreshing from the httpOnly cookie
+ * if not. For routes that bootstrap a brand-new session (/auth/callback):
+ * there the token is always absent, so letting the first request 401 and
+ * recover via the retry below is a guaranteed wasted round-trip.
+ */
+export async function ensureAccessToken(): Promise<boolean> {
+  return getAccessToken() ? true : tryRefresh()
+}
+
 type ApiFetchOptions = RequestInit & { skipAuth?: boolean }
 
 interface ApiEnvelope<T> {
@@ -101,8 +111,11 @@ async function authedRequest(path: string, options: ApiFetchOptions = {}): Promi
   }
   if (token) headers["Authorization"] = `Bearer ${token}`
 
+  // `include` unless the caller opts out: `GET /locations/suggestions` passes
+  // `credentials: "omit"` so no cookie (e.g. the pending-signup one) rides
+  // along with typed place text (google-signup-prefill PR1, design §3.4.4).
   const request = (): Promise<Response> =>
-    fetch(`${API_BASE}${path}`, { ...init, headers, credentials: "include" })
+    fetch(`${API_BASE}${path}`, { ...init, headers, credentials: init.credentials ?? "include" })
 
   let res = await request()
 
@@ -250,4 +263,17 @@ export async function apiFetchWithMeta<T = unknown>(
     data: (body?.data !== undefined ? body.data : (body as unknown)) as T,
     meta: body?.meta,
   }
+}
+
+/**
+ * Same request path as `apiFetch`, but returns the whole JSON body instead of
+ * unwrapping `data`.
+ *
+ * For the endpoints that answer like `POST /auth/login` —
+ * `{ access_token, expires_at, message, data: user }` — where the token sits
+ * beside `data` rather than inside it, so `apiFetch` would throw it away. Used
+ * by `POST /auth/social/complete` (the Google "complete your account" step).
+ */
+export async function apiFetchBody<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  return (await apiFetchEnvelope(path, options)) as T
 }

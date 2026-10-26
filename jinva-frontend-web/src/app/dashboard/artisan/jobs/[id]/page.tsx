@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
+import { ApplyJobDialog } from "@/components/dashboard/apply-job-dialog"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -147,22 +148,10 @@ export default function ArtisanJobDetailPage() {
     }
   }
 
-  const handleApply = async () => {
-    if (!job) return
-    setIsApplying(true)
-    try {
-      await apiFetch(`/jobs/${job.id}/apply`, {
-        method: "POST",
-        body: JSON.stringify({ message: "I'm interested in this job.", quotePrice: 0 }),
-      })
-      toast.success("Application submitted successfully.")
-      setJob((prev) => prev ? { ...prev, status: "PENDING" } : prev)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to apply.")
-    } finally {
-      setIsApplying(false)
-    }
-  }
+  // QA JOB-08: the artisan states a price in a dialog (no more GH₵ 0 quote);
+  // applying leaves the job OPEN, so only this page's button changes.
+  const [hasApplied, setHasApplied] = useState(false)
+  const handleApply = () => setIsApplying(true)
 
   const handleRequestCompletion = async () => {
     if (!job) return
@@ -325,14 +314,18 @@ export default function ArtisanJobDetailPage() {
                 {/* Actions */}
                 <div className="mt-6 flex flex-wrap gap-2 border-t border-border pt-5">
                   {job.status === "OPEN" && (
-                    <Button
-                      className="bg-primary text-primary-foreground hover:bg-primary/90"
-                      onClick={handleApply}
-                      disabled={isApplying}
-                    >
-                      {isApplying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Apply for Job
-                    </Button>
+                    hasApplied ? (
+                      <Button variant="outline" disabled>
+                        Application sent
+                      </Button>
+                    ) : (
+                      <Button
+                        className="bg-primary text-primary-foreground hover:bg-primary/90"
+                        onClick={handleApply}
+                      >
+                        Apply for Job
+                      </Button>
+                    )
                   )}
                   {isMyJob && job.status === "PENDING" && (
                     <Button
@@ -417,7 +410,7 @@ export default function ArtisanJobDetailPage() {
                 {job.customer ? (
                   <div className="flex items-start gap-3">
                     <Avatar className="h-11 w-11 shrink-0">
-                      <AvatarImage src={resolveAvatarUrl(job.customer.profilePicture, clientName)} />
+                      <AvatarImage src={resolveAvatarUrl(job.customer.profilePicture)} />
                       <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 space-y-0.5">
@@ -526,6 +519,12 @@ export default function ArtisanJobDetailPage() {
           </div>
         </div>
       </div>
+      <ApplyJobDialog
+        job={job}
+        open={isApplying}
+        onOpenChange={setIsApplying}
+        onApplied={() => setHasApplied(true)}
+      />
     </DashboardLayout>
   )
 }

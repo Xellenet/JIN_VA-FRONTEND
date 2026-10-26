@@ -76,6 +76,8 @@ export interface BackendDM {
    * down with it, which is why every call site optional-chains this.
    */
   sender: BackendContact | null
+  /** Client-only: the picked file's object URL while the message is sending. */
+  localPreviewUrl?: string
 }
 
 /** `POST /messages` body (api-contract.md §3). */

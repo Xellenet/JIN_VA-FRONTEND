@@ -187,7 +187,7 @@ export function RaiseDisputeDialog({
         <div className="rounded-lg bg-muted/40 p-3">
           <div className="flex items-start gap-3">
             <Avatar className="h-9 w-9 shrink-0">
-              <AvatarImage src={resolveAvatarUrl(counterpartyAvatar, counterpartyName, 36)} />
+              <AvatarImage src={resolveAvatarUrl(counterpartyAvatar)} />
               <AvatarFallback className="text-xs">{counterpartyName[0]}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">

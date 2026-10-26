@@ -76,24 +76,33 @@ export function validateEmail(value: string, requireValue: boolean): string | nu
   return EMAIL_PATTERN.test(text) ? null : EMAIL_MESSAGES.invalid
 }
 
-export const PASSWORD_HINT = "At least 8 characters with letters, numbers, and symbols"
+export const PASSWORD_HINT = "8+ characters: upper and lower case, a number and one of ! @ # $ % ^ & *"
+
+/**
+ * QA SEC-16: the address a new account must verify, handed from sign-up to
+ * /verify-email through sessionStorage. It used to ride in the URL, which put
+ * it in browser history, server logs and analytics page views.
+ */
+export const PENDING_VERIFY_EMAIL_KEY = "jinva:pending-verify-email"
 
 export const PASSWORD_MESSAGES = {
   /** Login: any non-empty password may be tried. */
   enter: "Enter your password",
   create: "Create a password",
-  rule: "Use at least 8 characters, with a letter, a number and a symbol",
+  rule: "Use 8 or more characters with an upper-case letter, a lower-case letter, a number and one of ! @ # $ % ^ & *",
   reenter: "Re-enter your password",
   mismatch: "These passwords don't match",
 } as const
 
+/**
+ * QA VAL-12: the exact rule the backend enforces (PASSWORD_REGEX), so nothing
+ * the form accepts is refused after submit. Only the symbols ! @ # $ % ^ & *
+ * are allowed, and nothing besides letters, numbers and those symbols.
+ */
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,128}$/
+
 export function isStrongPassword(password: string): boolean {
-  return (
-    password.length >= 8 &&
-    /[a-zA-Z]/.test(password) &&
-    /[0-9]/.test(password) &&
-    /[!@#$%^&*(),.?":{}|<>]/.test(password)
-  )
+  return PASSWORD_PATTERN.test(password)
 }
 
 /** A new password (signup, reset): "Create a password", then the rule. */

@@ -18,7 +18,8 @@ import {
 import { AlertTriangle, Search, MessageSquare, Loader2 } from "lucide-react"
 import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
+import { PagePager } from "@/components/admin/page-pager"
 import { getDisputeOutcomeConfig, getDisputeStatusConfig } from "@/lib/status-badges"
 import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
 import {
@@ -27,40 +28,63 @@ import {
   type AdminDisputeStatus,
 } from "@/components/admin/resolve-dispute-dialog"
 
+const PAGE_SIZE = 25
+
 export default function DisputesPage() {
   const [disputes, setDisputes] = useState<AdminDispute[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [active, setActive] = useState<AdminDispute | null>(null)
 
+  // QA DSP-08: the page searched and counted only the first 100 rows it had
+  // loaded. Search (`q`: id, booking id, reason, names) and paging now run
+  // on the server, and the counters come from the summary endpoint.
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [debounced, setDebounced] = useState("")
+  const [counts, setCounts] = useState({ open: 0, review: 0, resolved: 0, closed: 0 })
+
   useEffect(() => {
-    apiFetch<AdminDispute[] | { items: AdminDispute[] }>("/admin/disputes?limit=100")
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: AdminDispute[] }).items ?? []
-        setDisputes(items)
-      })
-      .catch(() => toast.error("Could not load disputes."))
-      .finally(() => setIsLoading(false))
+    const t = setTimeout(() => setDebounced(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+  useEffect(() => setPage(1), [debounced])
+
+  const loadCounts = () =>
+    apiFetch<{ counts: { open: number; underReview: number; resolved: number; closed: number } }>(
+      "/admin/disputes/summary",
+    )
+      .then(({ counts: c }) =>
+        setCounts({ open: c.open, review: c.underReview, resolved: c.resolved, closed: c.closed }),
+      )
+      .catch(() => {})
+
+  useEffect(() => {
+    void loadCounts()
   }, [])
 
-  const filtered = disputes.filter((d) => {
-    const q = search.toLowerCase()
-    const raiserName = d.raisedBy
-      ? `${d.raisedBy.firstname ?? ""} ${d.raisedBy.lastname ?? ""}`.toLowerCase()
-      : ""
-    return (
-      String(d.id).includes(q) ||
-      d.reason.toLowerCase().includes(q) ||
-      raiserName.includes(q)
-    )
-  })
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+    if (debounced) params.set("q", debounced)
+    apiFetchWithMeta<AdminDispute[]>(`/admin/disputes?${params.toString()}`)
+      .then(({ data, meta }) => {
+        if (cancelled) return
+        setDisputes(Array.isArray(data) ? data : [])
+        const pagination = meta?.pagination as { total?: number; totalPages?: number } | undefined
+        setTotal(pagination?.total ?? 0)
+        setTotalPages(Math.max(pagination?.totalPages ?? 1, 1))
+      })
+      .catch(() => !cancelled && toast.error("Could not load disputes."))
+      .finally(() => !cancelled && setIsLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [page, debounced])
 
-  const counts = {
-    open:     disputes.filter((d) => d.status === "OPEN").length,
-    review:   disputes.filter((d) => d.status === "UNDER_REVIEW").length,
-    resolved: disputes.filter((d) => d.status === "RESOLVED").length,
-    closed:   disputes.filter((d) => d.status === "CLOSED").length,
-  }
+  const filtered = disputes
 
   /**
    * DC1.5: a dispute's new state always comes from the server. The dialog
@@ -72,12 +96,14 @@ export default function DisputesPage() {
   const applyServerState = (updated: AdminDispute) => {
     setDisputes((prev) => prev.map((d) => (d.id === updated.id ? { ...d, ...updated } : d)))
     setActive((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev))
+    void loadCounts()
   }
 
   const markUnderReview = async (id: number) => {
     try {
       await apiFetch(`/admin/disputes/${id}/start-review`, { method: "PATCH" })
       setDisputes((prev) => prev.map((d) => d.id === id ? { ...d, status: "UNDER_REVIEW" as AdminDisputeStatus } : d))
+      void loadCounts()
       toast.success("Dispute marked as under review.")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Action failed.")
@@ -92,6 +118,7 @@ export default function DisputesPage() {
           d.id === id ? { ...d, status: "CLOSED" as AdminDisputeStatus, resolvedAt: new Date().toISOString() } : d,
         ),
       )
+      void loadCounts()
       toast.success("Dispute closed.")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to close dispute.")
@@ -122,12 +149,12 @@ export default function DisputesPage() {
           <div className="flex items-center justify-between border-b p-4">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">{filtered.length} disputes</span>
+              <span className="text-sm font-medium text-foreground">{total} dispute{total === 1 ? "" : "s"}</span>
             </div>
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search disputes…"
+                placeholder="Search by ID, booking ID, name or email…"
                 className="h-8 pl-9 text-sm"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -174,7 +201,7 @@ export default function DisputesPage() {
                           <TableCell>
                             <div className="flex items-center gap-1.5">
                               <Avatar className="h-6 w-6 shrink-0">
-                                <AvatarImage src={resolveAvatarUrl(d.raisedBy?.profilePicture, raiserName, 24)} />
+                                <AvatarImage src={resolveAvatarUrl(d.raisedBy?.profilePicture)} />
                                 <AvatarFallback className="text-xs">{raiserName[0]}</AvatarFallback>
                               </Avatar>
                               <span className="text-sm text-foreground">{raiserName}</span>
@@ -254,6 +281,9 @@ export default function DisputesPage() {
                 </TableBody>
               </Table>
             )}
+          </div>
+          <div className="flex justify-end border-t p-3">
+            <PagePager page={page} totalPages={totalPages} onPage={setPage} />
           </div>
         </Card>
       </div>

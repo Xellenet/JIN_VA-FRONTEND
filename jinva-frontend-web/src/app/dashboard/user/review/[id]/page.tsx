@@ -20,6 +20,8 @@ import type { ApiReview } from "@/lib/types"
 
 // RE1 — matches `REVIEW_EDIT_WINDOW_HOURS` in api-contract.md §1.
 const REVIEW_EDIT_WINDOW_HOURS = 48
+/** The API's limit on review text (CreateReviewDto). */
+const REVIEW_MAX_LENGTH = 2000
 
 interface BackendJob {
   id: string
@@ -57,6 +59,7 @@ function ReviewPageContent() {
   const [hoveredRating, setHoveredRating] = useState(0)
   const [comment, setComment] = useState("")
   const [photoUrls, setPhotoUrls] = useState<string[]>([])
+  const [photosUploading, setPhotosUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
@@ -271,16 +274,24 @@ function ReviewPageContent() {
                     rows={6}
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    maxLength={500}
+                    maxLength={REVIEW_MAX_LENGTH}
                     disabled={editWindowExpired}
                   />
-                  <p className="text-xs text-muted-foreground">{comment.length}/500 characters</p>
+                  {/* QA REV-04: the API takes 2,000 characters; the form allowed 500. */}
+                  <p className="text-xs text-muted-foreground">
+                    {comment.length}/{REVIEW_MAX_LENGTH} characters
+                  </p>
                 </div>
 
                 {!isEditMode && (
                   <div className="space-y-2 pt-2">
                     <Label>Add Photos (optional)</Label>
-                    <ReviewPhotoPicker value={photoUrls} onChange={setPhotoUrls} disabled={isSubmitting} />
+                    <ReviewPhotoPicker
+                      value={photoUrls}
+                      onChange={setPhotoUrls}
+                      onUploadingChange={setPhotosUploading}
+                      disabled={isSubmitting}
+                    />
                   </div>
                 )}
                 {isEditMode && existingReview && existingReview.photos.length > 0 && (
@@ -297,10 +308,10 @@ function ReviewPageContent() {
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleSubmit}
-                disabled={rating === 0 || isSubmitting || editWindowExpired}
+                disabled={rating === 0 || isSubmitting || editWindowExpired || photosUploading}
               >
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isEditMode ? "Update Review" : "Submit Review"}
+                {isSubmitting || photosUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {photosUploading ? "Uploading photos…" : isEditMode ? "Update Review" : "Submit Review"}
               </Button>
               <Button variant="outline" className="bg-transparent" asChild>
                 <Link href={isEditMode && backToProfileHref ? backToProfileHref : `/dashboard/user/bookings/${id}`}>
@@ -319,7 +330,7 @@ function ReviewPageContent() {
                 <CardContent className="p-5">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-14 w-14">
-                      <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture, artisanName)} />
+                      <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture)} />
                       <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                     <div>

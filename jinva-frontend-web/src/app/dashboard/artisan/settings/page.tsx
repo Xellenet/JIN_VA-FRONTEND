@@ -44,7 +44,7 @@ import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
 import { PhoneField } from "@/components/forms/phone-field"
-import { PHONE_IN_USE_CODE } from "@/components/auth/signup-fields"
+import { isStrongPassword, PASSWORD_MESSAGES, PHONE_IN_USE_CODE } from "@/components/auth/signup-fields"
 import {
   DEFAULT_PHONE_COUNTRY,
   PHONE_MESSAGES,
@@ -324,9 +324,31 @@ function ArtisanSettingsContent() {
   if (!user) return null
 
   const handleSaveProfile = async () => {
+    // QA ART-09: every rule the two endpoints enforce is checked here first,
+    // so a bad value can't leave the name saved and the rest not.
     const radiusValue = serviceRadiusKm.trim() === "" ? undefined : Number(serviceRadiusKm)
-    if (radiusValue !== undefined && (!Number.isFinite(radiusValue) || radiusValue <= 0)) {
-      toast.error("Service radius must be a positive number of kilometers.")
+    if (
+      radiusValue !== undefined &&
+      (!Number.isInteger(radiusValue) || radiusValue <= 0 || radiusValue > MAX_SERVICE_RADIUS_KM)
+    ) {
+      toast.error(`Service radius must be a whole number of kilometres from 1 to ${MAX_SERVICE_RADIUS_KM}.`)
+      document.getElementById("radius")?.focus()
+      return
+    }
+    if (!firstname.trim() || !lastname.trim()) {
+      toast.error("Enter your first and last name.")
+      return
+    }
+    if (firstname.trim().length > NAME_MAX || lastname.trim().length > NAME_MAX) {
+      toast.error(`First and last name can each be at most ${NAME_MAX} characters.`)
+      return
+    }
+    if (serviceArea.trim().length > SERVICE_AREA_MAX) {
+      toast.error(`Service area can be at most ${SERVICE_AREA_MAX} characters.`)
+      return
+    }
+    if (cancellationPolicy.length > CANCELLATION_POLICY_MAX) {
+      toast.error(`Cancellation policy can be at most ${CANCELLATION_POLICY_MAX} characters.`)
       return
     }
     const phoneUpdate = phoneUpdateFor(user.phone, phone, phoneCountry)
@@ -337,6 +359,7 @@ function ArtisanSettingsContent() {
     }
 
     setIsSaving(true)
+    let accountSaved = false
     try {
       await apiFetch("/users/me", {
         method: "PATCH",
@@ -346,11 +369,12 @@ function ArtisanSettingsContent() {
         // before it ever reached the artisan-profile call below.
         // PH11: phone is E.164, and sent only when edited (see phoneUpdateFor).
         body: JSON.stringify({
-          firstname,
-          lastname,
+          firstname: firstname.trim(),
+          lastname: lastname.trim(),
           ...(phoneUpdate.phoneNumber ? { phoneNumber: phoneUpdate.phoneNumber } : {}),
         }),
       })
+      accountSaved = true
       // F6/F7: Service Area, Service Radius, and Cancellation Policy live on
       // the artisan profile, not the base user record.
       const savedProfile = await apiFetch<ProfileCompletenessSource>("/users/me/artisan-profile", {
@@ -383,7 +407,13 @@ function ArtisanSettingsContent() {
         setPhoneError(PHONE_MESSAGES.inUse)
         return
       }
-      toast.error(err instanceof Error ? err.message : "Failed to save changes.")
+      const reason = err instanceof Error ? err.message : "Failed to save changes."
+      if (accountSaved) {
+        await refreshUser()
+        toast.error(`Your name and phone were saved, but your service details weren't: ${reason}`)
+      } else {
+        toast.error(reason)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -394,8 +424,8 @@ function ArtisanSettingsContent() {
       toast.error("New passwords do not match.")
       return
     }
-    if (newPass.length < 8) {
-      toast.error("Password must be at least 8 characters.")
+    if (!isStrongPassword(newPass)) {
+      toast.error(PASSWORD_MESSAGES.rule)
       return
     }
     setIsUpdatingPass(true)
@@ -443,7 +473,7 @@ function ArtisanSettingsContent() {
           onValueChange={(tab) => router.replace(`?tab=${tab}`, { scroll: false })}
           className="space-y-6"
         >
-          <TabsList className="bg-muted">
+          <TabsList className="h-auto w-full justify-start overflow-x-auto bg-muted sm:w-auto">
             <TabsTrigger value="account" className="gap-2">
               <User className="h-4 w-4" />
               Account
@@ -718,38 +748,23 @@ function ArtisanSettingsContent() {
                     <Briefcase className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
-                    <h3 className="font-semibold">Job Preferences</h3>
+                    <h3 className="font-semibold">Service Radius</h3>
                     <p className="text-sm text-muted-foreground">
-                      Configure how you receive and handle job requests
+                      How far you&apos;re willing to travel for work
                     </p>
                   </div>
                 </div>
               </div>
               <CardContent className="p-6 space-y-4">
-                {[
-                  { label: "Auto-Accept Matching Jobs", desc: "Automatically accept jobs matching your specialization" },
-                  { label: "Show Phone Number to Clients", desc: "Allow clients to see your phone number on your profile", defaultOn: true },
-                  { label: "Accept Emergency Jobs", desc: "Receive high-priority emergency repair requests", defaultOn: true },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
-                    </div>
-                    <Switch defaultChecked={item.defaultOn} />
-                  </div>
-                ))}
-                <div className="grid gap-6 md:grid-cols-2 pt-2">
+                <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="maxJobs">Max Concurrent Jobs</Label>
-                    <Input id="maxJobs" type="number" defaultValue="3" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="radius">Service Radius (kilometers)</Label>
+                    <Label htmlFor="radius">Service Radius (kilometres)</Label>
                     <Input
                       id="radius"
                       type="number"
                       min={1}
+                      max={MAX_SERVICE_RADIUS_KM}
+                      step={1}
                       placeholder="e.g. 25"
                       value={serviceRadiusKm}
                       onChange={(e) => setServiceRadiusKm(e.target.value)}
@@ -1081,6 +1096,12 @@ function ArtisanSettingsContent() {
     </DashboardLayout>
   )
 }
+
+/** Matches the backend's UpdateMeDto and artisan-profile DTO limits. */
+const NAME_MAX = 15
+const MAX_SERVICE_RADIUS_KM = 500
+const SERVICE_AREA_MAX = 150
+const CANCELLATION_POLICY_MAX = 1000
 
 export default function ArtisanSettingsPage() {
   return (

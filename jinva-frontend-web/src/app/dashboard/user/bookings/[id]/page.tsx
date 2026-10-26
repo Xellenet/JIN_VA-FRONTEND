@@ -28,13 +28,15 @@ import {
   UserRound,
   Briefcase,
   AlertOctagon,
+  CheckCircle,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
+import { formatClockTime, formatCurrency, resolveAvatarUrl, toClockTime } from "@/lib/utils"
 import { toast } from "sonner"
 import { getBookingStatusConfig } from "@/lib/status-badges"
 import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
 import { DisputeEntryPoint } from "@/components/disputes/dispute-entry-point"
+import { AttachmentGallery } from "@/components/dashboard/attachment-gallery"
 
 interface BackendBooking {
   id: number
@@ -57,7 +59,7 @@ interface BackendBooking {
 }
 
 function isPastEnd(booking: BackendBooking): boolean {
-  const instant = new Date(`${booking.scheduledDate}T${booking.endTime}:00Z`)
+  const instant = new Date(`${booking.scheduledDate}T${toClockTime(booking.endTime)}Z`)
   return Date.now() > instant.getTime()
 }
 
@@ -68,6 +70,8 @@ export default function BookingDetailPage() {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [isFlagging, setIsFlagging] = useState(false)
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false)
+  const [isCompleting, setIsCompleting] = useState(false)
 
   useEffect(() => {
     apiFetch<BackendBooking>(`/bookings/${id}`)
@@ -88,6 +92,24 @@ export default function BookingDetailPage() {
       toast.error(err instanceof Error ? err.message : "Failed to cancel booking.")
     } finally {
       setIsCancelling(false)
+    }
+  }
+
+  // QA BK-23: completing the booking also completes its job; for a paid job
+  // that releases the artisan's money, so the server only allows it once the
+  // artisan has started and marked the work finished.
+  const handleComplete = async () => {
+    if (!booking) return
+    setIsCompleting(true)
+    try {
+      await apiFetch(`/bookings/${booking.id}/complete`, { method: "PATCH" })
+      setBooking((prev) => (prev ? { ...prev, status: "COMPLETED" } : prev))
+      setShowCompleteDialog(false)
+      toast.success("Booking marked as completed.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to complete this booking.")
+    } finally {
+      setIsCompleting(false)
     }
   }
 
@@ -192,7 +214,7 @@ export default function BookingDetailPage() {
                       </span>
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
                         <Clock className="h-3.5 w-3.5 text-primary" />
-                        {booking.startTime} – {booking.endTime}
+                        {formatClockTime(booking.startTime)} – {formatClockTime(booking.endTime)}
                       </span>
                     </div>
                   </div>
@@ -229,11 +251,16 @@ export default function BookingDetailPage() {
                 <div className="border-b border-border p-5">
                   <h3 className="font-semibold text-foreground">Attached Photos</h3>
                 </div>
-                <CardContent className="flex flex-wrap gap-3 p-5">
-                  {booking.attachmentUrls.map((url) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={url} src={url} alt="Booking attachment" className="h-20 w-20 rounded-lg border border-border object-cover" />
-                  ))}
+                <CardContent className="p-5">
+                  {/* QA MSG-18: private photos, loaded with the signed-in request. */}
+                  <AttachmentGallery
+                    attachments={booking.attachmentUrls.map((url, i) => ({
+                      id: i + 1,
+                      url,
+                      fileType: "",
+                      createdAt: booking.createdAt,
+                    }))}
+                  />
                 </CardContent>
               </Card>
             )}
@@ -250,7 +277,7 @@ export default function BookingDetailPage() {
               <CardContent className="p-5">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-14 w-14">
-                    <AvatarImage src={resolveAvatarUrl(booking.artisanProfile?.user?.profilePicture, artisanName)} />
+                    <AvatarImage src={resolveAvatarUrl(booking.artisanProfile?.user?.profilePicture)} />
                     <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                   <div>
@@ -283,6 +310,16 @@ export default function BookingDetailPage() {
                       <Briefcase className="mr-2 h-4 w-4" />
                       View Linked Job
                     </Link>
+                  </Button>
+                )}
+                {booking.status === "CONFIRMED" && (
+                  <Button
+                    variant="outline"
+                    className="w-full bg-transparent"
+                    onClick={() => setShowCompleteDialog(true)}
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Mark as Completed
                   </Button>
                 )}
                 {canFlagNoShow && (
@@ -325,6 +362,32 @@ export default function BookingDetailPage() {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={showCompleteDialog} onOpenChange={(open) => !isCompleting && setShowCompleteDialog(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark this booking as completed?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirm the work is done. If you paid through JinVa, this releases the payment to the artisan and
+              can&apos;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCompleting}>Not yet</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void handleComplete()
+              }}
+              disabled={isCompleting}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Yes, it&apos;s done
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>

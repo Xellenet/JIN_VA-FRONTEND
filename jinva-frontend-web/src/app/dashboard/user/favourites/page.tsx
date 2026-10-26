@@ -33,7 +33,9 @@ import {
 } from "lucide-react"
 import { cn, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
+import { fetchAllFavourites } from "@/hooks/use-favourites"
 import { toast } from "sonner"
+import { availabilityLabel } from "@/lib/availability"
 
 interface BackendArtisan {
   id: string
@@ -54,16 +56,6 @@ interface BackendArtisan {
 // — read `.data` (and `.pagination` for paging), never a nonexistent `items`
 // field. Also defensively accepts a bare array in case the shape is ever
 // simplified server-side.
-interface FavouritesEnvelope {
-  message?: string
-  data?: BackendArtisan[]
-  pagination?: { total: number; page: number; limit: number; totalPages: number }
-}
-
-function extractFavourites(response: BackendArtisan[] | FavouritesEnvelope): BackendArtisan[] {
-  return Array.isArray(response) ? response : response?.data ?? []
-}
-
 function mapArtisan(a: BackendArtisan) {
   return {
     id: a.id,
@@ -78,6 +70,7 @@ function mapArtisan(a: BackendArtisan) {
     totalReviews: Number(a.totalReviews ?? 0),
     completedJobsCount: a.completedJobsCount,
     availability: a.availabilityStatus === "AVAILABLE" ? "available" : "busy",
+    availabilityLabel: availabilityLabel(a.availabilityStatus),
     isVerified: a.isVerified,
     favouritedAt: a.favouritedAt,
   }
@@ -125,9 +118,9 @@ export default function FavouritesPage() {
   const load = useCallback(() => {
     setIsLoading(true)
     setLoadError(false)
-    apiFetch<BackendArtisan[] | FavouritesEnvelope>("/favourites")
-      .then((r) => {
-        const mapped = extractFavourites(r).map(mapArtisan)
+    fetchAllFavourites<BackendArtisan>()
+      .then((items) => {
+        const mapped = items.map(mapArtisan)
         setFavourites(mapped)
         // design-spec.md §10.2: if the backend hasn't shipped `favouritedAt`
         // yet, "Recently Saved" has nothing real to sort by — fall back to
@@ -305,7 +298,7 @@ export default function FavouritesPage() {
                         <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
                           <div className="relative">
                             <Avatar className="h-20 w-20 border-4 border-background shadow-md">
-                              <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
+                              <AvatarImage src={resolveAvatarUrl(artisan.avatar)} />
                               <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
                             </Avatar>
                             <button
@@ -341,7 +334,7 @@ export default function FavouritesPage() {
                             )}
                           >
                             <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                            {artisan.availability === "available" ? "Available" : "Busy"}
+                            {artisan.availabilityLabel}
                           </Badge>
                         </div>
 

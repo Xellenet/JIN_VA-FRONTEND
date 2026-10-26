@@ -44,9 +44,9 @@ import {
   AlertOctagon,
   Briefcase,
 } from "lucide-react"
-import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
+import { cn, formatClockTime, formatCurrency, resolveAvatarUrl, toClockTime } from "@/lib/utils"
 import { toast } from "sonner"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMessage } from "@/lib/api"
 import { getBookingStatusConfig } from "@/lib/status-badges"
 
 // 0=Sunday … 6=Saturday
@@ -103,7 +103,7 @@ function toDateKey(d: Date): string {
 }
 
 function isBookingPastEnd(b: ApiBooking): boolean {
-  return Date.now() > new Date(`${b.scheduledDate}T${b.endTime}:00Z`).getTime()
+  return Date.now() > new Date(`${b.scheduledDate}T${toClockTime(b.endTime)}Z`).getTime()
 }
 
 export default function ArtisanCalendarPage() {
@@ -135,6 +135,11 @@ export default function ArtisanCalendarPage() {
   const [selectedBookingDate, setSelectedBookingDate] = useState<Date | undefined>(undefined)
   const [respondingId, setRespondingId] = useState<number | null>(null)
   const [declineTargetId, setDeclineTargetId] = useState<number | null>(null)
+  // QA JOB-22: confirming creates the customer's payment, so a booking with no
+  // agreed price needs the artisan's price first.
+  const [acceptTarget, setAcceptTarget] = useState<ApiBooking | null>(null)
+  const [acceptPrice, setAcceptPrice] = useState("")
+  const [acceptPriceError, setAcceptPriceError] = useState<string | null>(null)
 
   useEffect(() => {
     apiFetch<ApiAvailability>("/availability/my")
@@ -219,7 +224,8 @@ export default function ArtisanCalendarPage() {
           dayOfWeek: Number(newDay),
           startTime: newStart,
           endTime: newEnd,
-          isActive: true,
+          // QA AV-01: no isActive here. New slots are active by default, and
+          // the create endpoint rejects the field (it's for PATCH only).
         }),
       })
       setSlots((prev) => [...prev, created])
@@ -237,7 +243,7 @@ export default function ArtisanCalendarPage() {
     if (blockEnd < blockStart) { toast.error("End date must be on or after the start date."); return }
     setIsAddingBlock(true)
     try {
-      const created = await apiFetch<ApiBlock>("/availability/my/blocks", {
+      const { data: created, message } = await apiFetchWithMessage<ApiBlock & { conflictingBookingIds?: number[] }>("/availability/my/blocks", {
         method: "POST",
         body: JSON.stringify({
           startDate: blockStart,
@@ -249,7 +255,12 @@ export default function ArtisanCalendarPage() {
       setBlockStart("")
       setBlockEnd("")
       setBlockReason("")
-      toast.success("Time off blocked. Customers won't be able to request slots in this range.")
+      // QA AV-06: existing bookings in the range aren't cancelled; say so.
+      if (created.conflictingBookingIds?.length) {
+        toast.warning(message ?? "Time off blocked, but you still have bookings in these dates.")
+      } else {
+        toast.success("Time off blocked. Customers won't be able to request slots in this range.")
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to block this date range.")
     } finally {
@@ -271,17 +282,41 @@ export default function ArtisanCalendarPage() {
   }
 
   // ─── A3: accept / decline / no-show ────────────────────────────────────────
-  const handleAccept = async (booking: ApiBooking) => {
+  const hasAgreedPrice = (booking: ApiBooking) => Number(booking.agreedPrice ?? 0) > 0
+
+  const handleAccept = async () => {
+    const booking = acceptTarget
+    if (!booking) return
+    let price: number | undefined
+    if (!hasAgreedPrice(booking)) {
+      const raw = acceptPrice.trim()
+      const error =
+        raw === ""
+          ? "Enter your price for this booking"
+          : !/^\d+(\.\d{1,2})?$/.test(raw)
+            ? "Use a number with up to 2 decimal places, like 150.50"
+            : Number(raw) <= 0
+              ? "Enter an amount above 0"
+              : null
+      setAcceptPriceError(error)
+      if (error) return
+      price = Number(raw)
+    }
     setRespondingId(booking.id)
     try {
       const result = await apiFetch<{ jobId: number }>(`/bookings/${booking.id}/confirm`, {
         method: "PATCH",
-        body: JSON.stringify({}),
+        body: JSON.stringify(price != null ? { price } : {}),
       })
       setBookings((prev) =>
-        prev.map((b) => (b.id === booking.id ? { ...b, status: "CONFIRMED", jobId: result?.jobId } : b)),
+        prev.map((b) =>
+          b.id === booking.id
+            ? { ...b, status: "CONFIRMED", jobId: result?.jobId, agreedPrice: price ?? b.agreedPrice }
+            : b,
+        ),
       )
-      toast.success("Booking confirmed. A job has been created for this appointment.")
+      setAcceptTarget(null)
+      toast.success("Booking confirmed. The customer pays before you start the job.")
     } catch (err) {
       // A3 edge case: the request may have already auto-expired (A5) or the
       // artisan's own account may be suspended — the backend's message
@@ -413,7 +448,7 @@ export default function ArtisanCalendarPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-0 divide-y divide-border">
-                {slotsByDay.map(({ day, dayOfWeek, slots: daySlots }) => (
+                {slotsByDay.map(({ day, slots: daySlots }) => (
                   <div key={day} className="py-3">
                     <p className="mb-2 text-sm font-medium text-foreground">{day}</p>
                     {daySlots.length === 0 ? (
@@ -433,7 +468,7 @@ export default function ArtisanCalendarPage() {
                               onCheckedChange={() => toggleSlotActive(slot)}
                             />
                             <span className="flex-1 text-sm text-foreground">
-                              {slot.startTime} – {slot.endTime}
+                              {formatClockTime(slot.startTime)} – {formatClockTime(slot.endTime)}
                             </span>
                             <Button
                               size="icon"
@@ -694,14 +729,14 @@ export default function ArtisanCalendarPage() {
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="flex items-start gap-3">
                               <Avatar className="h-10 w-10 shrink-0">
-                                <AvatarImage src={resolveAvatarUrl(booking.customer?.profilePicture, customerName)} />
+                                <AvatarImage src={resolveAvatarUrl(booking.customer?.profilePicture)} />
                                 <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                               </Avatar>
                               <div>
                                 <p className="font-medium text-foreground">{booking.service?.name ?? "Service"} — {customerName}</p>
                                 <p className="text-xs text-muted-foreground">
                                   {new Date(booking.scheduledDate).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-                                  {" · "}{booking.startTime} – {booking.endTime}
+                                  {" · "}{formatClockTime(booking.startTime)} – {formatClockTime(booking.endTime)}
                                   {booking.agreedPrice != null && <> · {formatCurrency(booking.agreedPrice)}</>}
                                 </p>
                               </div>
@@ -718,7 +753,11 @@ export default function ArtisanCalendarPage() {
                                 <Button
                                   size="sm"
                                   className="bg-primary text-primary-foreground hover:bg-primary/90"
-                                  onClick={() => handleAccept(booking)}
+                                  onClick={() => {
+                                    setAcceptTarget(booking)
+                                    setAcceptPrice("")
+                                    setAcceptPriceError(null)
+                                  }}
                                   disabled={isResponding}
                                 >
                                   {isResponding ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
@@ -767,6 +806,58 @@ export default function ArtisanCalendarPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog
+        open={acceptTarget != null}
+        onOpenChange={(open) => !open && respondingId == null && setAcceptTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Accept Booking Request</AlertDialogTitle>
+            <AlertDialogDescription>
+              {acceptTarget && hasAgreedPrice(acceptTarget)
+                ? `The customer agreed to ${formatCurrency(Number(acceptTarget.agreedPrice))}. They pay it, held safely by JinVa, before you start.`
+                : "Set your price for this booking. The customer pays it, held safely by JinVa, before you start."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {acceptTarget && !hasAgreedPrice(acceptTarget) && (
+            <div className="space-y-1.5">
+              <Label htmlFor="accept-price">Your price (GH₵)</Label>
+              <Input
+                id="accept-price"
+                inputMode="decimal"
+                value={acceptPrice}
+                onChange={(e) => {
+                  setAcceptPrice(e.target.value)
+                  setAcceptPriceError(null)
+                }}
+                aria-invalid={acceptPriceError != null}
+                aria-describedby={acceptPriceError ? "accept-price-error" : undefined}
+                disabled={respondingId != null}
+              />
+              {acceptPriceError && (
+                <p id="accept-price-error" className="text-sm text-destructive">
+                  {acceptPriceError}
+                </p>
+              )}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={respondingId != null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void handleAccept()
+              }}
+              disabled={respondingId != null}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {respondingId != null && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Accept Booking
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={declineTargetId != null} onOpenChange={(open) => !open && setDeclineTargetId(null)}>
         <AlertDialogContent>

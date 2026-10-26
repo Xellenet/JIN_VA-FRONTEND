@@ -155,7 +155,7 @@ export function MessagesPopover({
                   >
                     <div className="relative mt-0.5 flex-shrink-0">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={resolveAvatarUrl(conv.contact.profilePicture, name)} alt={name} />
+                        <AvatarImage src={resolveAvatarUrl(conv.contact.profilePicture)} alt={name} />
                         <AvatarFallback>
                           <UserRound className="h-3.5 w-3.5" />
                         </AvatarFallback>

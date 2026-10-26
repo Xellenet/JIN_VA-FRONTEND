@@ -3,6 +3,9 @@ export type UserRole = "admin" | "artisan" | "user"
 export interface User {
   id: string
   name: string
+  /** The stored parts of `name`; splitting `name` breaks a two-word first name. */
+  firstname?: string
+  lastname?: string
   email: string
   phone?: string
   address?: { id?: number; street?: string; city?: string; country?: string; zipCode?: string }

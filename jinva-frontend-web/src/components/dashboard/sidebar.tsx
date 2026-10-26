@@ -13,7 +13,6 @@ import {
   Users,
   UserCircle,
   ClipboardList,
-  FileText,
   Settings,
   HelpCircle,
   Search,
@@ -61,6 +60,8 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     { href: "/dashboard/artisan/jobs",            label: "My Jobs",   icon: ClipboardList },
     { href: "/dashboard/artisan/earnings",        label: "Earnings",  icon: Wallet        },
     { href: "/dashboard/artisan/profile",         label: "Profile",   icon: UserCircle    },
+    // QA KYC-01: the only way to submit ID documents for verification.
+    { href: "/dashboard/artisan/verification",    label: "Verification", icon: ShieldCheck },
     { href: "/dashboard/artisan/services",        label: "Services",  icon: Wrench        },
     { href: "/dashboard/artisan/portfolio",       label: "Portfolio", icon: ImageIcon     },
     { href: "/dashboard/artisan/reviews",         label: "Reviews",   icon: Star          },
@@ -90,7 +91,6 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
   const workspaceLinks = [
     { href: `${roleBase}/settings`, label: "Settings", icon: Settings },
     { href: `${roleBase}/support`,  label: "Support",  icon: HelpCircle },
-    { href: `${roleBase}/report`,   label: "Report",   icon: FileText },
   ]
 
   const userInitials = user?.name

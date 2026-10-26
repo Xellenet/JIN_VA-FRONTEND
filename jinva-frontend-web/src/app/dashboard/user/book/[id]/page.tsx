@@ -30,9 +30,10 @@ import {
 } from "@/components/ui/dialog"
 import { ArrowLeft, CalendarDays, CreditCard, CheckCircle, Loader2, UserRound, AlertTriangle } from "lucide-react"
 import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
-import { apiFetch } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { toast } from "sonner"
+import { availabilityLabel } from "@/lib/availability"
 
 interface BackendService {
   id: string
@@ -90,6 +91,27 @@ function toDateKey(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+/**
+ * QA BK-28: "today" and "now" are Ghana's, where every artisan works and the
+ * server checks bookings, not the device's. From another time zone the page
+ * offered slots that had already passed in Accra, or hid a day that hadn't.
+ */
+const PLATFORM_TIME_ZONE = "Africa/Accra"
+
+function platformNow(): { dateKey: string; hhmm: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PLATFORM_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date())
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00"
+  return { dateKey: `${get("year")}-${get("month")}-${get("day")}`, hhmm: `${get("hour")}:${get("minute")}` }
+}
+
 function addMinutes(hhmm: string, mins: number): string {
   const [h, m] = hhmm.split(":").map(Number)
   const total = h * 60 + m + mins
@@ -127,7 +149,7 @@ export default function BookArtisanPage() {
   const router = useRouter()
 
   const [artisan, setArtisan] = useState<{
-    name: string; specialization: string; avatar?: string; avgRating: number; reviews: number; availability: string
+    name: string; specialization: string; avatar?: string; avgRating: number; reviews: number; availability: string; availabilityLabel: string
   } | null>(null)
   const [services, setServices] = useState<BackendService[]>([])
   const [selectedService, setSelectedService] = useState("")
@@ -147,6 +169,9 @@ export default function BookArtisanPage() {
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [createdBooking, setCreatedBooking] = useState<BackendBooking | null>(null)
+  // QA SRCH-15 / BK-10: a suspended, banned or unfinished artisan now answers
+  // 404, and a busy or unavailable one can't be booked.
+  const [unavailable, setUnavailable] = useState(false)
 
   useEffect(() => {
     apiFetch<BackendArtisan>(`/artisans/${id}`)
@@ -169,10 +194,12 @@ export default function BookArtisanPage() {
           avgRating: Number(profile.averageRating ?? 0),
           reviews: Number(profile.totalReviews ?? 0),
           availability: profile.availabilityStatus === "AVAILABLE" ? "available" : "busy",
+          availabilityLabel: availabilityLabel(profile.availabilityStatus),
         })
       })
-      .catch(() => {
+      .catch((err) => {
         setServices([])
+        if (err instanceof ApiError && err.status === 404) setUnavailable(true)
       })
   }, [id])
 
@@ -188,7 +215,7 @@ export default function BookArtisanPage() {
   }, [id])
 
   const hasAnyActiveSlot = weeklySlots.some((s) => s.isActive)
-  const todayKey = toDateKey(new Date())
+  const todayKey = platformNow().dateKey
 
   // Batch-prefetch bookability for every date in the visible month that has
   // configured working hours for its day-of-week — this is what lets the
@@ -312,11 +339,10 @@ export default function BookArtisanPage() {
     if (!windowsForSelectedDate) return []
     let slots = computeDiscreteSlots(windowsForSelectedDate, durationMins)
     // Courtesy client-side filter for "today" so we don't offer times that
-    // have already passed in the customer's own clock — the server's UTC
-    // clock remains the authoritative check at submit time (NFR (c)).
+    // have already passed in Ghana — the server's clock remains the
+    // authoritative check at submit time (NFR (c)).
     if (selectedDateKey === todayKey) {
-      const now = new Date()
-      const nowHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+      const nowHHMM = platformNow().hhmm
       slots = slots.filter((s) => s.startTime > nowHHMM)
     }
     return slots
@@ -391,6 +417,19 @@ export default function BookArtisanPage() {
           <p className="text-muted-foreground">Fill in the details below to book {artisan?.name ?? "this artisan"}</p>
         </div>
 
+        {unavailable ? (
+          <Card>
+            <CardContent className="space-y-3 p-6 text-center">
+              <p className="font-medium text-foreground">This artisan isn&apos;t available for booking</p>
+              <p className="text-sm text-muted-foreground">
+                Their profile may be paused or not finished yet. Find another artisan for this job.
+              </p>
+              <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Link href="/dashboard/user/search">Find Artisans</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <form onSubmit={handleSubmit}>
@@ -544,6 +583,12 @@ export default function BookArtisanPage() {
                 </CardContent>
               </Card>
 
+              {artisan?.availability === "busy" && (
+                <p className="mt-6 text-sm text-muted-foreground">
+                  This artisan isn&apos;t taking new bookings right now. Check back later or find another artisan.
+                </p>
+              )}
+
               <div className="mt-6 flex gap-3">
                 <Button type="button" variant="outline" asChild className="flex-1 md:flex-none bg-transparent">
                   <Link href="/dashboard/user/search">Cancel</Link>
@@ -551,7 +596,7 @@ export default function BookArtisanPage() {
                 <Button
                   type="submit"
                   className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 md:flex-none md:px-8"
-                  disabled={!isFormValid || isSubmitting || !hasAnyActiveSlot}
+                  disabled={!isFormValid || isSubmitting || !hasAnyActiveSlot || artisan?.availability === "busy"}
                 >
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Confirm Booking
@@ -570,7 +615,7 @@ export default function BookArtisanPage() {
                   <>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-16 w-16">
-                        <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
+                        <AvatarImage src={resolveAvatarUrl(artisan.avatar)} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div>
@@ -586,7 +631,7 @@ export default function BookArtisanPage() {
                       className={`mt-4 w-full justify-center ${artisan.availability === "available" ? "border-primary/20 bg-primary/5 text-primary" : "border-border bg-muted text-muted-foreground"}`}
                     >
                       <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                      {artisan.availability === "available" ? "Available" : "Busy"}
+                      {artisan.availabilityLabel}
                     </Badge>
                   </>
                 ) : (
@@ -643,6 +688,7 @@ export default function BookArtisanPage() {
             </Card>
           </div>
         </div>
+        )}
 
         <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
           <DialogContent className="sm:max-w-md">

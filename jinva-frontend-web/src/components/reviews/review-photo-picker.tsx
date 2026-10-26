@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { AlertTriangle, ImageIcon, Loader2, X } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { resolveMediaUrl } from "@/lib/utils"
@@ -39,10 +39,21 @@ function validateFile(file: File): string | null {
 export function ReviewPhotoPicker({
   value,
   onChange,
+  onUploadingChange,
   disabled,
-}: Readonly<{ value: string[]; onChange: (urls: string[]) => void; disabled?: boolean }>) {
+}: Readonly<{
+  value: string[]
+  onChange: (urls: string[]) => void
+  /** QA REV-01: lets the form wait for photos still uploading. */
+  onUploadingChange?: (uploading: boolean) => void
+  disabled?: boolean
+}>) {
   const [tiles, setTiles] = useState<Tile[]>([EMPTY_TILE, EMPTY_TILE, EMPTY_TILE])
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+  const anyUploading = tiles.some((t) => t.state === "uploading")
+  useEffect(() => {
+    onUploadingChange?.(anyUploading)
+  }, [anyUploading, onUploadingChange])
 
   const syncUrls = (next: Tile[]) => {
     onChange(next.filter((t) => t.state === "done" && t.url).map((t) => t.url!))

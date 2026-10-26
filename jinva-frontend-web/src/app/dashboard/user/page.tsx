@@ -204,9 +204,6 @@ export default function UserDashboard() {
             ) : (
               <div key={activeFilter ?? "all"} className="space-y-2.5">
                 {displayedJobs.map((job) => {
-                  const artisanName = job.acceptedArtisan
-                    ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`.trim()
-                    : "Awaiting artisan"
                   const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
                   return (
                     <div
@@ -219,7 +216,7 @@ export default function UserDashboard() {
                     >
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10 shrink-0">
-                          <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan?.profilePicture, artisanName)} />
+                          <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan?.profilePicture)} />
                           <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">

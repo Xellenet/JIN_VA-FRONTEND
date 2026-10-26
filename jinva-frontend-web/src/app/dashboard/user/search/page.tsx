@@ -44,6 +44,7 @@ import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { RatingStars } from "@/components/ui/rating-stars"
+import { availabilityLabel } from "@/lib/availability"
 
 interface BackendArtisan {
   id: string
@@ -77,6 +78,7 @@ function mapArtisan(a: BackendArtisan) {
     totalReviews: Number(a.totalReviews ?? 0),
     completedJobsCount: Number(a.completedJobsCount ?? 0),
     availability: a.availabilityStatus === "AVAILABLE" ? "available" : "busy",
+    availabilityLabel: availabilityLabel(a.availabilityStatus),
     location: a.location,
     experienceYears: a.experienceYears,
     services: a.services ?? [],
@@ -527,7 +529,7 @@ export default function SearchArtisansPage() {
                       <CardContent className="p-0">
                         <div className="relative h-32 bg-gradient-to-br from-primary to-primary/80">
                           <Avatar className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 border-4 border-background shadow-lg">
-                            <AvatarImage src={resolveAvatarUrl(artisan.avatar, artisan.name)} />
+                            <AvatarImage src={resolveAvatarUrl(artisan.avatar)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <div className="absolute right-3 top-3 rounded-full bg-background px-2.5 py-1 shadow-sm">
@@ -555,8 +557,17 @@ export default function SearchArtisansPage() {
 
                         <div className="mt-14 space-y-4 p-4">
                           <div className="text-center">
-                            <h3 className="font-semibold text-foreground">{artisan.name}</h3>
-                            <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
+                            <h3 className="truncate font-semibold text-foreground">{artisan.name}</h3>
+                            <p className="truncate text-sm text-muted-foreground">{artisan.specialization}</p>
+                            {/* QA LOC-17: the location was loaded but never shown. */}
+                            <p className="mt-1 flex h-4 items-center justify-center gap-1 text-xs text-muted-foreground">
+                              {artisan.location && (
+                                <>
+                                  <MapPin className="h-3 w-3 shrink-0" />
+                                  <span className="truncate">{artisan.location}</span>
+                                </>
+                              )}
+                            </p>
                             <Badge
                               variant="outline"
                               className={
@@ -566,7 +577,7 @@ export default function SearchArtisansPage() {
                               }
                             >
                               <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                              {artisan.availability === "available" ? "Available" : "Busy"}
+                              {artisan.availabilityLabel}
                             </Badge>
                           </div>
 
@@ -583,16 +594,15 @@ export default function SearchArtisansPage() {
                                 <span>{formatCurrency(artisan.hourlyRate)}/hr</span>
                               )}
                             </div>
-                            {artisan.services.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
+                            {/* QA UI-07: always one line, so every card is the same height. */}
+                            <div className="flex h-5 flex-nowrap gap-1 overflow-hidden">
                                 {artisan.services.slice(0, 3).map((s) => (
                                   <Badge key={s.id} variant="secondary" className="text-[10px]">{s.name}</Badge>
                                 ))}
                                 {artisan.services.length > 3 && (
                                   <Badge variant="secondary" className="text-[10px]">+{artisan.services.length - 3}</Badge>
                                 )}
-                              </div>
-                            )}
+                            </div>
                           </div>
 
                           <div className="flex gap-2">

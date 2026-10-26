@@ -30,7 +30,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback  } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Accordion,
@@ -52,7 +52,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { UserRole } from "@/lib/types"
-import { naviiAvatar } from "@/lib/utils"
 
 interface SupportPageProps {
   role: UserRole
@@ -469,7 +468,6 @@ export function SupportPage({ role }: SupportPageProps) {
                 <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-4">
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src={naviiAvatar("current-user", 32)} />
                       <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
                     </Avatar>
                     <div>
@@ -481,7 +479,6 @@ export function SupportPage({ role }: SupportPageProps) {
                   </div>
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src={naviiAvatar("support-agent", 32)} />
                       <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
                     </Avatar>
                     <div>

@@ -378,7 +378,7 @@ export default function AdminJobsPage() {
                             <td className="py-4">
                               <div className="flex items-center gap-3">
                                 <Avatar className="h-8 w-8">
-                                  <AvatarImage src={resolveAvatarUrl(job.clientAvatar, job.clientName)} />
+                                  <AvatarImage src={resolveAvatarUrl(job.clientAvatar)} />
                                   <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                                 </Avatar>
                                 <span className="font-medium">{job.clientName}</span>

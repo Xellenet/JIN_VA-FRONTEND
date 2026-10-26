@@ -33,7 +33,9 @@ interface BackendJob {
 
 interface BackendPayment {
   id: number
-  jobId: number
+  /** QA PAY-01: the history returns `job.id`; `jobId` is only on newer backends. */
+  jobId?: number
+  job?: { id: number; title?: string | null }
   amount: number
   currency: string
   status: string
@@ -94,6 +96,18 @@ export default function PaymentCheckoutPage() {
         setPhase("success")
         return
       }
+      // QA PAY-03/PAY-06: Paystack already knows the attempt failed (declined
+      // card) or was never completed (checkout closed). Say so now, rather
+      // than "Confirming your payment…" and then "Still confirming".
+      if (res.status === "PENDING" && (res.remoteStatus === "failed" || res.remoteStatus === "abandoned")) {
+        setPhase("failed")
+        setMessage(
+          res.remoteStatus === "failed"
+            ? "Your payment was declined. No charge was made — you can try again with another card or mobile money number."
+            : "Your payment wasn't completed. No charge was made — you can try again.",
+        )
+        return
+      }
       if (res.status === "PENDING") {
         pollAttemptsRef.current += 1
         if (pollAttemptsRef.current >= MAX_POLL_ATTEMPTS) {
@@ -135,7 +149,7 @@ export default function PaymentCheckoutPage() {
         return
       }
 
-      const match = history.find((p) => Number(p.jobId) === Number(id))
+      const match = history.find((p) => Number(p.jobId ?? p.job?.id) === Number(id))
       if (!match) {
         setPhase("unavailable")
         setMessage("No payment is due yet — this job doesn't have an accepted artisan with a pending payment.")
@@ -233,7 +247,7 @@ export default function PaymentCheckoutPage() {
               {job.acceptedArtisan && (
                 <div className="flex items-center gap-3 border-b border-border p-4">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture, artisanName ?? "Artisan")} />
+                    <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture)} />
                     <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">

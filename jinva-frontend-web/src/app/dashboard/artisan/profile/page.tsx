@@ -56,6 +56,7 @@ import {
   readProfileCompleteness,
 } from "@/components/artisan/profile-completeness"
 import type { ApiReview } from "@/lib/types"
+import { availabilityLabel } from "@/lib/availability"
 
 // RV2: reviews are paginated server-side (default limit 10, max 50) — always
 // send `page`/`limit` explicitly, or reviews 11+ are silently unreachable.
@@ -286,6 +287,29 @@ export default function ArtisanProfile() {
     return marked
   }, [professionalHalfUnsaved, artisanProfile, bio, location, businessName, experienceYears, hourlyRate])
 
+  // QA ART-03: the server's limits, checked before anything is sent, with the
+  // message under the field rather than raw validator text in a toast.
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<"experience" | "hourlyRate" | "businessName" | "bio" | "location", string>>>({})
+  const validateProfessional = () => {
+    const errors: typeof fieldErrors = {}
+    if (experienceYears.trim()) {
+      const n = Number(experienceYears)
+      if (!Number.isInteger(n) || n < 1 || n > 80) errors.experience = "Enter whole years from 1 to 80."
+    }
+    if (hourlyRate.trim()) {
+      const n = Number(hourlyRate)
+      if (!Number.isFinite(n) || n <= 0) errors.hourlyRate = "Enter a rate above 0."
+      else if (!/^\d+(\.\d{1,2})?$/.test(hourlyRate.trim())) errors.hourlyRate = "Use at most 2 decimal places, like 50.25."
+    }
+    if (businessName.length > 150) errors.businessName = "Business name can be at most 150 characters."
+    if (bio.length > 1000) errors.bio = "Bio can be at most 1,000 characters."
+    if (location.length > 150) errors.location = "Service area can be at most 150 characters."
+    setFieldErrors(errors)
+    const first = Object.keys(errors)[0]
+    if (first) document.getElementById(first)?.focus()
+    return !first
+  }
+
   const handleSaveProfile = async () => {
     const wasIncomplete = readProfileCompleteness(artisanProfile).state === "incomplete"
     const phoneUpdate = phoneUpdateFor(user?.phone, phone, phoneCountry)
@@ -294,6 +318,7 @@ export default function ArtisanProfile() {
       document.getElementById("phone")?.focus()
       return
     }
+    if (!validateProfessional()) return
 
     setIsSaving(true)
     try {
@@ -442,7 +467,7 @@ export default function ArtisanProfile() {
                         }
                       >
                         <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
-                        {artisanProfile.availabilityStatus === "AVAILABLE" ? "Available" : "Busy"}
+                        {availabilityLabel(artisanProfile.availabilityStatus)}
                       </Badge>
                     )}
                     {/* C2/§3.4: search visibility, permanently visible in both
@@ -622,10 +647,15 @@ export default function ArtisanProfile() {
                               onChange={(e) => setLocation(e.target.value)}
                               placeholder="e.g., Accra, Greater Accra Region"
                               rows={2}
+                              maxLength={150}
+                              aria-invalid={!!fieldErrors.location}
                               aria-describedby={unsavedFields.has("location") ? "location-unsaved" : undefined}
                             />
                           </div>
                           {unsavedFields.has("location") && <UnsavedFieldNote id="location-unsaved" />}
+                            {fieldErrors.location && (
+                              <p id="location-error" className="text-sm text-destructive">{fieldErrors.location}</p>
+                            )}
                         </div>
                       </div>
                     </CardContent>
@@ -648,9 +678,14 @@ export default function ArtisanProfile() {
                             onChange={(e) => setBio(e.target.value)}
                             placeholder="Describe your experience, specializations, and what clients can expect..."
                             rows={4}
+                            maxLength={1000}
+                            aria-invalid={!!fieldErrors.bio}
                             aria-describedby={unsavedFields.has("bio") ? "bio-unsaved" : undefined}
                           />
                           {unsavedFields.has("bio") && <UnsavedFieldNote id="bio-unsaved" />}
+                            {fieldErrors.bio && (
+                              <p id="bio-error" className="text-sm text-destructive">{fieldErrors.bio}</p>
+                            )}
                         </div>
                         <div className="grid gap-5 md:grid-cols-2">
                           <div className="space-y-2">
@@ -658,7 +693,10 @@ export default function ArtisanProfile() {
                             <Input
                               id="experience"
                               type="number"
-                              min="0"
+                              min="1"
+                              max="80"
+                              step="1"
+                              aria-invalid={!!fieldErrors.experience}
                               className={unsavedFields.has("experienceYears") ? UNSAVED_FIELD_CLASS : undefined}
                               value={experienceYears}
                               onChange={(e) => setExperienceYears(e.target.value)}
@@ -668,6 +706,9 @@ export default function ArtisanProfile() {
                               }
                             />
                             {unsavedFields.has("experienceYears") && <UnsavedFieldNote id="experience-unsaved" />}
+                            {fieldErrors.experience && (
+                              <p id="experience-error" className="text-sm text-destructive">{fieldErrors.experience}</p>
+                            )}
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="hourlyRate">Hourly Rate (GH₵)</Label>
@@ -679,7 +720,9 @@ export default function ArtisanProfile() {
                             <Input
                               id="hourlyRate"
                               type="number"
-                              min="0"
+                              min="0.01"
+                              step="0.01"
+                              aria-invalid={!!fieldErrors.hourlyRate}
                               className={unsavedFields.has("hourlyRate") ? UNSAVED_FIELD_CLASS : undefined}
                               value={hourlyRate}
                               onChange={(e) => setHourlyRate(e.target.value)}
@@ -687,11 +730,16 @@ export default function ArtisanProfile() {
                               aria-describedby={unsavedFields.has("hourlyRate") ? "hourlyRate-unsaved" : undefined}
                             />
                             {unsavedFields.has("hourlyRate") && <UnsavedFieldNote id="hourlyRate-unsaved" />}
+                            {fieldErrors.hourlyRate && (
+                              <p id="hourlyRate-error" className="text-sm text-destructive">{fieldErrors.hourlyRate}</p>
+                            )}
                           </div>
                           <div className="space-y-2 md:col-span-2">
                             <Label htmlFor="businessName">Business Name</Label>
                             <Input
                               id="businessName"
+                              maxLength={150}
+                              aria-invalid={!!fieldErrors.businessName}
                               className={unsavedFields.has("businessName") ? UNSAVED_FIELD_CLASS : undefined}
                               value={businessName}
                               onChange={(e) => setBusinessName(e.target.value)}
@@ -699,8 +747,60 @@ export default function ArtisanProfile() {
                               aria-describedby={unsavedFields.has("businessName") ? "businessName-unsaved" : undefined}
                             />
                             {unsavedFields.has("businessName") && <UnsavedFieldNote id="businessName-unsaved" />}
+                            {fieldErrors.businessName && (
+                              <p id="businessName-error" className="text-sm text-destructive">{fieldErrors.businessName}</p>
+                            )}
                           </div>
                         </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* QA ART-01: what customers see on the public profile, with links to
+                      the pages that manage each part. */}
+                  <Card>
+                    <div className="border-b border-border p-5">
+                      <h3 className="font-semibold text-foreground">Services, Portfolio and Reviews</h3>
+                    </div>
+                    <CardContent className="space-y-4 p-5">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-foreground">Services you offer</p>
+                          <Link href="/dashboard/artisan/services" className="text-sm text-primary hover:underline">
+                            Manage
+                          </Link>
+                        </div>
+                        {artisanProfile?.services?.length ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {artisanProfile.services.map((s) => (
+                              <Badge key={s.id} variant="secondary">
+                                {s.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No services yet. Customers can&apos;t find you until you add one.</p>
+                        )}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Link
+                          href="/dashboard/artisan/portfolio"
+                          className="flex items-center gap-3 rounded-lg border border-border p-3 hover:bg-muted/40"
+                        >
+                          <ImageIcon className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-medium text-foreground">Your portfolio</span>
+                        </Link>
+                        <Link
+                          href="/dashboard/artisan/reviews"
+                          className="flex items-center gap-3 rounded-lg border border-border p-3 hover:bg-muted/40"
+                        >
+                          <Star className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-medium text-foreground">
+                            {artisanProfile?.totalReviews
+                              ? `${Number(artisanProfile.averageRating).toFixed(1)} from ${artisanProfile.totalReviews} review${artisanProfile.totalReviews === 1 ? "" : "s"}`
+                              : "No reviews yet"}
+                          </span>
+                        </Link>
                       </div>
                     </CardContent>
                   </Card>
@@ -752,7 +852,7 @@ export default function ArtisanProfile() {
                       <div key={review.id} className="p-5">
                         <div className="flex items-start gap-4">
                           <Avatar className="h-10 w-10">
-                            <AvatarImage src={resolveAvatarUrl(avatar, reviewerName)} />
+                            <AvatarImage src={resolveAvatarUrl(avatar)} />
                             <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                           </Avatar>
                           <div className="flex-1">

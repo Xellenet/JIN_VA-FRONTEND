@@ -30,15 +30,18 @@ import {
   CheckCircle,
   Link2,
   CreditCard,
+  Pencil,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dashboard/job-status-timeline"
 import { AttachmentGallery, type JobAttachment } from "@/components/dashboard/attachment-gallery"
+import { EditJobDialog } from "@/components/dashboard/edit-job-dialog"
 import { getPaymentStatusConfig, RETRYABLE_PAYOUT_STATUSES } from "@/lib/status-badges"
 import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
 import { DisputeEntryPoint } from "@/components/disputes/dispute-entry-point"
+import { JobApplicationsCard } from "@/components/dashboard/job-applications-card"
 
 interface BackendJob {
   id: number
@@ -69,7 +72,9 @@ interface BackendJob {
 // status field").
 interface BackendPayment {
   id: number
-  jobId: number
+  /** QA PAY-01: the history returns `job.id`; `jobId` is only on newer backends. */
+  jobId?: number
+  job?: { id: number; title?: string | null }
   amount: number
   status: string
   paidAt?: string
@@ -94,20 +99,23 @@ export default function JobDetailPage() {
   const [isConfirming, setIsConfirming] = useState(false)
   const [payment, setPayment] = useState<BackendPayment | null>(null)
   const [isPaymentLoading, setIsPaymentLoading] = useState(true)
+  // Bumped after accepting an application so the job and its new payment reload.
+  const [reloadKey, setReloadKey] = useState(0)
+  const [isEditing, setIsEditing] = useState(false)
 
   useEffect(() => {
     apiFetch<BackendJob>(`/jobs/${id}`)
       .then(setJob)
       .catch(() => toast.error("Failed to load job details."))
       .finally(() => setIsLoading(false))
-  }, [id])
+  }, [id, reloadKey])
 
   useEffect(() => {
     apiFetch<BackendPayment[]>("/payments/history")
-      .then((history) => setPayment(history.find((p) => Number(p.jobId) === Number(id)) ?? null))
+      .then((history) => setPayment(history.find((p) => Number(p.jobId ?? p.job?.id) === Number(id)) ?? null))
       .catch(() => setPayment(null))
       .finally(() => setIsPaymentLoading(false))
-  }, [id])
+  }, [id, reloadKey])
 
   const handleConfirmCompletion = async () => {
     if (!job) return
@@ -167,10 +175,11 @@ export default function JobDetailPage() {
     ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`.trim()
     : "Awaiting artisan"
   const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
-  // Best-effort UI hint while `completionRequestedAt` isn't in the API
-  // response yet (see write-up) — the button is shown for any IN_PROGRESS
-  // job and the server's own precondition check is the real gate.
-  const canConfirmCompletion = job.status === "IN_PROGRESS"
+  // QA JOB-14: the API returns `completionRequestedAt` now, so the button
+  // appears only once the artisan has said the work is finished (the server
+  // refuses a confirmation before that).
+  const canConfirmCompletion = job.status === "IN_PROGRESS" && !!job.completionRequestedAt
+  const awaitingArtisanFinish = job.status === "IN_PROGRESS" && !job.completionRequestedAt
 
   return (
     <DashboardLayout>
@@ -189,10 +198,19 @@ export default function JobDetailPage() {
               {job.service?.name ?? "Job"} · {new Date(job.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
             </p>
           </div>
-          <Badge variant="outline" className={cfg.className}>
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-            {cfg.label}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {/* QA JOB-16: editable only while open (the server enforces it too). */}
+            {job.status === "OPEN" && (
+              <Button variant="outline" size="sm" className="gap-1.5 bg-transparent" onClick={() => setIsEditing(true)}>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit Job
+              </Button>
+            )}
+            <Badge variant="outline" className={cfg.className}>
+              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+              {cfg.label}
+            </Badge>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -292,6 +310,9 @@ export default function JobDetailPage() {
           </div>
 
           <div className="space-y-6">
+            {job.status === "OPEN" && (
+              <JobApplicationsCard jobId={job.id} onAccepted={() => setReloadKey((k) => k + 1)} />
+            )}
             <Card>
               <div className="border-b border-border p-5">
                 <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -304,7 +325,7 @@ export default function JobDetailPage() {
                   <>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-14 w-14">
-                        <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture, artisanName)} />
+                        <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture)} />
                         <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
                       </Avatar>
                       <div>
@@ -403,6 +424,11 @@ export default function JobDetailPage() {
 
             <Card>
               <CardContent className="space-y-2 p-5">
+                {awaitingArtisanFinish && (
+                  <p className="text-sm text-muted-foreground">
+                    Work is in progress. You can confirm completion once {artisanName} marks the job as finished.
+                  </p>
+                )}
                 {canConfirmCompletion && (
                   <Button
                     className="w-full bg-success text-success-foreground hover:bg-success/90"
@@ -475,6 +501,12 @@ export default function JobDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <EditJobDialog
+        job={job}
+        open={isEditing}
+        onOpenChange={setIsEditing}
+        onSaved={() => setReloadKey((k) => k + 1)}
+      />
     </DashboardLayout>
   )
 }

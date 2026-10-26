@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
+import { ApplyJobDialog } from "@/components/dashboard/apply-job-dialog"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,7 +36,7 @@ import {
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
-import { naviiAvatar, cn, resolveAvatarUrl } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 
 interface BackendJob {
   id: string | number
@@ -47,6 +48,8 @@ interface BackendJob {
   customer?: { id: string; firstname: string; lastname: string; profilePicture?: string }
   acceptedArtisan?: { id: string }
   service?: { id: string; name: string }
+  budgetMin?: number | null
+  budgetMax?: number | null
 }
 
 const statusConfig = {
@@ -167,18 +170,15 @@ export default function ArtisanJobsPage() {
     setLocationQuery("")
   }
 
-  const handleApply = async (e: React.MouseEvent, jobId: string | number) => {
+  // QA JOB-08: Apply opens a dialog for the artisan's price instead of
+  // sending a GH₵ 0 quote. Applying doesn't change the job's status, so the
+  // card shows "Application sent" rather than pretending the job is Pending.
+  const [applyTarget, setApplyTarget] = useState<BackendJob | null>(null)
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
+
+  const handleApply = (e: React.MouseEvent, job: BackendJob) => {
     e.stopPropagation()
-    try {
-      await apiFetch(`/jobs/${jobId}/apply`, {
-        method: "POST",
-        body: JSON.stringify({ message: "I'm interested in this job.", quotePrice: 0 }),
-      })
-      toast.success("Application submitted successfully.")
-      setJobs((prev) => prev.map((j) => String(j.id) === String(jobId) ? { ...j, status: "PENDING" } : j))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to apply.")
-    }
+    setApplyTarget(job)
   }
 
   const handleRequestCompletion = async (e: React.MouseEvent, jobId: string | number) => {
@@ -427,7 +427,7 @@ export default function ArtisanJobsPage() {
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex items-start gap-4">
                           <Avatar className="h-12 w-12 shrink-0">
-                            <AvatarImage src={resolveAvatarUrl(job.customer?.profilePicture, clientName)} alt={clientName} />
+                            <AvatarImage src={resolveAvatarUrl(job.customer?.profilePicture)} alt={clientName} />
                             <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
@@ -441,7 +441,6 @@ export default function ArtisanJobsPage() {
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1.5">
                                 <Avatar className="h-5 w-5">
-                                  <AvatarImage src={naviiAvatar(clientName, 32)} />
                                   <AvatarFallback><UserRound className="h-2.5 w-2.5" /></AvatarFallback>
                                 </Avatar>
                                 {clientName}
@@ -478,13 +477,19 @@ export default function ArtisanJobsPage() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         {job.status === "OPEN" && (
-                          <Button
-                            size="sm"
-                            className="bg-primary text-primary-foreground hover:bg-primary/90"
-                            onClick={(e) => handleApply(e, job.id)}
-                          >
-                            Apply for Job
-                          </Button>
+                          appliedIds.has(String(job.id)) ? (
+                            <Button size="sm" variant="outline" disabled onClick={(e) => e.stopPropagation()}>
+                              Application sent
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="bg-primary text-primary-foreground hover:bg-primary/90"
+                              onClick={(e) => handleApply(e, job)}
+                            >
+                              Apply for Job
+                            </Button>
+                          )
                         )}
                         {isMyJob && job.status === "IN_PROGRESS" && (
                           <Button
@@ -527,6 +532,12 @@ export default function ArtisanJobsPage() {
           </CardContent>
         </Card>
       </div>
+      <ApplyJobDialog
+        job={applyTarget}
+        open={applyTarget != null}
+        onOpenChange={(open) => !open && setApplyTarget(null)}
+        onApplied={(id) => setAppliedIds((prev) => new Set(prev).add(String(id)))}
+      />
     </DashboardLayout>
   )
 }

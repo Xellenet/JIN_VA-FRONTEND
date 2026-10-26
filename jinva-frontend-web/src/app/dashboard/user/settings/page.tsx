@@ -45,7 +45,7 @@ import {
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
 import { PhoneField } from "@/components/forms/phone-field"
-import { PHONE_IN_USE_CODE } from "@/components/auth/signup-fields"
+import { isStrongPassword, PASSWORD_MESSAGES, PHONE_IN_USE_CODE } from "@/components/auth/signup-fields"
 import {
   DEFAULT_PHONE_COUNTRY,
   PHONE_MESSAGES,
@@ -58,7 +58,7 @@ import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/utils"
-import { getPaymentStatusConfig } from "@/lib/status-badges"
+import { getCustomerPaymentStatusConfig } from "@/lib/status-badges"
 
 // C4: matches GET /payments/history's real, unpaginated shape verbatim — no
 // client-side pagination is invented for a list the backend doesn't paginate.
@@ -76,9 +76,14 @@ interface BackendPayment {
   status: string
   reference: string
   paidAt?: string
+  releasedAt?: string | null
   date: string
   job?: { id: number; title: string }
 }
+
+/** Matches the backend's UpdateMeDto limits. */
+const NAME_MAX = 15
+const NATIONAL_ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{4,29}$/
 
 function UserSettingsContent() {
   const { user, refreshUser, logout } = useAuth()
@@ -249,8 +254,8 @@ function UserSettingsContent() {
   useEffect(() => {
     if (!user) return
     const parts = user.name.split(" ")
-    setFirstname(parts[0] ?? "")
-    setLastname(parts.slice(1).join(" "))
+    setFirstname(user.firstname ?? parts[0] ?? "")
+    setLastname(user.lastname ?? parts.slice(1).join(" "))
     setEmail(user.email ?? "")
     const storedPhone = splitStoredPhone(user.phone)
     setPhone(storedPhone.national)
@@ -272,19 +277,58 @@ function UserSettingsContent() {
       document.getElementById("phone")?.focus()
       return
     }
+    // QA CUS-02/03/07: PATCH /users/me takes only the account fields; the
+    // address has its own endpoints. Sending `addresses` there was rejected,
+    // so nothing on this card could ever be saved.
+    const nameError = !firstname.trim()
+      ? "Enter your first name."
+      : !lastname.trim()
+        ? "Enter your last name."
+        : firstname.trim().length > NAME_MAX || lastname.trim().length > NAME_MAX
+          ? `First and last name can each be at most ${NAME_MAX} characters.`
+          : null
+    if (nameError) {
+      toast.error(nameError)
+      return
+    }
+    const addressFields = { street: street.trim(), city: city.trim(), country: country.trim(), zipCode: zipCode.trim() }
+    const saved = user.address
+    const addressChanged =
+      addressFields.street !== (saved?.street ?? "") ||
+      addressFields.city !== (saved?.city ?? "") ||
+      addressFields.country !== (saved?.country ?? "") ||
+      addressFields.zipCode !== (saved?.zipCode ?? "")
+    if (addressChanged && Object.values(addressFields).some((v) => v === "")) {
+      toast.error("Fill in street, city, country and zip code to save your address.")
+      return
+    }
+    const newNationalId = !user.nationalId && nationalId.trim() ? nationalId.trim().toUpperCase() : undefined
+    if (newNationalId && !NATIONAL_ID_PATTERN.test(newNationalId)) {
+      toast.error("Enter your national ID as letters, numbers and dashes, like GHA-123456789-0.")
+      document.getElementById("nationalId")?.focus()
+      return
+    }
+
     setIsSaving(true)
+    let accountSaved = false
     try {
       await apiFetch("/users/me", {
         method: "PATCH",
         body: JSON.stringify({
-          firstname,
-          lastname,
+          firstname: firstname.trim(),
+          lastname: lastname.trim(),
           // PH11: E.164, and only when edited (see phoneUpdateFor).
           ...(phoneUpdate.phoneNumber ? { phoneNumber: phoneUpdate.phoneNumber } : {}),
-          addresses: [{ street, city, country, zipCode }],
-          ...(nationalId && !user.nationalId ? { nationalId } : {}),
+          ...(newNationalId ? { nationalId: newNationalId } : {}),
         }),
       })
+      accountSaved = true
+      if (addressChanged) {
+        await apiFetch(saved?.id ? `/users/me/addresses/${saved.id}` : "/users/me/addresses", {
+          method: saved?.id ? "PATCH" : "POST",
+          body: JSON.stringify(addressFields),
+        })
+      }
       await refreshUser()
       toast.success("Profile updated successfully.")
     } catch (err: unknown) {
@@ -292,7 +336,13 @@ function UserSettingsContent() {
         setPhoneError(PHONE_MESSAGES.inUse)
         return
       }
-      toast.error(err instanceof Error ? err.message : "Failed to save changes.")
+      const reason = err instanceof Error ? err.message : "Failed to save changes."
+      if (accountSaved) {
+        await refreshUser()
+        toast.error(`Your details were saved, but your address wasn't: ${reason}`)
+      } else {
+        toast.error(reason)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -303,8 +353,8 @@ function UserSettingsContent() {
       toast.error("New passwords do not match.")
       return
     }
-    if (newPass.length < 8) {
-      toast.error("Password must be at least 8 characters.")
+    if (!isStrongPassword(newPass)) {
+      toast.error(PASSWORD_MESSAGES.rule)
       return
     }
     setIsUpdatingPass(true)
@@ -349,7 +399,7 @@ function UserSettingsContent() {
           onValueChange={(tab) => router.replace(`?tab=${tab}`, { scroll: false })}
           className="space-y-6"
         >
-          <TabsList className="bg-muted">
+          <TabsList className="h-auto w-full justify-start overflow-x-auto bg-muted sm:w-auto">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
               Profile
@@ -435,6 +485,7 @@ function UserSettingsContent() {
                     <Label htmlFor="firstName">First Name</Label>
                     <Input
                       id="firstName"
+                      maxLength={NAME_MAX}
                       value={firstname}
                       onChange={(e) => setFirstname(e.target.value)}
                       placeholder="First name"
@@ -444,6 +495,7 @@ function UserSettingsContent() {
                     <Label htmlFor="lastName">Last Name</Label>
                     <Input
                       id="lastName"
+                      maxLength={NAME_MAX}
                       value={lastname}
                       onChange={(e) => setLastname(e.target.value)}
                       placeholder="Last name"
@@ -492,7 +544,8 @@ function UserSettingsContent() {
                         value={nationalId}
                         onChange={user.nationalId ? undefined : (e) => setNationalId(e.target.value)}
                         readOnly={!!user.nationalId}
-                        placeholder="Enter your national ID number"
+                        placeholder="e.g. GHA-123456789-0"
+                        maxLength={30}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -764,7 +817,7 @@ function UserSettingsContent() {
                         </TableHeader>
                         <TableBody>
                           {payments.map((p) => {
-                            const cfg = getPaymentStatusConfig(p.status)
+                            const cfg = getCustomerPaymentStatusConfig(p.status)
                             const isExpanded = expandedPaymentId === p.id
                             return (
                               <Fragment key={p.id}>
@@ -799,6 +852,9 @@ function UserSettingsContent() {
                                         {p.paidAt && (
                                           <span>Paid at: {new Date(p.paidAt).toLocaleString("en-GB")}</span>
                                         )}
+                                        {p.releasedAt && (
+                                          <span>Paid to the artisan: {new Date(p.releasedAt).toLocaleString("en-GB")}</span>
+                                        )}
                                         <Link
                                           href={`/dashboard/user/jobs/${p.job?.id ?? p.jobId}`}
                                           className="text-primary hover:underline"
@@ -818,7 +874,7 @@ function UserSettingsContent() {
                     </div>
                     <div className="divide-y md:hidden">
                       {payments.map((p) => {
-                        const cfg = getPaymentStatusConfig(p.status)
+                        const cfg = getCustomerPaymentStatusConfig(p.status)
                         const isExpanded = expandedPaymentId === p.id
                         return (
                           <div
@@ -845,6 +901,9 @@ function UserSettingsContent() {
                                 <span>Reference: <span className="font-mono">{p.reference}</span></span>
                                 {p.paidAt && (
                                   <span>Paid at: {new Date(p.paidAt).toLocaleString("en-GB")}</span>
+                                )}
+                                {p.releasedAt && (
+                                  <span>Paid to the artisan: {new Date(p.releasedAt).toLocaleString("en-GB")}</span>
                                 )}
                                 <Link
                                   href={`/dashboard/user/jobs/${p.job?.id ?? p.jobId}`}

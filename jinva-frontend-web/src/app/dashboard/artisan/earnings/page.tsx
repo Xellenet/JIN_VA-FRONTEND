@@ -41,7 +41,14 @@ interface EarningRow {
   artisanAmount: number
   status: string
   date: string
+  /** QA PAY-20: when the payout reached the artisan. */
+  releasedAt?: string | null
 }
+
+/** A paid-out row is dated by its payout; anything else by when it began. */
+const rowDate = (r: EarningRow) => (r.status === "RELEASED" && r.releasedAt ? r.releasedAt : r.date)
+const fmtRowDate = (r: EarningRow) =>
+  `${r.status === "RELEASED" && r.releasedAt ? "Paid " : ""}${new Date(rowDate(r)).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
 
 export default function ArtisanEarningsPage() {
   const [rows, setRows] = useState<EarningRow[]>([])
@@ -81,7 +88,7 @@ export default function ArtisanEarningsPage() {
       .reduce((sum, r) => sum + Number(r.artisanAmount), 0)
     const now = new Date()
     const thisMonth = rows
-      .filter((r) => r.status === "RELEASED" && new Date(r.date).getMonth() === now.getMonth() && new Date(r.date).getFullYear() === now.getFullYear())
+      .filter((r) => r.status === "RELEASED" && new Date(rowDate(r)).getMonth() === now.getMonth() && new Date(rowDate(r)).getFullYear() === now.getFullYear())
       .reduce((sum, r) => sum + Number(r.artisanAmount), 0)
     return { totalEarnings, pendingPayout, thisMonth }
   }, [rows])
@@ -263,7 +270,7 @@ export default function ArtisanEarningsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                            {new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            {fmtRowDate(r)}
                           </TableCell>
                           <TableCell className="text-right">
                             {isRetryable ? (
@@ -310,7 +317,7 @@ export default function ArtisanEarningsPage() {
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">
-                          {new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                          {fmtRowDate(r)}
                         </span>
                         <span className="font-medium text-foreground">{formatCurrency(r.artisanAmount)}</span>
                       </div>

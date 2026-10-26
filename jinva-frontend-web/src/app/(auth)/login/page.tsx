@@ -3,7 +3,7 @@ import { LoginForm } from "@/components/auth/login-form"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Sign In - JinVa",
+  title: "Sign In",
   description: "Sign in to your JinVa account",
 }
 

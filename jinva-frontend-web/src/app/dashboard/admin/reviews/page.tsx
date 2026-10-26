@@ -303,7 +303,7 @@ export default function AdminReviewsPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="h-7 w-7 shrink-0">
-                              <AvatarImage src={resolveAvatarUrl(r.reviewerUser?.profilePicture, reviewerName, 28)} />
+                              <AvatarImage src={resolveAvatarUrl(r.reviewerUser?.profilePicture)} />
                               <AvatarFallback className="text-xs">{reviewerName[0]}</AvatarFallback>
                             </Avatar>
                             <p className="truncate text-sm font-medium text-foreground">{reviewerName}</p>

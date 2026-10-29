@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
+import { ApplyJobDialog } from "@/components/dashboard/apply-job-dialog"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,7 +36,7 @@ import {
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
-import { naviiAvatar, cn } from "@/lib/utils"
+import { cn, resolveAvatarUrl } from "@/lib/utils"
 
 interface BackendJob {
   id: string | number
@@ -47,14 +48,16 @@ interface BackendJob {
   customer?: { id: string; firstname: string; lastname: string; profilePicture?: string }
   acceptedArtisan?: { id: string }
   service?: { id: string; name: string }
+  budgetMin?: number | null
+  budgetMax?: number | null
 }
 
 const statusConfig = {
   IN_PROGRESS: { label: "In Progress", className: "bg-muted text-muted-foreground border-muted",              icon: Timer },
-  COMPLETED:   { label: "Completed",   className: "bg-green-100 text-green-700 border-green-200",             icon: CheckCircle2 },
-  CANCELLED:   { label: "Cancelled",   className: "bg-red-100 text-red-700 border-red-200",                   icon: XCircle },
-  PENDING:     { label: "Pending",     className: "bg-yellow-100 text-yellow-700 border-yellow-200",          icon: AlertCircle },
-  OPEN:        { label: "Open",        className: "bg-blue-100 text-blue-700 border-blue-200",                icon: CheckCircle2 },
+  COMPLETED:   { label: "Completed",   className: "bg-success/10 text-success border-success/20",             icon: CheckCircle2 },
+  CANCELLED:   { label: "Cancelled",   className: "bg-destructive/10 text-destructive border-destructive/20",                   icon: XCircle },
+  PENDING:     { label: "Pending",     className: "bg-warning/10 text-warning border-warning/20",          icon: AlertCircle },
+  OPEN:        { label: "Open",        className: "bg-info/10 text-info border-info/20",                icon: CheckCircle2 },
 } as const
 
 type StatusKey = keyof typeof statusConfig
@@ -167,18 +170,15 @@ export default function ArtisanJobsPage() {
     setLocationQuery("")
   }
 
-  const handleApply = async (e: React.MouseEvent, jobId: string | number) => {
+  // QA JOB-08: Apply opens a dialog for the artisan's price instead of
+  // sending a GH₵ 0 quote. Applying doesn't change the job's status, so the
+  // card shows "Application sent" rather than pretending the job is Pending.
+  const [applyTarget, setApplyTarget] = useState<BackendJob | null>(null)
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
+
+  const handleApply = (e: React.MouseEvent, job: BackendJob) => {
     e.stopPropagation()
-    try {
-      await apiFetch(`/jobs/${jobId}/apply`, {
-        method: "POST",
-        body: JSON.stringify({ message: "I'm interested in this job.", quotePrice: 0 }),
-      })
-      toast.success("Application submitted successfully.")
-      setJobs((prev) => prev.map((j) => String(j.id) === String(jobId) ? { ...j, status: "PENDING" } : j))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to apply.")
-    }
+    setApplyTarget(job)
   }
 
   const handleRequestCompletion = async (e: React.MouseEvent, jobId: string | number) => {
@@ -216,7 +216,7 @@ export default function ArtisanJobsPage() {
                   {key !== "all" && (
                     <div className={cn(
                       "h-2 w-2 rounded-full",
-                      key === "IN_PROGRESS" ? "bg-primary" : key === "COMPLETED" ? "bg-green-500" : "bg-blue-500",
+                      key === "IN_PROGRESS" ? "bg-primary" : key === "COMPLETED" ? "bg-success" : "bg-info",
                     )} />
                   )}
                   <p className="text-sm text-muted-foreground">
@@ -409,7 +409,11 @@ export default function ArtisanJobsPage() {
                     : "Unknown"
                   const cfg = statusConfig[job.status as StatusKey] ?? { label: job.status, className: "", icon: AlertCircle }
                   const StatusIcon = cfg.icon
-                  const isMyJob = String(job.acceptedArtisan?.id) === String(user?.id)
+                  // GET /jobs does not yet expose `acceptedArtisan` (flagged
+                  // to backend-engineer) — fall back to "assume mine" so this
+                  // action isn't permanently hidden; the server's own
+                  // ownership guard is the real gate.
+                  const isMyJob = job.acceptedArtisan ? String(job.acceptedArtisan.id) === String(user?.id) : true
 
                   return (
                     <div
@@ -423,7 +427,7 @@ export default function ArtisanJobsPage() {
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex items-start gap-4">
                           <Avatar className="h-12 w-12 shrink-0">
-                            <AvatarImage src={job.customer?.profilePicture || naviiAvatar(clientName)} alt={clientName} />
+                            <AvatarImage src={resolveAvatarUrl(job.customer?.profilePicture)} alt={clientName} />
                             <AvatarFallback><UserRound className="h-5 w-5" /></AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
@@ -437,7 +441,6 @@ export default function ArtisanJobsPage() {
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1.5">
                                 <Avatar className="h-5 w-5">
-                                  <AvatarImage src={naviiAvatar(clientName, 32)} />
                                   <AvatarFallback><UserRound className="h-2.5 w-2.5" /></AvatarFallback>
                                 </Avatar>
                                 {clientName}
@@ -474,18 +477,24 @@ export default function ArtisanJobsPage() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         {job.status === "OPEN" && (
-                          <Button
-                            size="sm"
-                            className="bg-primary text-primary-foreground hover:bg-primary/90"
-                            onClick={(e) => handleApply(e, job.id)}
-                          >
-                            Apply for Job
-                          </Button>
+                          appliedIds.has(String(job.id)) ? (
+                            <Button size="sm" variant="outline" disabled onClick={(e) => e.stopPropagation()}>
+                              Application sent
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="bg-primary text-primary-foreground hover:bg-primary/90"
+                              onClick={(e) => handleApply(e, job)}
+                            >
+                              Apply for Job
+                            </Button>
+                          )
                         )}
                         {isMyJob && job.status === "IN_PROGRESS" && (
                           <Button
                             size="sm"
-                            className="bg-green-600 text-white hover:bg-green-700"
+                            className="bg-success text-success-foreground hover:bg-success/90"
                             onClick={(e) => handleRequestCompletion(e, job.id)}
                           >
                             <CheckCircle2 className="mr-1.5 h-4 w-4" />
@@ -495,7 +504,9 @@ export default function ArtisanJobsPage() {
                         {job.customer && (
                           <Button variant="outline" size="sm" className="bg-transparent" asChild>
                             <Link
-                              href={`/dashboard/artisan/messages?client=${job.customer.id}`}
+                              // MC2 — `&job=` rides along so the message carries
+                              // a reference to this job (feeds AD1's evidence view).
+                              href={`/dashboard/artisan/messages?client=${job.customer.id}&job=${job.id}`}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <MessageSquare className="mr-1.5 h-4 w-4" />
@@ -521,6 +532,12 @@ export default function ArtisanJobsPage() {
           </CardContent>
         </Card>
       </div>
+      <ApplyJobDialog
+        job={applyTarget}
+        open={applyTarget != null}
+        onOpenChange={(open) => !open && setApplyTarget(null)}
+        onApplied={(id) => setAppliedIds((prev) => new Set(prev).add(String(id)))}
+      />
     </DashboardLayout>
   )
 }

@@ -2,21 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -25,120 +15,98 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  AlertTriangle,
-  Search,
-  MessageSquare,
-  CheckCircle,
-  Clock,
-  XCircle,
-  Loader2,
-} from "lucide-react"
-import { naviiAvatar, cn } from "@/lib/utils"
+import { AlertTriangle, Search, MessageSquare, Loader2 } from "lucide-react"
+import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, apiFetchWithMeta } from "@/lib/api"
+import { PagePager } from "@/components/admin/page-pager"
+import { getDisputeOutcomeConfig, getDisputeStatusConfig } from "@/lib/status-badges"
+import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
+import {
+  ResolveDisputeDialog,
+  type AdminDispute,
+  type AdminDisputeStatus,
+} from "@/components/admin/resolve-dispute-dialog"
 
-type DisputeStatus = "OPEN" | "UNDER_REVIEW" | "RESOLVED" | "CLOSED"
-
-interface BackendDispute {
-  id: number
-  reason: string
-  status: DisputeStatus
-  resolution?: string
-  adminNotes?: string
-  resolvedAt?: string
-  createdAt: string
-  booking?: {
-    id: number
-    scheduledDate?: string
-    status?: string
-    agreedPrice?: number
-  }
-  raisedBy?: {
-    id: number
-    firstname: string
-    lastname: string
-    profilePicture?: string
-  }
-}
-
-const statusCfg: Record<DisputeStatus, { label: string; icon: typeof Clock; className: string }> = {
-  OPEN:         { label: "Open",         icon: AlertTriangle, className: "bg-destructive/10 text-destructive border-destructive/20" },
-  UNDER_REVIEW: { label: "Under Review", icon: Clock,         className: "bg-muted text-muted-foreground border-border" },
-  RESOLVED:     { label: "Resolved",     icon: CheckCircle,   className: "bg-primary/10 text-primary border-primary/20" },
-  CLOSED:       { label: "Closed",       icon: XCircle,       className: "bg-muted text-muted-foreground border-border" },
-}
+const PAGE_SIZE = 25
 
 export default function DisputesPage() {
-  const [disputes, setDisputes] = useState<BackendDispute[]>([])
+  const [disputes, setDisputes] = useState<AdminDispute[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [active, setActive] = useState<BackendDispute | null>(null)
-  const [resolution, setResolution] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [active, setActive] = useState<AdminDispute | null>(null)
+
+  // QA DSP-08: the page searched and counted only the first 100 rows it had
+  // loaded. Search (`q`: id, booking id, reason, names) and paging now run
+  // on the server, and the counters come from the summary endpoint.
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [debounced, setDebounced] = useState("")
+  const [counts, setCounts] = useState({ open: 0, review: 0, resolved: 0, closed: 0 })
 
   useEffect(() => {
-    apiFetch<BackendDispute[] | { items: BackendDispute[] }>("/admin/disputes?limit=100")
-      .then((r) => {
-        const items = Array.isArray(r) ? r : (r as { items: BackendDispute[] }).items ?? []
-        setDisputes(items)
-      })
-      .catch(() => toast.error("Could not load disputes."))
-      .finally(() => setIsLoading(false))
+    const t = setTimeout(() => setDebounced(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+  useEffect(() => setPage(1), [debounced])
+
+  const loadCounts = () =>
+    apiFetch<{ counts: { open: number; underReview: number; resolved: number; closed: number } }>(
+      "/admin/disputes/summary",
+    )
+      .then(({ counts: c }) =>
+        setCounts({ open: c.open, review: c.underReview, resolved: c.resolved, closed: c.closed }),
+      )
+      .catch(() => {})
+
+  useEffect(() => {
+    void loadCounts()
   }, [])
 
-  const filtered = disputes.filter((d) => {
-    const q = search.toLowerCase()
-    const raiserName = d.raisedBy
-      ? `${d.raisedBy.firstname} ${d.raisedBy.lastname}`.toLowerCase()
-      : ""
-    return (
-      String(d.id).includes(q) ||
-      d.reason.toLowerCase().includes(q) ||
-      raiserName.includes(q)
-    )
-  })
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+    if (debounced) params.set("q", debounced)
+    apiFetchWithMeta<AdminDispute[]>(`/admin/disputes?${params.toString()}`)
+      .then(({ data, meta }) => {
+        if (cancelled) return
+        setDisputes(Array.isArray(data) ? data : [])
+        const pagination = meta?.pagination as { total?: number; totalPages?: number } | undefined
+        setTotal(pagination?.total ?? 0)
+        setTotalPages(Math.max(pagination?.totalPages ?? 1, 1))
+      })
+      .catch(() => !cancelled && toast.error("Could not load disputes."))
+      .finally(() => !cancelled && setIsLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [page, debounced])
 
-  const counts = {
-    open:     disputes.filter((d) => d.status === "OPEN").length,
-    review:   disputes.filter((d) => d.status === "UNDER_REVIEW").length,
-    resolved: disputes.filter((d) => d.status === "RESOLVED").length,
-    closed:   disputes.filter((d) => d.status === "CLOSED").length,
+  const filtered = disputes
+
+  /**
+   * DC1.5: a dispute's new state always comes from the server. The dialog
+   * re-reads `GET /admin/disputes/:id` after every resolve attempt and hands
+   * the result back here — a local patch from the request body cannot
+   * represent `outcome`, `moneyAction`, or a ruling the backend rolled back
+   * because the money action failed.
+   */
+  const applyServerState = (updated: AdminDispute) => {
+    setDisputes((prev) => prev.map((d) => (d.id === updated.id ? { ...d, ...updated } : d)))
+    setActive((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev))
+    void loadCounts()
   }
 
   const markUnderReview = async (id: number) => {
     try {
       await apiFetch(`/admin/disputes/${id}/start-review`, { method: "PATCH" })
-      setDisputes((prev) => prev.map((d) => d.id === id ? { ...d, status: "UNDER_REVIEW" as DisputeStatus } : d))
+      setDisputes((prev) => prev.map((d) => d.id === id ? { ...d, status: "UNDER_REVIEW" as AdminDisputeStatus } : d))
+      void loadCounts()
       toast.success("Dispute marked as under review.")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Action failed.")
-    }
-  }
-
-  const resolveDispute = async () => {
-    if (!active) return
-    if (!resolution.trim()) { toast.error("Please enter a resolution note."); return }
-    setIsSubmitting(true)
-    try {
-      await apiFetch(`/admin/disputes/${active.id}/resolve`, {
-        method: "PATCH",
-        body: JSON.stringify({ resolution }),
-      })
-      setDisputes((prev) =>
-        prev.map((d) =>
-          d.id === active.id
-            ? { ...d, status: "RESOLVED" as DisputeStatus, resolution, resolvedAt: new Date().toISOString() }
-            : d,
-        ),
-      )
-      setActive(null)
-      setResolution("")
-      toast.success("Dispute resolved.")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to resolve dispute.")
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -147,9 +115,10 @@ export default function DisputesPage() {
       await apiFetch(`/admin/disputes/${id}/close`, { method: "PATCH", body: JSON.stringify({}) })
       setDisputes((prev) =>
         prev.map((d) =>
-          d.id === id ? { ...d, status: "CLOSED" as DisputeStatus, resolvedAt: new Date().toISOString() } : d,
+          d.id === id ? { ...d, status: "CLOSED" as AdminDisputeStatus, resolvedAt: new Date().toISOString() } : d,
         ),
       )
+      void loadCounts()
       toast.success("Dispute closed.")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to close dispute.")
@@ -170,31 +139,22 @@ export default function DisputesPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "Open",         value: counts.open,     className: "text-destructive",      bg: "bg-destructive/10" },
-            { label: "Under Review", value: counts.review,   className: "text-muted-foreground", bg: "bg-muted" },
-            { label: "Resolved",     value: counts.resolved, className: "text-primary",          bg: "bg-primary/10" },
-            { label: "Closed",       value: counts.closed,   className: "text-muted-foreground", bg: "bg-muted" },
-          ].map(({ label, value, className, bg }) => (
-            <Card key={label}>
-              <CardContent className={cn("p-4", bg)}>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className={cn("mt-0.5 text-2xl font-bold", className)}>{value}</p>
-              </CardContent>
-            </Card>
-          ))}
+          <QueueCounterCard label="Open"         value={counts.open}     tone="destructive" />
+          <QueueCounterCard label="Under Review" value={counts.review}   tone="muted" />
+          <QueueCounterCard label="Resolved"     value={counts.resolved} tone="primary" />
+          <QueueCounterCard label="Closed"       value={counts.closed}   tone="muted" />
         </div>
 
         <Card>
           <div className="flex items-center justify-between border-b p-4">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">{filtered.length} disputes</span>
+              <span className="text-sm font-medium text-foreground">{total} dispute{total === 1 ? "" : "s"}</span>
             </div>
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search disputes…"
+                placeholder="Search by ID, booking ID, name or email…"
                 className="h-8 pl-9 text-sm"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -228,10 +188,12 @@ export default function DisputesPage() {
                     </TableRow>
                   ) : (
                     filtered.map((d) => {
-                      const cfg = statusCfg[d.status] ?? statusCfg.OPEN
+                      const cfg = getDisputeStatusConfig(d.status)
                       const StatusIcon = cfg.icon
+                      const outcomeCfg = d.outcome ? getDisputeOutcomeConfig(d.outcome) : null
+                      const OutcomeIcon = outcomeCfg?.icon
                       const raiserName = d.raisedBy
-                        ? `${d.raisedBy.firstname} ${d.raisedBy.lastname}`.trim()
+                        ? `${d.raisedBy.firstname ?? ""} ${d.raisedBy.lastname ?? ""}`.trim() || "a former JinVa user"
                         : "Unknown"
                       return (
                         <TableRow key={d.id} className="hover:bg-muted/30">
@@ -239,7 +201,7 @@ export default function DisputesPage() {
                           <TableCell>
                             <div className="flex items-center gap-1.5">
                               <Avatar className="h-6 w-6 shrink-0">
-                                <AvatarImage src={d.raisedBy?.profilePicture || naviiAvatar(raiserName, 24)} />
+                                <AvatarImage src={resolveAvatarUrl(d.raisedBy?.profilePicture)} />
                                 <AvatarFallback className="text-xs">{raiserName[0]}</AvatarFallback>
                               </Avatar>
                               <span className="text-sm text-foreground">{raiserName}</span>
@@ -249,16 +211,27 @@ export default function DisputesPage() {
                             <Badge variant="secondary" className="text-xs">{d.reason}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-medium text-foreground">
-                            {d.booking?.agreedPrice != null ? `GH₵ ${Number(d.booking.agreedPrice).toLocaleString()}` : "—"}
+                            {d.booking?.agreedPrice != null ? formatCurrency(d.booking.agreedPrice) : "—"}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                             {fmtDate(d.createdAt)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("text-xs", cfg.className)}>
-                              <StatusIcon className="mr-1 h-3 w-3" />
-                              {cfg.label}
-                            </Badge>
+                            {/* DC1.8: a resolved row reflects the recorded
+                                verdict, not just the status. A CLOSED dispute
+                                carries no outcome, so it gets no second badge. */}
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge variant="outline" className={cn("text-xs", cfg.className)}>
+                                <StatusIcon className="mr-1 h-3 w-3" />
+                                {cfg.label}
+                              </Badge>
+                              {outcomeCfg && OutcomeIcon && (
+                                <Badge variant="outline" className={cn("text-xs", outcomeCfg.className)}>
+                                  <OutcomeIcon className="mr-1 h-3 w-3" />
+                                  {outcomeCfg.label}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1">
@@ -266,7 +239,7 @@ export default function DisputesPage() {
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7"
-                                onClick={() => { setActive(d); setResolution(d.resolution ?? "") }}
+                                onClick={() => setActive(d)}
                               >
                                 <MessageSquare className="h-3.5 w-3.5" />
                               </Button>
@@ -284,7 +257,7 @@ export default function DisputesPage() {
                                 <Button
                                   size="sm"
                                   className="h-7 bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90"
-                                  onClick={() => { setActive(d); setResolution(d.resolution ?? "") }}
+                                  onClick={() => setActive(d)}
                                 >
                                   Resolve
                                 </Button>
@@ -309,90 +282,18 @@ export default function DisputesPage() {
               </Table>
             )}
           </div>
+          <div className="flex justify-end border-t p-3">
+            <PagePager page={page} totalPages={totalPages} onPage={setPage} />
+          </div>
         </Card>
       </div>
 
-      <Dialog open={!!active} onOpenChange={(o) => { if (!o) { setActive(null); setResolution("") } }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {active?.status === "RESOLVED" || active?.status === "CLOSED"
-                ? "Dispute Details"
-                : "Resolve Dispute"}
-            </DialogTitle>
-            <DialogDescription>
-              #{active?.id} — {active?.reason}
-            </DialogDescription>
-          </DialogHeader>
-          {active && (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-muted/40 p-3">
-                <p className="text-xs text-muted-foreground">Raised By</p>
-                {active.raisedBy ? (
-                  <div className="mt-1 flex items-center gap-2">
-                    <Avatar className="h-6 w-6">
-                      <AvatarImage src={active.raisedBy.profilePicture || naviiAvatar(`${active.raisedBy.firstname} ${active.raisedBy.lastname}`, 24)} />
-                      <AvatarFallback className="text-xs">{active.raisedBy.firstname[0]}</AvatarFallback>
-                    </Avatar>
-                    <p className="text-sm font-medium text-foreground">
-                      {`${active.raisedBy.firstname} ${active.raisedBy.lastname}`.trim()}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Unknown</p>
-                )}
-              </div>
-
-              {active.booking?.agreedPrice != null && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Amount at dispute:</span>
-                  <span className="font-semibold text-foreground">GH₵ {Number(active.booking.agreedPrice).toLocaleString()}</span>
-                </div>
-              )}
-
-              {active.status !== "RESOLVED" && active.status !== "CLOSED" ? (
-                <div className="space-y-1.5">
-                  <Label>Resolution Note</Label>
-                  <Textarea
-                    placeholder="Document the resolution and any actions taken…"
-                    rows={3}
-                    value={resolution}
-                    onChange={(e) => setResolution(e.target.value)}
-                  />
-                </div>
-              ) : (
-                active.resolution && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Resolution</p>
-                    <p className="mt-1 rounded-lg bg-primary/5 p-3 text-sm text-foreground">{active.resolution}</p>
-                    {active.resolvedAt && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Resolved {new Date(active.resolvedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                      </p>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-          )}
-          {active && active.status !== "RESOLVED" && active.status !== "CLOSED" && (
-            <DialogFooter className="gap-2">
-              <Button variant="outline" className="bg-transparent" onClick={() => { setActive(null); setResolution("") }}>
-                Cancel
-              </Button>
-              <Button
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={resolveDispute}
-                disabled={isSubmitting}
-              >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Mark as Resolved
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* DC1 — the three-step resolve flow (design-spec.md §10). */}
+      <ResolveDisputeDialog
+        dispute={active}
+        onOpenChange={(open) => { if (!open) setActive(null) }}
+        onDisputeUpdated={applyServerState}
+      />
     </DashboardLayout>
   )
 }

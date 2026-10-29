@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef, Suspense } from "react"
+import { Fragment, useState, useEffect, useRef, Suspense } from "react"
+import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -10,13 +11,26 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   User,
   Bell,
   Shield,
   Camera,
   Mail,
-  Phone,
   MapPin,
   Trash2,
   AlertTriangle,
@@ -24,13 +38,55 @@ import {
   Loader2,
   Lock,
   CreditCard,
+  ChevronDown,
+  ChevronRight,
+  Receipt,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
+import { PhoneField } from "@/components/forms/phone-field"
+import { isStrongPassword, PASSWORD_MESSAGES, PHONE_IN_USE_CODE } from "@/components/auth/signup-fields"
+import {
+  DEFAULT_PHONE_COUNTRY,
+  PHONE_MESSAGES,
+  phoneUpdateFor,
+  splitStoredPhone,
+  type SupportedPhoneCountry,
+} from "@/lib/phone"
+import { loginUrlAfterAccountDeletion } from "@/lib/auth"
+import { applyPushPreference } from "@/lib/push-notifications"
+import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
+import { formatCurrency } from "@/lib/utils"
+import { getCustomerPaymentStatusConfig } from "@/lib/status-badges"
+
+// C4: matches GET /payments/history's real, unpaginated shape verbatim — no
+// client-side pagination is invented for a list the backend doesn't paginate.
+//
+// QA re-verification (2026-08-21, NEW MAJOR): `getMyHistory`'s response
+// shape changed when the backend closed security-report.md finding #5 (it
+// no longer returns the raw Payment entity). The top-level `jobId` field is
+// gone (only `job.id` remains) and `createdAt` was renamed to `date`. This
+// interface and every read site below were updated to match — `jobId` is
+// kept as an optional fallback only, `date` replaces `createdAt`.
+interface BackendPayment {
+  id: number
+  jobId?: number
+  amount: number
+  status: string
+  reference: string
+  paidAt?: string
+  releasedAt?: string | null
+  date: string
+  job?: { id: number; title: string }
+}
+
+/** Matches the backend's UpdateMeDto limits. */
+const NAME_MAX = 15
+const NATIONAL_ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{4,29}$/
 
 function UserSettingsContent() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, logout } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
   const activeTab = searchParams.get("tab") ?? "profile"
@@ -39,6 +95,8 @@ function UserSettingsContent() {
   const [lastname, setLastname] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
+  const [phoneCountry, setPhoneCountry] = useState<SupportedPhoneCountry>(DEFAULT_PHONE_COUNTRY)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [street, setStreet] = useState("")
   const [city, setCity] = useState("")
   const [country, setCountry] = useState("")
@@ -50,6 +108,50 @@ function UserSettingsContent() {
   const [newPass, setNewPass] = useState("")
   const [confirmPass, setConfirmPass] = useState("")
   const [isUpdatingPass, setIsUpdatingPass] = useState(false)
+
+  // ── Delete account (F4 / C1) ────────────────────────────────────────────
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  // C1.1: the backend refuses deletion with a 409 while the account still owes
+  // somebody something, and its message names every outstanding item. That has
+  // to be readable *in the open dialog* — a toast would vanish before the user
+  // finished reading a list of things to go and resolve.
+  const [deleteRefusal, setDeleteRefusal] = useState<string | null>(null)
+
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true)
+    setDeleteRefusal(null)
+    try {
+      // `purgeAt` is the server-computed restore deadline (api-contract.md) —
+      // carried to the login form so the confirmation there can name the real
+      // date instead of a client-side "+30 days".
+      const deleted = await apiFetch<{ purgeAt?: string }>("/users/me", { method: "DELETE" })
+      // C1.2/C1.3: clear this device's client state, then land the user on the
+      // login form deliberately. `logout()`'s own redirect can't be relied on
+      // here: its `POST /auth/logout` is 401 for a principal that no longer
+      // resolves, so it never gets to clear the httpOnly session cookie, and
+      // whichever redirect wins the race decides whether the user reaches the
+      // login form or bounces off middleware into the dashboard. The markers
+      // (see lib/auth.ts) are what keep the restore path reachable while that
+      // cookie is still signed and unexpired, AND what put the "you have until
+      // <date> to restore it" confirmation on the page they land on. It is not
+      // a toast: this navigation tears the toast container down long before
+      // one could be read (qa-report.md FE-1).
+      await logout()
+      globalThis.location.href = loginUrlAfterAccountDeletion(deleted?.purgeAt)
+    } catch (err: unknown) {
+      // Branch on the code, not the message text (api-contract.md). The
+      // account is untouched and the user is still logged in, so the dialog
+      // stays open with the confirm button live for a retry once they've
+      // resolved what it names.
+      if (err instanceof ApiError && err.status === 409) {
+        setDeleteRefusal(err.message)
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+      }
+      setIsDeleting(false)
+    }
+  }
 
   // ── Avatar upload ────────────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -105,15 +207,22 @@ function UserSettingsContent() {
       .finally(() => setIsLoadingNotifs(false))
   }, [])
 
-  const toggleNotif = (key: keyof CustomerNotifPrefs, val: boolean) =>
+  const toggleNotif = (key: keyof CustomerNotifPrefs, val: boolean) => {
     setNotifPrefs((p) => ({ ...p, [key]: val }))
+    // PN1: the push channel toggle is where browser permission is requested and
+    // this device's FCM token is registered/unregistered.
+    if (key === "pushEnabled") applyPushPreference(val)
+  }
 
   const handleSaveNotifications = async () => {
     setIsSavingNotifs(true)
     try {
       await apiFetch("/notifications/preferences", {
         method: "PATCH",
-        body: JSON.stringify(notifPrefs),
+        // stripPreferenceMetadata drops the row `id` the GET response carries —
+        // PATCH validates against a whitelist DTO and 400s the entire save if
+        // an undeclared property is present. See its doc comment.
+        body: JSON.stringify(stripPreferenceMetadata(notifPrefs)),
       })
       toast.success("Notification preferences saved.")
     } catch {
@@ -123,13 +232,35 @@ function UserSettingsContent() {
     }
   }
 
+  // ── Payment history (C4 / design-spec.md 2.2) ───────────────────────────
+  const [payments, setPayments] = useState<BackendPayment[]>([])
+  const [isLoadingPayments, setIsLoadingPayments] = useState(true)
+  const [paymentsError, setPaymentsError] = useState(false)
+  const [expandedPaymentId, setExpandedPaymentId] = useState<number | null>(null)
+
+  const loadPayments = () => {
+    setIsLoadingPayments(true)
+    setPaymentsError(false)
+    apiFetch<BackendPayment[]>("/payments/history")
+      .then(setPayments)
+      .catch(() => setPaymentsError(true))
+      .finally(() => setIsLoadingPayments(false))
+  }
+
+  useEffect(() => {
+    loadPayments()
+  }, [])
+
   useEffect(() => {
     if (!user) return
     const parts = user.name.split(" ")
-    setFirstname(parts[0] ?? "")
-    setLastname(parts.slice(1).join(" "))
+    setFirstname(user.firstname ?? parts[0] ?? "")
+    setLastname(user.lastname ?? parts.slice(1).join(" "))
     setEmail(user.email ?? "")
-    setPhone(user.phone ?? "")
+    const storedPhone = splitStoredPhone(user.phone)
+    setPhone(storedPhone.national)
+    setPhoneCountry(storedPhone.country)
+    setPhoneError(null)
     setStreet(user.address?.street ?? "")
     setCity(user.address?.city ?? "")
     setCountry(user.address?.country ?? "")
@@ -140,22 +271,78 @@ function UserSettingsContent() {
   if (!user) return null
 
   const handleSaveProfile = async () => {
+    const phoneUpdate = phoneUpdateFor(user.phone, phone, phoneCountry)
+    if (phoneUpdate.error) {
+      setPhoneError(phoneUpdate.error)
+      document.getElementById("phone")?.focus()
+      return
+    }
+    // QA CUS-02/03/07: PATCH /users/me takes only the account fields; the
+    // address has its own endpoints. Sending `addresses` there was rejected,
+    // so nothing on this card could ever be saved.
+    const nameError = !firstname.trim()
+      ? "Enter your first name."
+      : !lastname.trim()
+        ? "Enter your last name."
+        : firstname.trim().length > NAME_MAX || lastname.trim().length > NAME_MAX
+          ? `First and last name can each be at most ${NAME_MAX} characters.`
+          : null
+    if (nameError) {
+      toast.error(nameError)
+      return
+    }
+    const addressFields = { street: street.trim(), city: city.trim(), country: country.trim(), zipCode: zipCode.trim() }
+    const saved = user.address
+    const addressChanged =
+      addressFields.street !== (saved?.street ?? "") ||
+      addressFields.city !== (saved?.city ?? "") ||
+      addressFields.country !== (saved?.country ?? "") ||
+      addressFields.zipCode !== (saved?.zipCode ?? "")
+    if (addressChanged && Object.values(addressFields).some((v) => v === "")) {
+      toast.error("Fill in street, city, country and zip code to save your address.")
+      return
+    }
+    const newNationalId = !user.nationalId && nationalId.trim() ? nationalId.trim().toUpperCase() : undefined
+    if (newNationalId && !NATIONAL_ID_PATTERN.test(newNationalId)) {
+      toast.error("Enter your national ID as letters, numbers and dashes, like GHA-123456789-0.")
+      document.getElementById("nationalId")?.focus()
+      return
+    }
+
     setIsSaving(true)
+    let accountSaved = false
     try {
       await apiFetch("/users/me", {
         method: "PATCH",
         body: JSON.stringify({
-          firstname,
-          lastname,
-          phoneNumber: phone,
-          addresses: [{ street, city, country, zipCode }],
-          ...(nationalId && !user.nationalId ? { nationalId } : {}),
+          firstname: firstname.trim(),
+          lastname: lastname.trim(),
+          // PH11: E.164, and only when edited (see phoneUpdateFor).
+          ...(phoneUpdate.phoneNumber ? { phoneNumber: phoneUpdate.phoneNumber } : {}),
+          ...(newNationalId ? { nationalId: newNationalId } : {}),
         }),
       })
+      accountSaved = true
+      if (addressChanged) {
+        await apiFetch(saved?.id ? `/users/me/addresses/${saved.id}` : "/users/me/addresses", {
+          method: saved?.id ? "PATCH" : "POST",
+          body: JSON.stringify(addressFields),
+        })
+      }
       await refreshUser()
       toast.success("Profile updated successfully.")
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to save changes.")
+      if (err instanceof ApiError && err.code === PHONE_IN_USE_CODE) {
+        setPhoneError(PHONE_MESSAGES.inUse)
+        return
+      }
+      const reason = err instanceof Error ? err.message : "Failed to save changes."
+      if (accountSaved) {
+        await refreshUser()
+        toast.error(`Your details were saved, but your address wasn't: ${reason}`)
+      } else {
+        toast.error(reason)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -166,15 +353,25 @@ function UserSettingsContent() {
       toast.error("New passwords do not match.")
       return
     }
-    if (newPass.length < 8) {
-      toast.error("Password must be at least 8 characters.")
+    if (!isStrongPassword(newPass)) {
+      toast.error(PASSWORD_MESSAGES.rule)
       return
     }
     setIsUpdatingPass(true)
     try {
       await apiFetch("/auth/change-password", {
         method: "POST",
-        body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
+        // FE-1: `confirmNewPassword` is required by the endpoint's DTO
+        // (`ChangePasswordDto extends ResetPasswordDto`), which re-checks the
+        // match server-side. Omitting it made every attempt 400 with the
+        // validation array joined into a toast that blamed the password's
+        // strength, and the password never changed. The form already collects
+        // the value for the client-side check above — it just has to be sent.
+        body: JSON.stringify({
+          currentPassword: currentPass,
+          newPassword: newPass,
+          confirmNewPassword: confirmPass,
+        }),
       })
       toast.success("Password updated.")
       setCurrentPass("")
@@ -202,7 +399,7 @@ function UserSettingsContent() {
           onValueChange={(tab) => router.replace(`?tab=${tab}`, { scroll: false })}
           className="space-y-6"
         >
-          <TabsList className="bg-muted">
+          <TabsList className="h-auto w-full justify-start overflow-x-auto bg-muted sm:w-auto">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
               Profile
@@ -210,6 +407,10 @@ function UserSettingsContent() {
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
               Notifications
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="gap-2">
+              <CreditCard className="h-4 w-4" />
+              Payments
             </TabsTrigger>
             <TabsTrigger value="security" className="gap-2">
               <Shield className="h-4 w-4" />
@@ -284,6 +485,7 @@ function UserSettingsContent() {
                     <Label htmlFor="firstName">First Name</Label>
                     <Input
                       id="firstName"
+                      maxLength={NAME_MAX}
                       value={firstname}
                       onChange={(e) => setFirstname(e.target.value)}
                       placeholder="First name"
@@ -293,6 +495,7 @@ function UserSettingsContent() {
                     <Label htmlFor="lastName">Last Name</Label>
                     <Input
                       id="lastName"
+                      maxLength={NAME_MAX}
                       value={lastname}
                       onChange={(e) => setLastname(e.target.value)}
                       placeholder="Last name"
@@ -312,19 +515,22 @@ function UserSettingsContent() {
                     </div>
                     <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        id="phone"
-                        className="pl-10"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="Phone number"
-                      />
-                    </div>
-                  </div>
+                  <PhoneField
+                    id="phone"
+                    label="Phone Number"
+                    value={phone}
+                    country={phoneCountry}
+                    onChange={(value) => {
+                      setPhone(value)
+                      setPhoneError(null)
+                    }}
+                    onCountryChange={(next) => {
+                      setPhoneCountry(next)
+                      setPhoneError(null)
+                    }}
+                    error={phoneError}
+                    disabled={isSaving}
+                  />
                   <div className="space-y-2">
                     <Label htmlFor="nationalId">National Identification</Label>
                     <div className="relative">
@@ -338,7 +544,8 @@ function UserSettingsContent() {
                         value={nationalId}
                         onChange={user.nationalId ? undefined : (e) => setNationalId(e.target.value)}
                         readOnly={!!user.nationalId}
-                        placeholder="Enter your national ID number"
+                        placeholder="e.g. GHA-123456789-0"
+                        maxLength={30}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -462,13 +669,19 @@ function UserSettingsContent() {
                     </div>
                   </div>
                   <CardContent className="p-6 space-y-4">
+                    {/*
+                      PR2: the "Review Requests" row is deliberately absent, not disabled. No
+                      backend trigger sends a post-completion review prompt, so the toggle
+                      controlled nothing. `reviewRequests` stays on the interface and in the save
+                      payload so the stored value round-trips untouched; restore the row here once
+                      a real review-nudge trigger exists.
+                    */}
                     {([
                       { key: "bookingConfirmations", label: "Booking Confirmations",  desc: "Get notified when an artisan applies to your job" },
                       { key: "jobStatusUpdates",     label: "Job Status Updates",      desc: "Receive updates when your job status changes" },
                       { key: "paymentReceipts",      label: "Payment Receipts",        desc: "Receive receipts for completed payments" },
                       { key: "promotionalOffers",    label: "Promotional Offers",      desc: "Get notified about discounts and special offers" },
                       { key: "serviceReminders",     label: "Service Reminders",       desc: "Reminders for upcoming scheduled services" },
-                      { key: "reviewRequests",       label: "Review Requests",         desc: "Get prompted to review artisans after service completion" },
                       { key: "jobExpired",           label: "Job Expired",             desc: "Get notified when your job posting expires without being filled" },
                       { key: "messageReceived",      label: "New Messages",            desc: "Get notified when you receive a direct message" },
                     ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
@@ -490,11 +703,22 @@ function UserSettingsContent() {
                   <div className="border-b p-6">
                     <h3 className="font-semibold">Notification Channels</h3>
                     <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Email and SMS coverage varies by notification type — in-app notifications always
+                      fire when the toggle above is on.
+                    </p>
                   </div>
                   <CardContent className="p-6 space-y-4">
+                    {/*
+                      PR2: the SMS row is deliberately absent, not disabled. There is no SMS
+                      delivery capability anywhere in the platform and SMS is not a PRD-required
+                      channel, so showing the toggle implied a working feature that silently did
+                      nothing. `smsEnabled` stays on the interface and in the save payload so the
+                      stored value round-trips untouched; restore the row here if real SMS
+                      delivery is ever built.
+                    */}
                     {([
                       { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
-                      { key: "smsEnabled",   label: "SMS Notifications",   desc: "Receive notifications via text message" },
                       { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
                     ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
                       <div key={key} className="flex items-center justify-between rounded-lg border p-4">
@@ -523,6 +747,181 @@ function UserSettingsContent() {
                 </div>
               </>
             )}
+          </TabsContent>
+
+          {/* Payments (C4, design-spec.md 2.2) */}
+          <TabsContent value="payments" className="space-y-6">
+            <Card>
+              <div className="border-b p-6">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-muted p-2">
+                    <CreditCard className="h-5 w-5 text-foreground" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Payment History</h3>
+                    <p className="text-sm text-muted-foreground">Everything you&apos;ve paid for on JinVa, newest first</p>
+                  </div>
+                </div>
+              </div>
+              <CardContent className="p-0">
+                {isLoadingPayments ? (
+                  <div className="space-y-3 p-6">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full rounded-lg" />
+                    ))}
+                  </div>
+                ) : paymentsError ? (
+                  <Empty className="border-0 py-12">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <AlertTriangle className="text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>Couldn&apos;t load your payments</EmptyTitle>
+                      <EmptyDescription>Something went wrong fetching your payment history.</EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button variant="outline" className="bg-transparent" onClick={loadPayments}>Try Again</Button>
+                    </EmptyContent>
+                  </Empty>
+                ) : payments.length === 0 ? (
+                  <Empty className="border-0 py-12">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Receipt className="text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle>No payments yet</EmptyTitle>
+                      <EmptyDescription>Payments you make for jobs will show up here.</EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                        <a href="/dashboard/user/search">Browse Artisans</a>
+                      </Button>
+                    </EmptyContent>
+                  </Empty>
+                ) : (
+                  <>
+                    {/* QA MEDIUM (2026-08-20): below md, this table's Status
+                        column was pushed off-screen with no scroll affordance —
+                        replaced with stacked cards carrying the same fields.
+                        Table stays for md+ where it fits without scrolling. */}
+                    <div className="hidden overflow-x-auto md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Job</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="w-8" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {payments.map((p) => {
+                            const cfg = getCustomerPaymentStatusConfig(p.status)
+                            const isExpanded = expandedPaymentId === p.id
+                            return (
+                              <Fragment key={p.id}>
+                                <TableRow
+                                  className="cursor-pointer hover:bg-muted/30"
+                                  onClick={() => setExpandedPaymentId(isExpanded ? null : p.id)}
+                                >
+                                  <TableCell className="max-w-[180px] truncate font-medium text-foreground">
+                                    {p.job?.title ?? `Job #${p.job?.id ?? p.jobId}`}
+                                  </TableCell>
+                                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                    {new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                                  </TableCell>
+                                  <TableCell className="text-right font-medium text-foreground">
+                                    {formatCurrency(p.amount)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className={cfg.className}>
+                                      <cfg.icon className="h-3 w-3" />
+                                      {cfg.label}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                                  </TableCell>
+                                </TableRow>
+                                {isExpanded && (
+                                  <TableRow className="bg-muted/20 hover:bg-muted/20">
+                                    <TableCell colSpan={5} className="text-xs text-muted-foreground">
+                                      <div className="flex flex-wrap gap-x-6 gap-y-1 py-1">
+                                        <span>Reference: <span className="font-mono">{p.reference}</span></span>
+                                        {p.paidAt && (
+                                          <span>Paid at: {new Date(p.paidAt).toLocaleString("en-GB")}</span>
+                                        )}
+                                        {p.releasedAt && (
+                                          <span>Paid to the artisan: {new Date(p.releasedAt).toLocaleString("en-GB")}</span>
+                                        )}
+                                        <Link
+                                          href={`/dashboard/user/jobs/${p.job?.id ?? p.jobId}`}
+                                          className="text-primary hover:underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          View Job
+                                        </Link>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </Fragment>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="divide-y md:hidden">
+                      {payments.map((p) => {
+                        const cfg = getCustomerPaymentStatusConfig(p.status)
+                        const isExpanded = expandedPaymentId === p.id
+                        return (
+                          <div
+                            key={p.id}
+                            className="cursor-pointer space-y-2 p-4"
+                            onClick={() => setExpandedPaymentId(isExpanded ? null : p.id)}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="truncate font-medium text-foreground">{p.job?.title ?? `Job #${p.job?.id ?? p.jobId}`}</p>
+                              {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <Badge variant="outline" className={cfg.className}>
+                                <cfg.icon className="h-3 w-3" />
+                                {cfg.label}
+                              </Badge>
+                              <span className="font-medium text-foreground">{formatCurrency(p.amount)}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                            {isExpanded && (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
+                                <span>Reference: <span className="font-mono">{p.reference}</span></span>
+                                {p.paidAt && (
+                                  <span>Paid at: {new Date(p.paidAt).toLocaleString("en-GB")}</span>
+                                )}
+                                {p.releasedAt && (
+                                  <span>Paid to the artisan: {new Date(p.releasedAt).toLocaleString("en-GB")}</span>
+                                )}
+                                <Link
+                                  href={`/dashboard/user/jobs/${p.job?.id ?? p.jobId}`}
+                                  className="text-primary hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  View Job
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Security */}
@@ -607,7 +1006,7 @@ function UserSettingsContent() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-destructive">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">Irreversible account actions</p>
+                    <p className="text-sm text-muted-foreground">Permanent account actions</p>
                   </div>
                 </div>
               </div>
@@ -616,10 +1015,10 @@ function UserSettingsContent() {
                   <div>
                     <p className="font-medium">Delete Account</p>
                     <p className="text-sm text-muted-foreground">
-                      Permanently delete your account and all associated data
+                      Close your account and remove your profile from JinVa. You can restore it within 30 days.
                     </p>
                   </div>
-                  <Button variant="destructive" size="sm">
+                  <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete Account
                   </Button>
@@ -629,6 +1028,47 @@ function UserSettingsContent() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          if (isDeleting) return
+          if (!open) setDeleteRefusal(null)
+          setShowDeleteDialog(open)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You&apos;ll be signed out straight away and your profile will no longer be visible on JinVa. You
+              have <span className="font-medium text-foreground">30 days</span> to change your mind — sign in
+              again before then and we&apos;ll restore your account and your booking history. After 30 days
+              everything is permanently deleted and can&apos;t be recovered.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {/* C1.1: the refusal, rendered inline in the still-open dialog. */}
+          {deleteRefusal && (
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+              <p>{deleteRefusal}</p>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Keep my account</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteAccount()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   )
 }

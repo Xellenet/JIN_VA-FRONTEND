@@ -182,7 +182,11 @@ function CalendarDayButton({
 
   const ref = React.useRef<HTMLButtonElement>(null)
   React.useEffect(() => {
-    if (modifiers.focused) ref.current?.focus()
+    // preventScroll: true — without it, this fires on every mouse click too
+    // (not just keyboard nav), and the browser's default scroll-into-view
+    // races the "Available Times" block mounting below the calendar right
+    // after a date is picked, producing a visible jump/blank-space flash.
+    if (modifiers.focused) ref.current?.focus({ preventScroll: true })
   }, [modifiers.focused])
 
   return (

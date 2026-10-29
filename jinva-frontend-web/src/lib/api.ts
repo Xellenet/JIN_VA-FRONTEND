@@ -1,29 +1,24 @@
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, persistAuthTokens, clearAuthTokens } from "@/lib/auth"
+import { persistAuthTokens, clearAuthTokens, getAccessToken, SESSION_ENDED_PARAM } from "@/lib/auth"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
-
-function readCookie(name: string): string | null {
-  if (typeof document === "undefined") return null
-  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))
-  return match ? decodeURIComponent(match[1]) : null
-}
 
 let refreshPromise: Promise<boolean> | null = null
 
 async function doTokenRefresh(): Promise<boolean> {
-  const refreshToken = readCookie(REFRESH_TOKEN_COOKIE)
-  if (!refreshToken) return false
-
   try {
+    // The refresh token itself is never available to this code — it lives
+    // only in the httpOnly cookie the backend set at login (S1).
+    // `credentials: "include"` is what makes the browser attach that cookie
+    // here automatically; there's nothing for this module to read or send.
+    // A missing/invalid/expired cookie surfaces as a non-ok response below.
     const res = await fetch(`${API_BASE}/auth/refresh-token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
+      credentials: "include",
     })
     if (!res.ok) return false
     const data = await res.json()
     if (!data.access_token) return false
-    persistAuthTokens(data.access_token, data.refresh_token ?? refreshToken)
+    persistAuthTokens(data.access_token)
     return true
   } catch {
     return false
@@ -39,11 +34,75 @@ async function tryRefresh(): Promise<boolean> {
   return refreshPromise
 }
 
+/**
+ * Ensures an access token is in memory, refreshing from the httpOnly cookie
+ * if not. For routes that bootstrap a brand-new session (/auth/callback):
+ * there the token is always absent, so letting the first request 401 and
+ * recover via the retry below is a guaranteed wasted round-trip.
+ */
+export async function ensureAccessToken(): Promise<boolean> {
+  return getAccessToken() ? true : tryRefresh()
+}
+
 type ApiFetchOptions = RequestInit & { skipAuth?: boolean }
 
-export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+interface ApiEnvelope<T> {
+  status?: string
+  statusCode?: number
+  message?: string
+  data?: T
+  meta?: Record<string, unknown>
+}
+
+/**
+ * A failed request, carrying the HTTP status alongside the user-facing message.
+ *
+ * `apiFetch` used to throw a bare `Error`, which meant a caller could only ever
+ * show the message — there was no way to branch on *why* a call failed. Two
+ * surfaces in messaging & notifications need that:
+ *   - the admin dispute-conversation viewer, where a 403 means "access closed
+ *     with this dispute" (api-contract.md §4) rather than a generic failure;
+ *   - a deep-link first send to a recipient who doesn't exist (404), which must
+ *     drop back to the conversation list instead of stranding the user in a
+ *     thread addressed to nobody.
+ *
+ * `code`/`retryAfterSeconds` mirror the machine-readable fields
+ * api-contract.md §3.1 documents on a 429. They are optional because the
+ * server's global exception filter currently strips everything except
+ * `message` from an HttpException body (qa-report.md B1, backend-owned) — so
+ * callers must treat them as a bonus and never depend on them.
+ *
+ * Extends `Error`, so every existing `err instanceof Error ? err.message`
+ * call site keeps working unchanged.
+ */
+export class ApiError extends Error {
+  readonly status: number
+  readonly code?: string
+  readonly retryAfterSeconds?: number
+
+  constructor(message: string, status: number, code?: string, retryAfterSeconds?: number) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.code = code
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+/**
+ * The authenticated request itself: bearer header, the one-shot
+ * refresh-and-retry on a 401, and `ApiError` for any non-ok response. Returns
+ * the raw `Response` so the caller decides how to read the body.
+ *
+ * Split out of `apiFetchEnvelope` for `apiFetchBlob` below — the KYC media
+ * endpoint (api-contract.md §1) is the one endpoint that returns raw bytes
+ * rather than the JSON envelope, and it still needs every bit of this auth
+ * handling. The error body on a failure IS the normal JSON envelope, so that
+ * part is shared unchanged.
+ */
+async function authedRequest(path: string, options: ApiFetchOptions = {}): Promise<Response> {
   const { skipAuth, ...init } = options
-  const token = skipAuth ? null : readCookie(ACCESS_TOKEN_COOKIE)
+  const token = skipAuth ? null : getAccessToken()
 
   const isFormData = init.body instanceof FormData
   const headers: Record<string, string> = {
@@ -52,15 +111,18 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
   }
   if (token) headers["Authorization"] = `Bearer ${token}`
 
+  // `include` unless the caller opts out: `GET /locations/suggestions` passes
+  // `credentials: "omit"` so no cookie (e.g. the pending-signup one) rides
+  // along with typed place text (google-signup-prefill PR1, design §3.4.4).
   const request = (): Promise<Response> =>
-    fetch(`${API_BASE}${path}`, { ...init, headers })
+    fetch(`${API_BASE}${path}`, { ...init, headers, credentials: init.credentials ?? "include" })
 
   let res = await request()
 
   if (res.status === 401 && !skipAuth) {
     const refreshed = await tryRefresh()
     if (refreshed) {
-      const newToken = readCookie(ACCESS_TOKEN_COOKIE)
+      const newToken = getAccessToken()
       if (newToken) headers["Authorization"] = `Bearer ${newToken}`
       res = await request()
     }
@@ -68,19 +130,159 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
     if (res.status === 401) {
       clearAuthTokens()
       if (typeof window !== "undefined") {
-        window.location.href = "/login"
+        // /auth/callback (G7) owns its own post-refresh-failure redirect so it
+        // can land on "/login?error=oauth_failed" with the "something went
+        // wrong" message (see google-callback.tsx's PendingState). Racing it
+        // with this global hard-navigation would otherwise strip that query
+        // param off the URL before PendingState's own router.replace() runs,
+        // silently losing the message even though the user still lands on
+        // /login safely either way. Every other route still gets the
+        // hard-redirect safety net.
+        //
+        // The marker matters: middleware (S2) routes any /login request that
+        // carries a *verifiable* `jinva_session` straight back to the role
+        // dashboard, and that cookie stays verifiable until its own exp even
+        // when the API has just told us the session behind it is dead. Without
+        // the marker, this redirect and that one chase each other — the
+        // dashboard mounts, 401s, hard-navigates here, and middleware bounces
+        // it back — and the user can never reach the login form. The C1
+        // deletion flow hits this every time (see the note in
+        // docs/team/auth-settings-closeout, backend item: `DELETE /users/me`
+        // does not clear the cookies it set, and `POST /auth/logout` can't be
+        // reached by a soft-deleted principal to do it), which would make the
+        // restore-on-login recovery path unreachable from the very browser the
+        // account was deleted in.
+        if (window.location.pathname !== "/auth/callback") {
+          window.location.href = `/login?${SESSION_ENDED_PARAM}=1`
+        }
       }
-      throw new Error("Session expired. Please log in again.")
+      throw new ApiError("Session expired. Please log in again.", 401)
     }
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: "Request failed" }))
-    throw new Error(err.message ?? `Request failed with status ${res.status}`)
+    const err: {
+      message?: string | string[]
+      error?: string
+      retryAfterSeconds?: number
+      meta?: { error?: string; retryAfterSeconds?: number }
+    } = await res.json().catch(() => ({ message: "Request failed" }))
+    // A ValidationPipe rejection returns `message` as an array of strings.
+    const message = Array.isArray(err.message) ? err.message.join(" ") : err.message
+    // QA AUTH-17: an account banned mid-session is refused on its next request.
+    // End the session and say why on the login page, instead of leaving the
+    // user on a dashboard where every action fails.
+    if (res.status === 403 && (err.meta?.error ?? err.error) === "ACCOUNT_BANNED" && !skipAuth) {
+      clearAuthTokens()
+      if (typeof window !== "undefined") {
+        window.location.href = `/login?${SESSION_ENDED_PARAM}=1&error=account_banned`
+      }
+    }
+    // api-contract.md §3.1: the error code and retry hint live in `meta`
+    // (`meta.error`, `meta.retryAfterSeconds`) — the top-level reading was an
+    // earlier, corrected version of that contract, kept only as a fallback.
+    throw new ApiError(
+      message ?? `Request failed with status ${res.status}`,
+      res.status,
+      err.meta?.error ?? err.error,
+      err.meta?.retryAfterSeconds ?? err.retryAfterSeconds,
+    )
   }
 
-  const body = await res.json()
+  return res
+}
 
+async function apiFetchEnvelope<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<ApiEnvelope<T>> {
+  const res = await authedRequest(path, options)
+
+  if (res.status === 204) return {} as ApiEnvelope<T>
+
+  return await res.json().catch(() => ({}) as ApiEnvelope<T>)
+}
+
+/**
+ * Fetches a raw-bytes response through the authenticated request path.
+ *
+ * Exists for `GET /uploads/kyc/:folder/:filename` (api-contract.md §1), which
+ * streams a KYC document or selfie instead of returning the JSON envelope, and
+ * is `ADMIN`-guarded — so a browser `<img src>` can never fetch it (an image
+ * request carries no `Authorization` header, which is exactly why those objects
+ * are no longer anonymously readable). The caller turns the blob into an object
+ * URL and is responsible for revoking it.
+ *
+ * `contentType` is returned because the document upload accepts
+ * `application/pdf` as well as images, so the caller has to branch on it rather
+ * than assume an image.
+ */
+export async function apiFetchBlob(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<{ blob: Blob; contentType: string }> {
+  const res = await authedRequest(path, options)
+  const blob = await res.blob()
+  return { blob, contentType: res.headers.get("Content-Type") ?? blob.type ?? "" }
+}
+
+export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const body = await apiFetchEnvelope<T>(path, options)
   // Unwrap the NestJS ResponseInterceptor envelope: { statusCode, message, data }
-  return (body?.data !== undefined ? body.data : body) as T
+  return (body?.data !== undefined ? body.data : (body as unknown)) as T
+}
+
+/**
+ * Same as `apiFetch`, but also surfaces the envelope's `message`.
+ *
+ * `apiFetch` returns `body.data`, which throws the envelope's `message` away.
+ * That is fine for most endpoints, but two dispute surfaces are required to
+ * display the server's own sentence **verbatim** rather than compose a
+ * competing one:
+ *   - `PATCH /admin/disputes/:id/resolve`, whose message already names the
+ *     amount in GH₵ and states that both parties were notified, so
+ *     re-composing it would double-format the money (requirements.md DC1.5);
+ *   - `POST /disputes/:id/respond`, whose success line is the confirmation the
+ *     responding party sees (DC3.4).
+ *
+ * Both return `{ message, data }` from the service, and the global
+ * `ResponseInterceptor` lifts that `message` to the envelope's top level —
+ * where neither `apiFetch` nor `apiFetchWithMeta` could reach it.
+ */
+export async function apiFetchWithMessage<T = unknown>(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<{ data: T; message?: string }> {
+  const body = await apiFetchEnvelope<T>(path, options)
+  return {
+    data: (body?.data !== undefined ? body.data : (body as unknown)) as T,
+    message: typeof body?.message === "string" ? body.message : undefined,
+  }
+}
+
+/**
+ * Same as `apiFetch`, but also surfaces the envelope's `meta` block
+ * (e.g. `{ total, page, limit, totalPages }` on paginated list endpoints)
+ * instead of discarding it. Use this whenever a page needs real
+ * pagination controls rather than just the `data` array.
+ */
+export async function apiFetchWithMeta<T = unknown>(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<{ data: T; meta: Record<string, unknown> | undefined }> {
+  const body = await apiFetchEnvelope<T>(path, options)
+  return {
+    data: (body?.data !== undefined ? body.data : (body as unknown)) as T,
+    meta: body?.meta,
+  }
+}
+
+/**
+ * Same request path as `apiFetch`, but returns the whole JSON body instead of
+ * unwrapping `data`.
+ *
+ * For the endpoints that answer like `POST /auth/login` —
+ * `{ access_token, expires_at, message, data: user }` — where the token sits
+ * beside `data` rather than inside it, so `apiFetch` would throw it away. Used
+ * by `POST /auth/social/complete` (the Google "complete your account" step).
+ */
+export async function apiFetchBody<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  return (await apiFetchEnvelope(path, options)) as T
 }

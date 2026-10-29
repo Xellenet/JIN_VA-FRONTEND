@@ -5,18 +5,30 @@ import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {toast} from "sonner"
 import { CheckCircle2, ArrowLeft } from "lucide-react"
+import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
+import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { AuthSplitLayout } from "./auth-split-layout"
+import { EMAIL_MESSAGES, validateEmail } from "./signup-fields"
+
+/* google-signup-prefill V1–V8 (design-spec §1, §6.3): email as on login. */
+type Field = "email"
+
+const FIELDS: readonly Field[] = ["email"]
+const LABELS: Record<Field, string> = { email: "Email" }
 
 export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [email, setEmail] = useState("")
   const [isSubmitted, setIsSubmitted] = useState(false)
 
+  const validateField = (_field: Field, mode: ValidationMode) => validateEmail(email, mode === "submit")
+  const v = useFormValidation<Field>({ fields: FIELDS, values: { email }, validate: validateField, labels: LABELS })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!v.validateAll()) return
     setIsLoading(true)
 
     try {
@@ -31,6 +43,11 @@ export function ForgotPasswordForm() {
       const data = await response.json()
 
       if (!response.ok) {
+        // V5: a 400 here can only be about the email; show it on the field.
+        if (response.status === 400) {
+          v.setServerError("email", EMAIL_MESSAGES.invalid)
+          return
+        }
         throw new Error(data.message || "Failed to send reset email")
       }
 
@@ -46,19 +63,19 @@ export function ForgotPasswordForm() {
   if (isSubmitted) {
     return (
       <AuthSplitLayout>
-        <div className="space-y-8 text-center bg-white rounded-lg p-8 shadow-sm">
+        <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-[#1c4532]/10 rounded-full flex items-center justify-center">
-              <CheckCircle2 className="w-8 h-8 text-[#1c4532]" />
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-primary" />
             </div>
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">Check your email</h1>
-            <p className="text-gray-600 leading-relaxed">
-              We&apos;ve sent a password reset link to <span className="font-medium text-gray-900">{email}</span>
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Check your email</h1>
+            <p className="text-muted-foreground leading-relaxed">
+              We&apos;ve sent a password reset link to <span className="font-medium text-foreground">{email}</span>
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               The link will expire in 24 hours. If you don&apos;t see the email, check your spam folder.
             </p>
           </div>
@@ -66,7 +83,7 @@ export function ForgotPasswordForm() {
           <div className="space-y-4">
             <Button
               onClick={() => (window.location.href = "/login")}
-              className="w-full h-12 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             >
               Back to Sign In
             </Button>
@@ -89,11 +106,11 @@ export function ForgotPasswordForm() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 bg-white rounded-lg p-8 ">
+      <div className="space-y-8 bg-background rounded-lg p-8 ">
         {/* Back Button */}
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Sign In
@@ -101,33 +118,36 @@ export function ForgotPasswordForm() {
 
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Forgot Password?</h1>
-          <p className="text-gray-600 leading-relaxed">No worries, we&apos;ll send you reset instructions to your email.</p>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Forgot Password?</h1>
+          <p className="text-muted-foreground leading-relaxed">No worries, we&apos;ll send you reset instructions to your email.</p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email Field */}
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm text-gray-600">
-              E-mail
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="example@gmail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-              required
-              disabled={isLoading}
-            />
-          </div>
+        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
+          <FormAnnouncer message={v.announcement} />
+
+          <FormField id="email" label="Email" error={v.errors.email}>
+            {(control) => (
+              <Input
+                {...control}
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                enterKeyHint="send"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => v.handleBlur("email")}
+                className={AUTH_INPUT_CLASS}
+                required
+                disabled={isLoading}
+              />
+            )}
+          </FormField>
 
           {/* Submit Button */}
           <Button
             type="submit"
-            className="w-full h-10 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+            className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             disabled={isLoading}
           >
             {isLoading ? "Sending..." : "Send Reset Link"}

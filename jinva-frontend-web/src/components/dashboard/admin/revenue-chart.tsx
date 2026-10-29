@@ -1,60 +1,56 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
-import { Button } from "@/components/ui/button"
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
+import { CHART_TOOLTIP_STYLE, CHART_AXIS_TICK, CHART_GRID_STROKE } from "@/lib/charts"
+import { formatCurrency } from "@/lib/utils"
 
-const data = [
-  { month: "Jan", value: 8500 },
-  { month: "Feb", value: 10200 },
-  { month: "Mar", value: 14800 },
-  { month: "Apr", value: 9200 },
-  { month: "May", value: 11500 },
-  { month: "Jun", value: 7800 },
-  { month: "Jul", value: 13200 },
-  { month: "Aug", value: 20000 },
-  { month: "Sep", value: 12500 },
-  { month: "Oct", value: 15200 },
-  { month: "Nov", value: 17800 },
-  { month: "Dec", value: 16400 },
-]
-
-export function RevenueChart() {
+/**
+ * QA ADM-02: platform fees received per day, from the analytics rollup. This
+ * used to be twelve made-up months with "Product"/"Service" legends and a
+ * "Last Year" button that did nothing.
+ */
+export function RevenueChart({
+  series,
+  total,
+  periodLabel,
+}: {
+  /** `null` when the rollup couldn't compute revenue: unavailable, not zero. */
+  series: Array<{ label: string; net: number }> | null
+  total: number | null
+  periodLabel: string
+}) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">Revenue Growth Trend</CardTitle>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <div className="h-3 w-3 rounded-full bg-muted"></div>
-              <span className="text-muted-foreground">Product</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <div className="h-3 w-3 rounded-full bg-primary"></div>
-              <span className="text-muted-foreground">Service</span>
-            </div>
-            <Button variant="outline" size="sm" className="h-8 bg-transparent">
-              Last Year
-            </Button>
-          </div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <CardTitle className="text-lg font-semibold">Platform Fees Received</CardTitle>
+          {total != null && (
+            <p className="text-sm text-muted-foreground">
+              {formatCurrency(total)} in the {periodLabel}
+            </p>
+          )}
         </div>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data}>
-            <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
-            <YAxis axisLine={false} tickLine={false} className="text-xs" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "var(--radius)",
-              }}
-            />
-            <Bar dataKey="value" fill="hsl(var(--muted))" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        {series == null || total == null ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">Revenue couldn&apos;t be loaded right now.</p>
+        ) : total === 0 ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">No payments received in the {periodLabel}.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={series}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} vertical={false} />
+              <XAxis dataKey="label" axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} minTickGap={12} />
+              <YAxis axisLine={false} tickLine={false} tick={CHART_AXIS_TICK} width={56} />
+              <Tooltip
+                contentStyle={CHART_TOOLTIP_STYLE}
+                formatter={(value) => [formatCurrency(Number(value)), "Platform fees"]}
+              />
+              <Bar dataKey="net" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   )

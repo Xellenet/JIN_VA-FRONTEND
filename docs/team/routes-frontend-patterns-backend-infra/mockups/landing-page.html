@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JinVa — Marketing landing page (NEW) — / — 1440px, light theme</title>
+<style>
+  /* ────────────────────────────────────────────────────────────────────────
+     Every colour below is a REAL token value copied verbatim out of
+     jinva-frontend-web/src/app/globals.css (:root), plus the four DT1
+     semantic tokens and the three brand tokens specified in
+     design-spec.md §1.1 / §1.2. Nothing here is invented.
+     ──────────────────────────────────────────────────────────────────── */
+  :root{
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);            /* #0a0a0a */
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --primary: oklab(32.107% -0.04748 0.01739);/* #1c4532 — verbatim from globals.css */
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --muted: oklch(0.97 0 0);                  /* #f5f5f5 */
+    --muted-foreground: oklch(0.556 0 0);      /* #737373 */
+    --accent: oklch(0.97 0 0);
+    --destructive: oklch(0.577 0.245 27.325);  /* #dc2626 */
+    --border: oklch(0.922 0 0);                /* #e5e5e5 */
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --radius: 0.625rem;                        /* 10px */
+
+    /* DT1 — NEW semantic status tokens (design-spec.md §1.1) */
+    --success: oklch(0.448 0.119 151.328);     /* #166534 · 6.14:1 on /10 */
+    --warning: oklch(0.476 0.114 61.907);      /* #854d0e · 5.90:1 on /10 */
+    --attention: oklch(0.470 0.157 37.304);    /* #9a3412 · 6.24:1 on /10 */
+    --info: oklch(0.424 0.199 265.638);        /* #1e40af · 7.40:1 on /10 */
+
+    /* DT4 — NEW brand marketing-surface tokens (design-spec.md §1.2) */
+    --brand: oklab(32.107% -0.04748 0.01739);  /* identical to light --primary */
+    --brand-accent: color-mix(in oklab, var(--brand) 84%, white);  /* ≈ #2d5a42 */
+    --brand-foreground: oklch(0.985 0 0);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    color:var(--foreground);background:#e9e9e9;-webkit-font-smoothing:antialiased;
+  }
+  .mockup-note{background:#111;color:#eee;font-size:12px;line-height:1.6;padding:10px 20px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .mockup-note b{color:#fff}
+  .frame{width:1440px;margin:24px auto;background:var(--background);
+    box-shadow:0 24px 60px -20px rgba(0,0,0,.35);overflow:hidden}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 32px}
+
+  /* ── typography ─────────────────────────────────────────────────────── */
+  h1{font-size:60px;line-height:1.05;letter-spacing:-.025em;font-weight:700;text-wrap:balance}
+  h2.sect{font-size:36px;line-height:1.15;letter-spacing:-.02em;font-weight:700;text-wrap:balance}
+  h3{font-size:16px;font-weight:600;line-height:1.35}
+  .lead{font-size:18px;line-height:1.7;color:var(--muted-foreground)}
+  .sub{font-size:16px;line-height:1.6;color:var(--muted-foreground)}
+  .sm{font-size:14px;line-height:1.6}
+  .xs{font-size:12px;line-height:1.5}
+  .mut{color:var(--muted-foreground)}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--primary)}
+
+  /* ── buttons (mirrors buttonVariants in src/components/ui/button.tsx) ── */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;
+    padding:0 16px;border-radius:6px;font-size:14px;font-weight:500;white-space:nowrap;
+    border:1px solid transparent;cursor:pointer;transition:all .3s;text-decoration:none;
+    color:var(--foreground);background:transparent}
+  .btn-lg{height:40px;padding:0 24px;font-size:16px}
+  .btn-default{background:var(--primary);color:var(--primary-foreground)}
+  .btn-outline{border-color:var(--border);background:var(--background);
+    box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .btn-ghost{background:transparent}
+  .btn-link{background:transparent;color:var(--primary);text-decoration:underline;
+    text-underline-offset:4px;padding:0;height:auto}
+  .btn-icon{width:36px;height:36px;padding:0}
+  /* on-brand-surface buttons — tokens only, no hex (design-spec §3.11) */
+  .btn-onbrand{background:var(--brand-foreground);color:var(--brand)}
+  .btn-onbrand-outline{background:transparent;color:var(--brand-foreground);
+    border-color:color-mix(in oklab,var(--brand-foreground) 30%,transparent)}
+
+  /* ── badge (mirrors src/components/ui/badge.tsx) ────────────────────── */
+  .badge{display:inline-flex;align-items:center;gap:4px;border:1px solid transparent;
+    border-radius:6px;padding:2px 8px;font-size:12px;font-weight:500;width:fit-content;
+    white-space:nowrap}
+  .b-outline{border-color:var(--border);color:var(--foreground);background:var(--background)}
+  .b-success{background:color-mix(in oklab,var(--success) 10%,transparent);color:var(--success);
+    border-color:color-mix(in oklab,var(--success) 20%,transparent)}
+  .b-primary{background:color-mix(in oklab,var(--primary) 10%,transparent);color:var(--primary);
+    border-color:color-mix(in oklab,var(--primary) 20%,transparent)}
+
+  /* ── card (mirrors src/components/ui/card.tsx) ──────────────────────── */
+  .card{background:var(--card);color:var(--card-foreground);border:1px solid var(--border);
+    border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);transition:all .3s}
+  .icotile{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;
+    justify-content:center;flex:0 0 40px;
+    background:color-mix(in oklab,var(--primary) 10%,transparent);color:var(--primary)}
+  .icotile-sm{width:36px;height:36px;flex-basis:36px;border-radius:8px}
+
+  /* ── icons ──────────────────────────────────────────────────────────── */
+  .ico{width:20px;height:20px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+  .i16{width:16px;height:16px}.i14{width:14px;height:14px}.i12{width:12px;height:12px}
+  .i18{width:18px;height:18px}.i24{width:24px;height:24px}
+
+  /* ── header ─────────────────────────────────────────────────────────── */
+  header.site{position:sticky;top:0;z-index:50;height:64px;
+    background:color-mix(in oklab,var(--background) 80%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+  header.site .row{height:64px;display:flex;align-items:center;justify-content:space-between}
+  .logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+  .logo .mark{width:32px;height:32px;border-radius:6px;background:var(--primary);
+    display:flex;align-items:center;justify-content:center}
+  .logo .word{font-size:24px;font-weight:700;color:var(--foreground);letter-spacing:-.02em}
+  nav.desk{display:flex;align-items:center;gap:28px}
+  nav.desk a{font-size:14px;font-weight:500;color:var(--muted-foreground);text-decoration:none;
+    transition:color .2s}
+  nav.desk a:hover{color:var(--foreground)}
+  nav.desk a.focusdemo{color:var(--foreground);outline:3px solid
+    color-mix(in oklab,var(--ring) 50%,transparent);outline-offset:2px;border-radius:6px;
+    padding:2px 4px}
+  .hdr-actions{display:flex;align-items:center;gap:8px}
+
+  /* ── sections ───────────────────────────────────────────────────────── */
+  section{padding:96px 0}
+  .bg-muted40{background:color-mix(in oklab,var(--muted) 40%,var(--background))}
+  .sect-head{max-width:720px;margin-bottom:48px}
+  .sect-head h2{margin-bottom:12px}
+
+  /* ── hero ───────────────────────────────────────────────────────────── */
+  .hero{padding:80px 0 72px;position:relative;overflow:hidden}
+  .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,560px);gap:64px;
+    align-items:center}
+  .hero-cta{display:flex;align-items:center;gap:12px;margin-top:32px;flex-wrap:wrap}
+  .hero-third{margin-top:20px}
+
+  .brandpanel{position:relative;border-radius:16px;overflow:hidden;padding:40px;
+    min-height:460px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--brand) 0%,var(--brand-accent) 100%)}
+  .brandpanel .pat{position:absolute;inset:0;opacity:.10;color:var(--brand-foreground)}
+  .brandpanel .orb{position:absolute;right:-120px;bottom:-120px;width:340px;height:340px;
+    border-radius:9999px;filter:blur(60px);
+    background:radial-gradient(circle,color-mix(in oklab,var(--brand-accent) 45%,transparent) 0%,transparent 70%)}
+  .float{position:relative;z-index:2;width:100%;max-width:380px}
+  .wcard{background:var(--card);border-radius:16px;padding:24px;
+    box-shadow:0 25px 50px -12px rgba(0,0,0,.35);transition:all .5s}
+  .wcard:hover{transform:scale(1.05)}
+  .who{display:flex;align-items:center;gap:12px}
+  .ava{width:48px;height:48px;border-radius:9999px;overflow:hidden;flex:0 0 48px;
+    background:var(--muted);display:flex;align-items:center;justify-content:center}
+  .ava img{width:100%;height:100%;object-fit:cover;display:block}
+  .ava .fb{font-size:14px;font-weight:600;color:var(--muted-foreground)}
+  .chip-book{position:absolute;top:-26px;right:-34px;z-index:3;transform:rotate(6deg);
+    background:linear-gradient(135deg,var(--brand-accent),var(--brand));
+    color:var(--brand-foreground);border-radius:12px;padding:14px 18px;
+    box-shadow:0 20px 25px -5px rgba(0,0,0,.3);transition:all .5s}
+  .chip-book:hover{transform:rotate(3deg) scale(1.05)}
+  .chip-esc{position:absolute;bottom:-30px;left:-38px;z-index:3;background:var(--card);
+    border-radius:12px;padding:12px 16px;box-shadow:0 10px 15px -3px rgba(0,0,0,.2);
+    display:flex;align-items:center;gap:10px;transition:all .5s}
+  .chip-esc:hover{transform:scale(1.05)}
+
+  /* ── trust strip ────────────────────────────────────────────────────── */
+  .trust{padding:36px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .trust .g{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+  .trust .cell{display:flex;align-items:center;gap:12px}
+  .trust .cell span{font-size:14px;font-weight:500;line-height:1.35}
+
+  /* ── categories ─────────────────────────────────────────────────────── */
+  .cats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .cat{display:block;padding:20px;text-decoration:none;color:inherit}
+  .cat:hover{border-color:color-mix(in oklab,var(--primary) 30%,transparent);
+    box-shadow:0 4px 6px -1px rgba(0,0,0,.1);transform:scale(1.05)}
+  .cat h3{margin:14px 0 4px}
+  .cat.kbd{outline:3px solid color-mix(in oklab,var(--ring) 50%,transparent);outline-offset:2px}
+
+  /* ── how it works ───────────────────────────────────────────────────── */
+  .tabslist{display:inline-flex;align-items:center;height:36px;padding:3px;border-radius:8px;
+    background:var(--muted);color:var(--muted-foreground);margin:0 auto 48px;
+    justify-content:center}
+  .tabtrig{height:30px;padding:0 18px;border-radius:6px;font-size:14px;font-weight:500;
+    display:inline-flex;align-items:center;border:1px solid transparent;
+    color:var(--foreground);background:transparent}
+  .tabtrig[data-active]{background:var(--background);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .center{text-align:center}
+  .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:24px}
+  .step .n{width:32px;height:32px;border-radius:9999px;background:var(--primary);
+    color:var(--primary-foreground);display:flex;align-items:center;justify-content:center;
+    font-size:14px;font-weight:600;margin-bottom:14px}
+  .step p{font-size:14px;line-height:1.6}
+  .step .prd{font-size:11px;color:var(--muted-foreground);margin-top:8px;
+    font-family:ui-monospace,SFMono-Regular,monospace}
+
+  /* ── role sections ──────────────────────────────────────────────────── */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
+  .shot{border:1px solid var(--border);border-radius:16px;overflow:hidden;aspect-ratio:4/3;
+    background:var(--muted);position:relative}
+  .shot img{width:100%;height:100%;object-fit:cover;display:block}
+  .shot .assetlabel{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.62);
+    color:#fff;font-size:11px;padding:6px 10px;font-family:ui-monospace,monospace}
+  ul.bul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-top:24px}
+  ul.bul li{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.5}
+  ul.bul li .ico{color:var(--primary);margin-top:2px}
+  .minicards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:28px}
+  .minicards .card{padding:20px}
+  .minicards h3{margin:12px 0 4px;font-size:15px}
+  .gov{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+  .gov .card{padding:20px}
+  .gov h3{margin:12px 0 6px;font-size:14px}
+  .note{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);
+    border-radius:8px;background:color-mix(in oklab,var(--muted) 40%,var(--background));
+    padding:16px;margin-top:32px}
+  .note .ico{color:var(--muted-foreground);margin-top:2px}
+  .nocta{border-style:dashed;border-color:color-mix(in oklab,var(--attention) 40%,transparent)}
+
+  /* ── features ───────────────────────────────────────────────────────── */
+  .feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .feats .card{padding:24px}
+  .feats h3{margin:16px 0 8px}
+  .feats p{font-size:14px;line-height:1.6;color:var(--muted-foreground)}
+  .feats .prd{font-size:11px;color:var(--muted-foreground);margin-top:12px;
+    font-family:ui-monospace,SFMono-Regular,monospace}
+
+  /* ── testimonials (deliberately provisional-looking) ────────────────── */
+  .placeholderbox{border:1px dashed var(--border);border-radius:12px;padding:24px;
+    background:color-mix(in oklab,var(--muted) 40%,var(--background))}
+  .tcards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
+  .tcards .card{padding:20px}
+  blockquote{font-size:14px;line-height:1.65;margin:14px 0}
+  .stars{display:inline-flex;gap:2px;align-items:center}
+  .stars svg{width:14px;height:14px;fill:#facc15;stroke:#facc15}
+  .stars .num{font-size:12px;font-weight:600;margin-left:6px;color:var(--foreground)}
+
+  /* ── faq ────────────────────────────────────────────────────────────── */
+  .acc{max-width:768px;margin:0 auto}
+  .accitem{border-bottom:1px solid var(--border)}
+  .acctrig{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+    padding:16px 0;font-size:14px;font-weight:500;text-align:left;width:100%;cursor:pointer}
+  .acctrig .ico{color:var(--muted-foreground);margin-top:2px;transition:transform .2s}
+  .accitem[data-open] .acctrig .ico{transform:rotate(180deg)}
+  .acccontent{font-size:14px;line-height:1.7;color:var(--muted-foreground);padding:0 40px 16px 0}
+
+  /* ── final CTA band ─────────────────────────────────────────────────── */
+  .band{position:relative;overflow:hidden;padding:80px 0;
+    background:linear-gradient(135deg,var(--brand) 0%,var(--brand-accent) 100%)}
+  .band .pat{position:absolute;inset:0;opacity:.10;color:var(--brand-foreground)}
+  .band .inner{position:relative;z-index:2;max-width:672px;margin:0 auto;text-align:center}
+  .band h2{font-size:40px;line-height:1.1;font-weight:700;color:var(--brand-foreground);
+    letter-spacing:-.02em}
+  .band p{margin-top:16px;font-size:18px;line-height:1.6;
+    color:color-mix(in oklab,var(--brand-foreground) 80%,transparent)}
+  .band .btns{margin-top:32px;display:flex;gap:12px;justify-content:center}
+
+  /* ── footer ─────────────────────────────────────────────────────────── */
+  footer.site{border-top:1px solid var(--border);
+    background:color-mix(in oklab,var(--muted) 40%,var(--background));padding:56px 0 0}
+  .fgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:32px}
+  .fcol h4{font-size:13px;font-weight:600;margin-bottom:14px}
+  .fcol ul{list-style:none;display:flex;flex-direction:column;gap:10px}
+  .fcol a{font-size:13px;color:var(--muted-foreground);text-decoration:none}
+  .fcol a:hover{color:var(--foreground);text-decoration:underline;text-underline-offset:4px}
+  .fbrand p{font-size:13px;line-height:1.6;color:var(--muted-foreground);margin-top:14px;
+    max-width:300px}
+  .fbottom{margin-top:48px;border-top:1px solid var(--border);padding:20px 0;display:flex;
+    align-items:center;justify-content:space-between;font-size:12px;
+    color:var(--muted-foreground)}
+  .fbottom .r{display:flex;gap:14px}
+  .fbottom a{color:var(--muted-foreground);text-decoration:none}
+
+  /* ── annotation callouts (not part of the design) ───────────────────── */
+  .anno{background:#fffbe6;border-left:3px solid #9a3412;color:#3a2a10;font-size:12px;
+    line-height:1.6;padding:10px 16px;font-family:ui-monospace,SFMono-Regular,monospace}
+  .anno b{color:#000}
+</style>
+</head>
+<body>
+
+<div class="mockup-note">
+  <b>MOCKUP · NEW SCREEN · <code>/</code> · design-spec.md §3 · 1440px · LIGHT theme</b><br>
+  Colours are the real <code>globals.css</code> token values plus the DT1 / brand tokens from design-spec §1.1–§1.2 — no hex literals, no invented palette.
+  Photos load from <code>../../../../jinva-frontend-web/public/</code>, so the real assets render if you open this from disk. Dark theme + 375px is a separate file:
+  <code>landing-page-mobile-dark.html</code>. <b>This is for looking at, not for building from</b> — design-spec.md + <code>src/components/ui/</code> are the build spec.
+</div>
+
+<div class="frame">
+
+<!-- ══════════════════ STICKY HEADER ══════════════════ -->
+<header class="site">
+  <div class="wrap row">
+    <a class="logo" href="#" aria-label="JinVa home">
+      <span class="mark">
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z" fill="#fff" transform="translate(-6,-4) scale(1.35)"/>
+          <circle cx="19" cy="12" r="2.6" fill="#fff"/>
+        </svg>
+      </span>
+      <span class="word">JinVa</span>
+    </a>
+
+    <nav class="desk" aria-label="Main">
+      <a href="#services">Services</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#for-artisans" class="focusdemo">For artisans</a>
+      <a href="#features">Why JinVa</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+
+    <div class="hdr-actions">
+      <button class="btn btn-ghost btn-icon" aria-label="Toggle theme">
+        <svg class="ico i18" viewBox="0 0 24 24" style="color:var(--muted-foreground)"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
+      <a class="btn btn-ghost" href="#">Log in</a>
+      <a class="btn btn-default" href="#">Get started</a>
+    </div>
+  </div>
+</header>
+<div class="anno"><b>LP3 ·</b> 8 header targets, all real: logo → <code>/</code>; 5 nav items → on-page anchors that exist; Log in → <code>/login</code>; Get started → <code>/signup</code>. Theme toggle copies <code>dashboard/header.tsx</code>'s <code>mounted</code> guard verbatim. <b>"For artisans" is shown in its keyboard-focus state</b> — same <code>ring-ring/50 ring-[3px]</code> the rest of the app uses. Under <code>lg</code> this collapses into a <code>Sheet</code>.</div>
+
+<!-- ══════════════════ HERO ══════════════════ -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <h1>Hiring a skilled artisan shouldn't depend on word of mouth.</h1>
+      <p class="lead" style="margin-top:24px;max-width:34em">
+        JinVa connects you with verified electricians, plumbers, carpenters, painters, cleaners,
+        landscapers and beauty professionals. See their past work and their prices before you book,
+        get a real booking and a real payment record, and keep your money withheld until you
+        confirm the job is done.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-lg btn-default" href="#">Get started</a>
+        <a class="btn btn-lg btn-outline" href="#">Log in</a>
+      </div>
+      <div class="hero-third">
+        <a class="btn btn-link sm" href="#how-it-works">See how it works
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></a>
+      </div>
+    </div>
+
+    <div class="brandpanel">
+      <svg class="pat" width="100%" height="100%" aria-hidden="true">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1"/>
+          </pattern>
+          <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="10" cy="10" r="1.5" fill="currentColor"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+        <rect width="100%" height="100%" fill="url(#dots)"/>
+      </svg>
+      <div class="orb"></div>
+
+      <div class="float">
+        <!-- rotated booking chip -->
+        <div class="chip-book">
+          <div style="font-size:11px;opacity:.8;margin-bottom:6px">Booking</div>
+          <div style="font-size:15px;font-weight:600">Thu 3 Sep · 9:00–11:00</div>
+          <div style="margin-top:10px">
+            <span class="badge" style="background:color-mix(in oklab,var(--brand-foreground) 18%,transparent);color:var(--brand-foreground);border-color:color-mix(in oklab,var(--brand-foreground) 30%,transparent)">
+              <svg class="ico i12" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+              Confirmed
+            </span>
+          </div>
+        </div>
+
+        <!-- main sample artisan card -->
+        <div class="wcard">
+          <div class="who">
+            <span class="ava">
+              <img src="../../../../jinva-frontend-web/public/artisan-in-hard-hat.jpg" alt="A JinVa artisan on site">
+            </span>
+            <div style="min-width:0">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:17px;font-weight:600">Kwame Asante</span>
+                <span class="badge b-success">
+                  <svg class="ico i12" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+                  Verified
+                </span>
+              </div>
+              <div class="sm mut">Plumbing · Accra</div>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;display:flex;align-items:center;gap:8px">
+            <span class="stars" aria-label="4.8 out of 5 stars, 37 reviews">
+              <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+              <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+              <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+              <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+              <svg viewBox="0 0 24 24" style="opacity:.45"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+              <span class="num">4.8</span>
+            </span>
+            <span class="xs mut">(37)</span>
+          </div>
+
+          <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:16px"
+               class="sm mut">
+            Leak repair · Pipe installation · Water heaters
+          </div>
+        </div>
+
+        <!-- escrow reassurance chip -->
+        <div class="chip-esc">
+          <span class="icotile icotile-sm">
+            <svg class="ico i16" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
+          <span class="sm" style="font-weight:500;max-width:170px;line-height:1.35">
+            Payment withheld until you confirm
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="anno"><b>LP4 ·</b> Exactly one <code>&lt;h1&gt;</code>, problem-first, traced to <b>PRD §2</b>'s core-gap callout; the supporting paragraph carries PRD §2's client pain and PRD §1 sentence 1's category list. Both CTAs are above the fold at 1440×900 and at 375×812. <b>LP8 ·</b> The composition shows <b>no aggregate number and no amount</b> — "4.8 (37)" is one sample artisan's rating (product UI), and the escrow chip says nothing about money. The rotated chip is <code>hidden md:block</code>. Photo: the real <code>public/artisan-in-hard-hat.jpg</code>.</div>
+
+<!-- ══════════════════ TRUST STRIP ══════════════════ -->
+<div class="trust bg-muted40">
+  <div class="wrap g">
+    <div class="cell">
+      <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+      <span>Artisans verified by JinVa</span>
+    </div>
+    <div class="cell">
+      <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      <span>Payment withheld until you confirm</span>
+    </div>
+    <div class="cell">
+      <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></span>
+      <span>Reviews only from completed jobs</span>
+    </div>
+    <div class="cell">
+      <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg></span>
+      <span>Disputes reviewed by our team</span>
+    </div>
+  </div>
+</div>
+<div class="anno"><b>§3.4 ·</b> Icon + label on every cell — never colour alone. <b>Zero numbers here</b> (LP8). PRD trace: §5.13 / §5.7 / §5.8 / §5.13.</div>
+
+<!-- ══════════════════ #services ══════════════════ -->
+<section id="services">
+  <div class="wrap">
+    <div class="sect-head">
+      <p class="eyebrow">Service categories</p>
+      <h2 class="sect" style="margin-top:10px">Every trade, one platform.</h2>
+      <p class="sub">JinVa covers all artisan service categories — if someone does it as a trade, it belongs here.</p>
+    </div>
+
+    <div class="cats">
+      <a class="card cat" href="#">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M4 14h7l-2 8 11-12h-7l2-8z"/></svg></span>
+        <h3>Electrical</h3><p class="xs mut">Wiring, rewires, faults</p>
+      </a>
+      <a class="card cat" href="#">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg></span>
+        <h3>Plumbing</h3><p class="xs mut">Leaks, pipes, water heaters</p>
+      </a>
+      <a class="card cat" href="#">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="m15 12-8.5 8.5a2.12 2.12 0 1 1-3-3L12 9"/><path d="M17.6 15 22 10.6"/><path d="M20.9 11.7l1.4-1.4a2 2 0 0 0 0-2.8l-5.8-5.8a2 2 0 0 0-2.8 0l-1.4 1.4a2 2 0 0 0 0 2.8l5.8 5.8a2 2 0 0 0 2.8 0Z"/></svg></span>
+        <h3>Carpentry</h3><p class="xs mut">Fittings, repairs, joinery</p>
+      </a>
+      <a class="card cat" href="#">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M18.4 2.6a1.9 1.9 0 0 1 2.7 2.7l-3.6 3.6a.5.5 0 0 0 0 .7l.9.9a2.4 2.4 0 0 1 0 3.4l-.9.9a.5.5 0 0 1-.7 0L8.4 7.3a.5.5 0 0 1 0-.7l.9-.9a2.4 2.4 0 0 1 3.4 0l.9.9a.5.5 0 0 0 .7 0z"/><path d="m14.6 17.9-10.7-2.9"/><path d="M4 15c-1.5 2-1.5 5 0 7"/></svg></span>
+        <h3>Painting</h3><p class="xs mut">Interiors, exteriors, touch-ups</p>
+      </a>
+      <a class="card cat" href="#">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg></span>
+        <h3>Cleaning</h3><p class="xs mut">Homes, offices, post-build</p>
+      </a>
+      <a class="card cat" href="#">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M10 10v.2A3 3 0 0 1 8.9 16H5a3 3 0 0 1-1-5.8V10a3 3 0 0 1 6 0Z"/><path d="M7 16v6"/><path d="M13 19v3"/><path d="M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .8-1.7L13 3l-1.4 1.5"/></svg></span>
+        <h3>Landscaping</h3><p class="xs mut">Gardens, grounds, clearing</p>
+      </a>
+      <a class="card cat" href="#">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9"/><path d="M14.8 14.8 20 20"/><path d="M8.1 8.1 12 12"/></svg></span>
+        <h3>Beauty</h3><p class="xs mut">Hair, nails, makeup</p>
+      </a>
+      <a class="card cat kbd" href="#">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+        <h3>…and every other trade</h3><p class="xs mut">Tiling, welding, masonry and more</p>
+      </a>
+    </div>
+  </div>
+</section>
+<div class="anno"><b>LP6 ·</b> PRD §1 list, in PRD order, spelling checked: Electrical, Plumbing, Carpentry, Painting, Cleaning, Landscaping, Beauty + one "and more" tile. <b>Whole tile is the link</b> → <code>/signup</code>; no dead clicks. Icons not photos — there is no photo in <code>public/</code> for Beauty, Landscaping or Electrical, and one photo tile beside seven icon tiles reads as a fault. The last tile is drawn in its <b>keyboard-focus</b> state. All eight glyphs exist in the pinned <code>lucide-react@^0.454.0</code>.</div>
+
+<!-- ══════════════════ #how-it-works ══════════════════ -->
+<section id="how-it-works" class="bg-muted40">
+  <div class="wrap">
+    <div class="sect-head center" style="margin-left:auto;margin-right:auto">
+      <h2 class="sect">How JinVa works.</h2>
+      <p class="sub">Two journeys. Pick the one you're on.</p>
+    </div>
+    <div class="center">
+      <div class="tabslist" role="tablist">
+        <button class="tabtrig" data-active role="tab" aria-selected="true">For clients</button>
+        <button class="tabtrig" role="tab" aria-selected="false">For artisans</button>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <p>Search verified artisans by trade, location and rating.</p>
+        <div class="prd">PRD §5.2</div>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <p>Check their profile, portfolio and reviews.</p>
+        <div class="prd">PRD §5.3 · §5.4 · §5.8</div>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <p>Pick an available slot and send a booking request.</p>
+        <div class="prd">PRD §5.5</div>
+      </div>
+      <div class="step">
+        <div class="n">4</div>
+        <p>Pay — your money stays withheld until the job is confirmed complete.</p>
+        <div class="prd">PRD §5.7</div>
+      </div>
+      <div class="step">
+        <div class="n">5</div>
+        <p>Confirm completion and leave a review.</p>
+        <div class="prd">PRD §5.6 · §5.8</div>
+      </div>
+    </div>
+  </div>
+</section>
+<div class="anno"><b>LP7 ·</b> <code>Tabs</code> with "For clients" active. The second panel (6 artisan steps: profile → portfolio → hours → 24h accept/decline → payout → analytics; PRD §5.3, §5.4, §5.5, §5.5, §5.7, §5.12) is one click away and is <b>also restated as prose in <code>#for-artisans</code></b>, so a JS-disabled visitor still gets it. The <code>PRD §…</code> captions are shown here for reviewer traceability and are <b>not</b> part of the shipped design.</div>
+
+<!-- ══════════════════ ROLE 1 — CLIENTS ══════════════════ -->
+<section>
+  <div class="wrap split">
+    <div>
+      <p class="eyebrow">For clients</p>
+      <h2 class="sect" style="margin:10px 0 16px">Transparent, trustworthy and frictionless access to verified artisans.</h2>
+      <p class="sub">
+        You shouldn't have to take a stranger's word for it. On JinVa you can see who has been
+        verified, what they've built or fixed before, and what other clients said after the job was
+        done — and you keep a record of the booking and the payment.
+      </p>
+      <ul class="bul">
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Search and filter</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Book a real time slot</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Pay by card, mobile money or cash</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Review after completion</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Message your artisan about the job</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Raise a dispute if it goes wrong</li>
+      </ul>
+      <div style="margin-top:32px">
+        <a class="btn btn-lg btn-default" href="#">Get started as a client
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+      </div>
+    </div>
+    <div class="shot">
+      <img src="../../../../jinva-frontend-web/public/artisan-in-blue-uniform.jpg" alt="An artisan arriving for a JinVa booking">
+      <div class="assetlabel">public/artisan-in-blue-uniform.jpg</div>
+    </div>
+  </div>
+</section>
+<div class="anno"><b>LP5 ·</b> Headline is PRD §3 bullet 1 verbatim; the six bullets are PRD §4's "Search, book, pay, review, message, dispute" expanded one-for-one. CTA → <code>/signup?role=CUSTOMER</code>.</div>
+
+<!-- ══════════════════ ROLE 2 — ARTISANS ══════════════════ -->
+<section id="for-artisans" class="bg-muted40">
+  <div class="wrap split">
+    <div class="shot">
+      <img src="../../../../jinva-frontend-web/public/artisan-in-orange-vest.jpg" alt="A JinVa artisan at work on a job">
+      <div class="assetlabel">public/artisan-in-orange-vest.jpg</div>
+    </div>
+    <div>
+      <p class="eyebrow">For artisans</p>
+      <h2 class="sect" style="margin:10px 0 16px">Build a professional reputation, manage your own schedule, and get paid reliably.</h2>
+      <p class="sub">
+        Word of mouth doesn't scale, and it doesn't pay on time. JinVa gives you a profile that shows
+        what you can actually do, a calendar you control, and a payout that lands in your bank
+        account or mobile wallet after the job.
+      </p>
+      <ul class="bul">
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>A public profile with a verified badge</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Portfolio reviewed before it goes live</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Payouts to bank or mobile wallet</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Messaging scoped to each job</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>A cancellation policy you set</li>
+        <li><svg class="ico i16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Accept or decline within 24 hours</li>
+      </ul>
+
+      <div class="minicards">
+        <div class="card">
+          <span class="icotile icotile-sm"><svg class="ico i18" viewBox="0 0 24 24"><path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="M8 14l2.5-3 2 2.5L15 10l4 6"/><rect x="6" y="2" width="16" height="16" rx="2"/></svg></span>
+          <h3>Show your work</h3>
+          <p class="xs mut">A portfolio gallery on your public profile.</p>
+        </div>
+        <div class="card">
+          <span class="icotile icotile-sm"><svg class="ico i18" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><circle cx="16" cy="16" r="6"/><path d="M16 14v2l1.5 1"/></svg></span>
+          <h3>Own your calendar</h3>
+          <p class="xs mut">Weekly hours, blocked dates, and a 24-hour window to accept or decline.</p>
+        </div>
+        <div class="card">
+          <span class="icotile icotile-sm"><svg class="ico i18" viewBox="0 0 24 24"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg></span>
+          <h3>See what's working</h3>
+          <p class="xs mut">Earnings, job counts, rating trend and repeat-client rate.</p>
+        </div>
+      </div>
+
+      <div style="margin-top:32px">
+        <a class="btn btn-lg btn-default" href="#">List your trade on JinVa
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>
+<div class="anno"><b>LP5 / LP13 ·</b> Headline is PRD §3 bullet 2 verbatim; bullets are PRD §4's "Portfolio, calendar, analytics, messaging, payouts". This is the <b>most vertical space of the three role sections on purpose</b> — artisan supply is the harder side of a marketplace. CTA → <code>/signup?role=ARTISAN</code> with the role selector prefilled (Open Question 6 = yes).</div>
+
+<!-- ══════════════════ ROLE 3 — GOVERNANCE (NO CTA) ══════════════════ -->
+<section id="platform-governance">
+  <div class="wrap">
+    <div class="sect-head">
+      <p class="eyebrow">Platform governance</p>
+      <h2 class="sect" style="margin-top:10px">Someone is actually checking.</h2>
+      <p class="sub">JinVa has an internal admin team with full visibility into platform activity, and tools to enforce quality and resolve disputes.</p>
+    </div>
+
+    <div class="gov">
+      <div class="card">
+        <span class="icotile icotile-sm"><svg class="ico i18" viewBox="0 0 24 24"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <h3>Identity verification</h3>
+        <p class="xs mut">Artisans are manually verified before they get the badge.</p>
+        <div class="prd xs mut" style="margin-top:10px;font-family:ui-monospace,monospace">PRD §5.13</div>
+      </div>
+      <div class="card">
+        <span class="icotile icotile-sm"><svg class="ico i18" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span>
+        <h3>Portfolio moderation</h3>
+        <p class="xs mut">Uploads are reviewed before they appear publicly.</p>
+        <div class="prd xs mut" style="margin-top:10px;font-family:ui-monospace,monospace">PRD §5.4 · §5.13</div>
+      </div>
+      <div class="card">
+        <span class="icotile icotile-sm"><svg class="ico i18" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></span>
+        <h3>Review moderation</h3>
+        <p class="xs mut">Reviews that break the guidelines can be removed, with a logged reason.</p>
+        <div class="prd xs mut" style="margin-top:10px;font-family:ui-monospace,monospace">PRD §5.8 · §5.13</div>
+      </div>
+      <div class="card">
+        <span class="icotile icotile-sm"><svg class="ico i18" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+        <h3>Transaction oversight</h3>
+        <p class="xs mut">Every transaction is logged and refundable by an admin.</p>
+        <div class="prd xs mut" style="margin-top:10px;font-family:ui-monospace,monospace">PRD §5.7 · §5.13</div>
+      </div>
+      <div class="card">
+        <span class="icotile icotile-sm"><svg class="ico i18" viewBox="0 0 24 24"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg></span>
+        <h3>Dispute resolution</h3>
+        <p class="xs mut">An admin rules for the client, rules for the artisan, or records a mutual resolution.</p>
+        <div class="prd xs mut" style="margin-top:10px;font-family:ui-monospace,monospace">PRD §5.13</div>
+      </div>
+    </div>
+
+    <div class="note nocta">
+      <svg class="ico i18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      <span class="sm mut">Admin accounts are created by JinVa internally and are not open for registration.</span>
+    </div>
+  </div>
+</section>
+<div class="anno"><b>LP5 HARD RULE ·</b> <b>No signup CTA, no "become an admin", nothing clickable in this section at all</b> — PRD §5.1 makes admin accounts seed-only. The dashed note replaces the button every other role section has, so the absence reads as deliberate rather than as a hole. <b>No photo here</b> — illustrating platform governance with an artisan portrait would be misleading.</div>
+
+<!-- ══════════════════ #features ══════════════════ -->
+<section id="features" class="bg-muted40">
+  <div class="wrap">
+    <div class="sect-head">
+      <p class="eyebrow">Why JinVa</p>
+      <h2 class="sect" style="margin-top:10px">What you get, on both sides of the job.</h2>
+      <p class="sub">Nine capabilities that already exist in the product spec — nothing advertised that JinVa doesn't do.</p>
+    </div>
+
+    <div class="feats">
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <h3>Verified artisan badges</h3>
+        <p>An admin checks identity documents before an artisan gets the badge.</p>
+        <div class="prd">PRD §5.3 · §5.13</div>
+      </div>
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="M8 14l2.5-3 2 2.5L15 10l4 6"/><rect x="6" y="2" width="16" height="16" rx="2"/></svg></span>
+        <h3>Portfolio galleries</h3>
+        <p>Photos and video of past work, opened full-size in a lightbox.</p>
+        <div class="prd">PRD §5.4</div>
+      </div>
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><circle cx="16" cy="16" r="6"/><path d="M16 14v2l1.5 1"/></svg></span>
+        <h3>Availability and reminders</h3>
+        <p>Book a real slot from the artisan's calendar, with reminders 24 hours and 2 hours before.</p>
+        <div class="prd">PRD §5.5</div>
+      </div>
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span>
+        <h3>A job timeline both sides can see</h3>
+        <p>Every status change, from posted to completed, with who triggered it.</p>
+        <div class="prd">PRD §5.6</div>
+      </div>
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+        <h3>Payment withheld until completion</h3>
+        <p>Funds are held and only released to the artisan once the job is confirmed complete.</p>
+        <div class="prd">PRD §5.7</div>
+      </div>
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+        <h3>Card, mobile money or cash</h3>
+        <p>Pay the way you already pay. A receipt is emailed to you either way.</p>
+        <div class="prd">PRD §5.7</div>
+      </div>
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></span>
+        <h3>Reviews tied to real jobs</h3>
+        <p>Only a client with a completed job can review, and every review carries a Verified Booking badge.</p>
+        <div class="prd">PRD §5.8</div>
+      </div>
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M22 17a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></svg></span>
+        <h3>Messaging scoped to the job</h3>
+        <p>A thread opens when the job is accepted and archives when it closes.</p>
+        <div class="prd">PRD §5.10</div>
+      </div>
+      <div class="card">
+        <span class="icotile"><svg class="ico" viewBox="0 0 24 24"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg></span>
+        <h3>Earnings and ratings analytics</h3>
+        <p>Artisans see earnings over time, job counts, rating trend and repeat-client rate.</p>
+        <div class="prd">PRD §5.12</div>
+      </div>
+    </div>
+  </div>
+</section>
+<div class="anno"><b>LP7 ·</b> Every card maps to a PRD §5 module. <b>Deliberately absent and must stay absent</b> (PRD §10 out-of-scope): native mobile app, real-time / live chat, map view, nearby artisans, loyalty or rewards, promo codes, multi-language. Card 8 says "messaging", never "real-time". Card 3 says "reminders", never "push notifications". Cards are <b>not</b> links — nine identical destinations would be link spam.</div>
+
+<!-- ══════════════════ #testimonials — PROVISIONAL BY DESIGN ══════════════════ -->
+<section id="testimonials">
+  <div class="wrap">
+    <div class="placeholderbox">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h2 class="sect" style="font-size:28px">What clients and artisans say</h2>
+        <span class="badge b-outline">
+          <svg class="ico i12" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          Sample content
+        </span>
+      </div>
+      <p class="sm mut" style="margin-top:8px">
+        Placeholder — these are not real JinVa reviews. This section will read from real
+        completed-job reviews before launch.
+      </p>
+
+      <div class="tcards">
+        <div class="card">
+          <div class="who">
+            <span class="ava" style="width:40px;height:40px;flex-basis:40px">
+              <img src="../../../../jinva-frontend-web/public/placeholder-user.jpg" alt="">
+            </span>
+            <div>
+              <div class="sm" style="font-weight:600">Ama Boateng</div>
+              <div class="xs mut">Client · Accra</div>
+            </div>
+          </div>
+          <div style="margin-top:12px" class="stars" aria-label="5 out of 5 stars">
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+          </div>
+          <blockquote>“I could see the work he'd done before, and the money only moved once I said the job was finished.”</blockquote>
+        </div>
+
+        <div class="card">
+          <div class="who">
+            <span class="ava" style="width:40px;height:40px;flex-basis:40px">
+              <span class="fb">KO</span>
+            </span>
+            <div>
+              <div class="sm" style="font-weight:600">Kofi Owusu</div>
+              <div class="xs mut">Artisan · Carpentry</div>
+            </div>
+          </div>
+          <div style="margin-top:12px" class="stars" aria-label="5 out of 5 stars">
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+          </div>
+          <blockquote>“The calendar is mine. I block the days I'm not working and nobody books over them.”</blockquote>
+        </div>
+
+        <div class="card">
+          <div class="who">
+            <span class="ava" style="width:40px;height:40px;flex-basis:40px">
+              <img src="../../../../jinva-frontend-web/public/placeholder-user.jpg" alt="">
+            </span>
+            <div>
+              <div class="sm" style="font-weight:600">Naa Adjei</div>
+              <div class="xs mut">Client · Kumasi</div>
+            </div>
+          </div>
+          <div style="margin-top:12px" class="stars" aria-label="4 out of 5 stars">
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <svg viewBox="0 0 24 24" style="opacity:.28"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+          </div>
+          <blockquote>“Booking was easy. The reminder the night before is what actually saved me.”</blockquote>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<div class="anno"><b>LP8 ·</b> Three signals that this is placeholder, visible without reading source: the <b>dashed container</b> (the only dashed edge on the page — borrowed from the <code>Empty</code> primitive), the <b>"Sample content" <code>Badge</code></b>, and the explicit note. Source is one <code>PLACEHOLDER_TESTIMONIALS</code> constant with a placeholder comment; <b>emptying it must remove the whole section</b>, heading and container included. One card uses the <code>AvatarFallback</code> initials path and one shows 4 stars, not 5 — a uniformly 5-star wall is its own kind of dishonest.</div>
+
+<!-- ══════════════════ #faq ══════════════════ -->
+<section id="faq" class="bg-muted40">
+  <div class="wrap">
+    <div class="sect-head center" style="margin:0 auto 40px">
+      <h2 class="sect">Questions people ask.</h2>
+    </div>
+    <div class="acc">
+      <div class="accitem" data-open>
+        <div class="acctrig">What is JinVa?
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="acccontent">A marketplace that connects clients with skilled, verified artisans across all trade categories, and handles the discovery, booking, payment and reviews in one place.</div>
+      </div>
+      <div class="accitem">
+        <div class="acctrig">Which trades are on JinVa?
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+      <div class="accitem">
+        <div class="acctrig">How do I know an artisan is legitimate?
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+      <div class="accitem">
+        <div class="acctrig">When does the artisan actually get paid?
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+      <div class="accitem">
+        <div class="acctrig">What if the work isn't done properly?
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+      <div class="accitem" data-open>
+        <div class="acctrig">Does JinVa charge a fee?
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="acccontent">Yes. JinVa takes a percentage of each completed job, deducted from the artisan's payout — clients pay the price shown on the booking and nothing on top. The percentage is set by JinVa and appears in the artisan's earnings breakdown; we don't publish a figure here because it isn't a fixed public rate.</div>
+      </div>
+      <div class="accitem">
+        <div class="acctrig">How do reviews work?
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+      <div class="accitem">
+        <div class="acctrig">I'm an artisan — how do I get listed?
+          <svg class="ico i16" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+    </div>
+  </div>
+</section>
+<div class="anno"><b>PUB5 ·</b> FAQ lives here at <code>#faq</code>, not at a separate <code>/faq</code> route. Two items shown open only to display the answer treatment — shipped as <code>Accordion type="single" collapsible</code>, so exactly one opens at a time. <b>None of <code>dashboard/support-page.tsx</code>'s FAQ copy is reused</b>, and the word "Plumbify" appears nowhere; that file's "10% platform fee", "3–5 business days" refund window and "insurance confirmation and background checks" claims are all excluded. <b>The fee answer is the one to protect</b> — it answers honestly, shows no number, and must never be softened into "JinVa is free to use."</div>
+
+<!-- ══════════════════ FINAL CTA BAND ══════════════════ -->
+<div class="band">
+  <svg class="pat" width="100%" height="100%" aria-hidden="true">
+    <defs>
+      <pattern id="grid2" width="40" height="40" patternUnits="userSpaceOnUse">
+        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1"/>
+      </pattern>
+      <pattern id="dots2" width="20" height="20" patternUnits="userSpaceOnUse">
+        <circle cx="10" cy="10" r="1.5" fill="currentColor"/>
+      </pattern>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grid2)"/>
+    <rect width="100%" height="100%" fill="url(#dots2)"/>
+  </svg>
+  <div class="wrap">
+    <div class="inner">
+      <h2>Get the job done properly.</h2>
+      <p>Create an account to book a verified artisan — or list your trade and start taking bookings.</p>
+      <div class="btns">
+        <a class="btn btn-lg btn-onbrand" href="#">Get started</a>
+        <a class="btn btn-lg btn-onbrand-outline" href="#">Log in</a>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="anno"><b>§3.11 / §1.2 ·</b> <code>bg-linear-to-br from-brand to-brand-accent</code> + the extracted <code>BrandPattern</code> at 10%. White-on-brand measures <b>10.79:1</b> at the dark end and <b>7.92:1</b> at the light end; the body line is <code>text-brand-foreground/80</code> = <b>5.76:1</b> at the worst point. The primary button is <code>bg-brand-foreground text-brand</code>, <b>not</b> <code>variant="secondary"</code> — secondary would be a dark button on a dark green panel in <code>.dark</code>. Both overrides use tokens only, so <b>LP12's hex/palette grep stays clean</b>.</div>
+
+<!-- ══════════════════ FOOTER ══════════════════ -->
+<footer class="site">
+  <div class="wrap">
+    <div class="fgrid">
+      <div class="fcol fbrand">
+        <a class="logo" href="#" aria-label="JinVa home">
+          <span class="mark">
+            <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z" fill="#fff" transform="translate(-6,-4) scale(1.35)"/>
+              <circle cx="19" cy="12" r="2.6" fill="#fff"/>
+            </svg>
+          </span>
+          <span class="word">JinVa</span>
+        </a>
+        <p>An artisan services marketplace. Find verified artisans, book them, pay safely, and rate the work.</p>
+      </div>
+
+      <div class="fcol">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#services">Service categories</a></li>
+          <li><a href="#for-artisans">For artisans</a></li>
+          <li><a href="#features">Why JinVa</a></li>
+          <li><a href="#">Log in</a></li>
+          <li><a href="#">Get started</a></li>
+        </ul>
+      </div>
+
+      <div class="fcol">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#">About JinVa</a></li>
+          <li><a href="#platform-governance">How JinVa keeps the platform safe</a></li>
+        </ul>
+      </div>
+
+      <div class="fcol">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="#">Contact</a></li>
+        </ul>
+      </div>
+
+      <div class="fcol">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="#">Terms of Service</a></li>
+          <li><a href="#">Privacy Policy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="fbottom">
+      <span>© 2026 JinVa. All rights reserved.</span>
+      <span class="r"><a href="#">Terms</a><a href="#">Privacy</a></span>
+    </div>
+  </div>
+</footer>
+<div class="anno">
+  <b>LP9 ·</b> 12 footer targets, all real. <b>No social icon row</b> — no real JinVa account URLs were supplied (Open Question 5 = omit), and "all navs work" leaves no room for an icon pointing at <code>#</code>. <b>No newsletter form</b> — nothing exists to receive it. The Company column carries two links so it doesn't read as an orphan beside a 6-link Product column, and the second is a real on-page anchor to <code>#platform-governance</code>.<br>
+  <b>The one likely dead-link bug:</b> this footer is the <i>same component</i> on <code>/terms</code>, <code>/privacy</code>, <code>/about</code> and <code>/contact</code>, so every on-page anchor must be written <code>/#services</code>, <b>not</b> <code>#services</code> — otherwise it resolves to <code>/terms#services</code> and does nothing. QA should test the footer anchors <b>from <code>/terms</code></b>, not from <code>/</code>.<br>
+  <b>© year is <code>{new Date().getFullYear()}</code> computed at render</b>, never the literal 2026 hardcoded above.
+</div>
+
+</div><!-- /frame -->
+
+<div class="mockup-note" style="margin-top:0">
+  <b>Not shown in this file, specified in design-spec.md:</b> dark theme + 375px + the mobile <code>Sheet</code> nav (see <code>landing-page-mobile-dark.html</code>) · the "For artisans" how-it-works tab panel (§3.6) · the public
+  <code>error.tsx</code> and <code>not-found.tsx</code> states (§4.1, §4.2, mocked in <code>public-pages.html</code>) · the generated OpenGraph card (§9).
+  <b>There is no loading state and no empty state on this page by design</b> — zero data fetches, so LP2 ("renders with the backend stopped") is satisfied architecturally rather than with skeletons.
+</div>
+
+</body>
+</html>

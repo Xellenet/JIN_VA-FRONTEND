@@ -1,67 +1,171 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Settings,
   Shield,
   Bell,
   Globe,
-  Trash2,
-  Package,
-  MoreVertical,
-  AlertTriangle,
-  Search,
-  Users,
   Wrench,
+  Loader2,
 } from "lucide-react"
-import { mockProducts } from "@/lib/data/mock-data"
+import { apiFetch } from "@/lib/api"
+import { applyPushPreference } from "@/lib/push-notifications"
+
+/**
+ * PR3 — admin notification preferences (design-spec.md section 5).
+ *
+ * The five event rows below replace eight hardcoded, uncontrolled rows whose
+ * copy described an e-commerce store ("New Order Alerts", "Low Stock
+ * Warnings") on a services marketplace with no orders and no inventory, behind
+ * a Save button that had no onClick at all.
+ *
+ * `GET`/`PATCH /notifications/preferences` now return and accept the
+ * admin-shaped body (api-contract.md §6): the five event keys plus the three
+ * channel flags, all five defaulting to `true` server-side. Every one of them
+ * is hydrated from the GET response and sent on save — nothing on this tab is
+ * a local default, so the screen always shows the state the server holds.
+ *
+ * Writes are role-scoped in both directions server-side (an admin sending a
+ * customer key has it ignored), so the whole id-stripped object is safe to
+ * PATCH, matching what the Customer and Artisan tabs already do.
+ */
+interface AdminNotifPrefs {
+  disputeFiled: boolean
+  paymentTransferFailed: boolean
+  verificationSubmitted: boolean
+  reviewFlagged: boolean
+  artisanRegistered: boolean
+  emailEnabled: boolean
+  smsEnabled: boolean
+  pushEnabled: boolean
+}
+
+/**
+ * Pre-hydration placeholder only — the Notifications tab renders a spinner
+ * until the GET lands, so these values are never shown as if they were real
+ * state. They mirror the server's own defaults (api-contract.md §6: all five
+ * event toggles default to `true`) so a fetch failure can't misreport a toggle
+ * as off when the backend has it on.
+ */
+const ADMIN_NOTIF_FALLBACK: AdminNotifPrefs = {
+  disputeFiled: true,
+  paymentTransferFailed: true,
+  verificationSubmitted: true,
+  reviewFlagged: true,
+  artisanRegistered: true,
+  emailEnabled: true,
+  smsEnabled: false,
+  pushEnabled: true,
+}
+
+const ADMIN_EVENT_ROWS: { key: keyof AdminNotifPrefs; label: string; desc: string }[] = [
+  { key: "disputeFiled", label: "Dispute Filed", desc: "Get notified when a customer or artisan opens a new dispute that needs review" },
+  { key: "paymentTransferFailed", label: "Payment Transfer Failed", desc: "Get notified when an artisan payout fails and needs manual attention" },
+  { key: "verificationSubmitted", label: "Artisan Verification Submitted", desc: "Get notified when a new artisan submits documents for verification" },
+  { key: "reviewFlagged", label: "Review Flagged for Moderation", desc: "Get notified when a review is flagged and enters the moderation queue" },
+  { key: "artisanRegistered", label: "New Artisan Registered", desc: "Get notified when a new artisan creates an account on the platform" },
+]
+
+/**
+ * `GET /admin/platform-config` (AT9, QA ADM-20): the rules the backend really
+ * enforces. The General and Security tabs used to be editable fields and
+ * switches whose Save sent nothing, so every change was lost on reload; they
+ * now show these values as they are.
+ */
+interface PlatformConfig {
+  platformFeePercent: number
+  currency: string
+  timezone: string
+  supportEmail: string | null
+  bookingResponseHours: number
+  maxPendingBookingsPerArtisan: number
+  bookingReminderHours: number[]
+  agreedPriceTolerancePercent: number
+  jobAutoCompleteHours: number
+  emailVerificationRequired: boolean
+  passwordMinLength: number
+  passwordRule: string
+}
+
+function ConfigRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex flex-col gap-1 border-b py-3 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <div>
+        <p className="font-medium">{label}</p>
+        {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
+      </div>
+      <p className="shrink-0 text-sm font-medium text-foreground sm:text-right">{value}</p>
+    </div>
+  )
+}
 
 export default function AdminSettingsPage() {
-  const [products, setProducts] = useState(mockProducts)
-  const [productSearch, setProductSearch] = useState("")
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  // ── Platform rules (AT9, QA ADM-20) ─────────────────────────────────────
+  const [config, setConfig] = useState<PlatformConfig | null>(null)
+  const [configFailed, setConfigFailed] = useState(false)
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.sku.toLowerCase().includes(productSearch.toLowerCase())
-  )
+  // ── Notification preferences (PR3) ──────────────────────────────────────
+  const [notifPrefs, setNotifPrefs] = useState<AdminNotifPrefs>(ADMIN_NOTIF_FALLBACK)
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState(true)
+  const [isSavingNotifs, setIsSavingNotifs] = useState(false)
 
-  const handleDeleteProduct = (id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id))
-    setDeleteConfirm(null)
+  useEffect(() => {
+    // Hydrate every toggle from the server, event keys included — a local
+    // default shown as live state is how "artisanRegistered" ended up
+    // displaying as off while the backend had it on.
+    apiFetch<Partial<AdminNotifPrefs>>("/notifications/preferences")
+      .then((r) =>
+        setNotifPrefs((p) => ({
+          disputeFiled: r?.disputeFiled ?? p.disputeFiled,
+          paymentTransferFailed: r?.paymentTransferFailed ?? p.paymentTransferFailed,
+          verificationSubmitted: r?.verificationSubmitted ?? p.verificationSubmitted,
+          reviewFlagged: r?.reviewFlagged ?? p.reviewFlagged,
+          artisanRegistered: r?.artisanRegistered ?? p.artisanRegistered,
+          emailEnabled: r?.emailEnabled ?? p.emailEnabled,
+          smsEnabled: r?.smsEnabled ?? p.smsEnabled,
+          pushEnabled: r?.pushEnabled ?? p.pushEnabled,
+        })),
+      )
+      .catch(() => toast.error("Couldn't load notification preferences."))
+      .finally(() => setIsLoadingNotifs(false))
+  }, [])
+
+  useEffect(() => {
+    apiFetch<PlatformConfig>("/admin/platform-config")
+      .then(setConfig)
+      .catch(() => setConfigFailed(true))
+  }, [])
+
+  const toggleNotif = (key: keyof AdminNotifPrefs, val: boolean) => {
+    setNotifPrefs((p) => ({ ...p, [key]: val }))
+    // PN1: the push channel toggle is where browser permission is requested and
+    // this device's FCM token is registered/unregistered.
+    if (key === "pushEnabled") applyPushPreference(val)
   }
 
-  const stockBadge = (status: string) => {
-    const map: Record<string, string> = {
-      "in-stock": "border-green-200 bg-green-50 text-green-700",
-      "low-stock": "border-yellow-200 bg-yellow-50 text-yellow-700",
-      "out-of-stock": "border-red-200 bg-red-50 text-red-700",
+  const handleSaveNotifications = async () => {
+    setIsSavingNotifs(true)
+    try {
+      // All eight fields — the five admin event toggles and the three channels.
+      // `stripPreferenceMetadata` is not needed here because this component's
+      // state never holds the preferences row's own `id`.
+      await apiFetch("/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(notifPrefs),
+      })
+      toast.success("Notification preferences saved.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save notification preferences.")
+    } finally {
+      setIsSavingNotifs(false)
     }
-    return map[status] || ""
-  }
-
-  const stockLabel = (status: string) => {
-    const map: Record<string, string> = {
-      "in-stock": "In Stock",
-      "low-stock": "Low Stock",
-      "out-of-stock": "Out of Stock",
-    }
-    return map[status] || status
   }
 
   return (
@@ -70,10 +174,17 @@ export default function AdminSettingsPage() {
         <div>
           <h1 className="text-2xl font-bold">System Settings</h1>
           <p className="text-muted-foreground">
-            Manage system-wide configurations, notifications, and product inventory
+            Manage system-wide configurations and notifications
           </p>
         </div>
 
+        {/*
+          The "Products" tab and its mock inventory list are gone, along with
+          /dashboard/admin/products (resolved Open Question 15): JinVa is a
+          services marketplace with no product concept in the PRD or the
+          backend — both were template leftovers whose "Delete Product" action
+          only ever mutated a local array.
+        */}
         <Tabs defaultValue="general" className="space-y-6">
           <TabsList className="bg-muted">
             <TabsTrigger value="general" className="gap-2">
@@ -88,469 +199,215 @@ export default function AdminSettingsPage() {
               <Shield className="h-4 w-4" />
               Security
             </TabsTrigger>
-            <TabsTrigger value="products" className="gap-2">
-              <Package className="h-4 w-4" />
-              Products
-            </TabsTrigger>
           </TabsList>
 
-          {/* General Settings */}
+          {/* General (QA ADM-20: read-only — these are fixed in the platform's configuration) */}
           <TabsContent value="general" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Globe className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Platform Configuration</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Control platform-wide settings and defaults
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="platformName">Platform Name</Label>
-                    <Input id="platformName" defaultValue="Plumbify" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="supportEmail">Support Email</Label>
-                    <Input id="supportEmail" defaultValue="support@plumbify.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="currency">Default Currency</Label>
-                    <Input id="currency" defaultValue="GHS (GH₵)" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="timezone">Timezone</Label>
-                    <Input id="timezone" defaultValue="UTC-5 (Eastern Time)" />
-                  </div>
-                </div>
-
-                <div className="space-y-4 border-t pt-6">
-                  <h4 className="font-medium">System Controls</h4>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="font-medium">Maintenance Mode</p>
-                        <p className="text-sm text-muted-foreground">
-                          Temporarily disable the platform for maintenance
-                        </p>
-                      </div>
-                      <Switch />
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="font-medium">Allow New Registrations</p>
-                        <p className="text-sm text-muted-foreground">
-                          Enable or disable new user and artisan sign-ups
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="font-medium">Auto-Assign Artisans</p>
-                        <p className="text-sm text-muted-foreground">
-                          Automatically assign available artisans to new orders
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="font-medium">Enable Client Reviews</p>
-                        <p className="text-sm text-muted-foreground">
-                          Allow clients to leave ratings and reviews for artisans
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Users className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">User Management Defaults</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Set default policies for users and artisans
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Require Email Verification</p>
-                    <p className="text-sm text-muted-foreground">
-                      New accounts must verify their email before accessing the platform
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Require Artisan License Verification</p>
-                    <p className="text-sm text-muted-foreground">
-                      Artisan accounts need admin-approved license verification
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Auto-Deactivate Inactive Accounts</p>
-                    <p className="text-sm text-muted-foreground">
-                      Deactivate accounts with no activity for 90+ days
-                    </p>
-                  </div>
-                  <Switch />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Wrench className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Service & Order Defaults</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Configure default behavior for services and orders
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="cancellation">Cancellation Window (hours)</Label>
-                    <Input id="cancellation" type="number" defaultValue="24" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="commission">Platform Commission (%)</Label>
-                    <Input id="commission" type="number" defaultValue="15" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="maxBookings">Max Concurrent Bookings per Client</Label>
-                    <Input id="maxBookings" type="number" defaultValue="5" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="maxJobs">Max Concurrent Jobs per Artisan</Label>
-                    <Input id="maxJobs" type="number" defaultValue="3" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Settings
-              </Button>
-            </div>
+            <PlatformRulesCard
+              icon={<Globe className="h-5 w-5 text-foreground" />}
+              title="Platform"
+              description="How JinVa is set up"
+              config={config}
+              failed={configFailed}
+              rows={(c) => [
+                { label: "Currency", value: c.currency === "GHS" ? "Ghana cedi (GH₵)" : c.currency },
+                { label: "Timezone", value: c.timezone },
+                { label: "Support email", value: c.supportEmail ?? "Not set", hint: "Shown in every email JinVa sends" },
+                {
+                  label: "Platform commission",
+                  value: `${c.platformFeePercent}%`,
+                  hint: "Taken from each payment before the artisan is paid",
+                },
+              ]}
+            />
+            <PlatformRulesCard
+              icon={<Wrench className="h-5 w-5 text-foreground" />}
+              title="Bookings and jobs"
+              description="The rules every booking and job follows"
+              config={config}
+              failed={configFailed}
+              rows={(c) => [
+                {
+                  label: "Artisan response window",
+                  value: `${c.bookingResponseHours} hours`,
+                  hint: "A booking request the artisan doesn't answer in time expires",
+                },
+                {
+                  label: "Pending requests per artisan",
+                  value: `${c.maxPendingBookingsPerArtisan} per customer`,
+                  hint: "How many unanswered requests one customer can have with one artisan",
+                },
+                {
+                  label: "Appointment reminders",
+                  value: c.bookingReminderHours.map((h) => `${h}h`).join(" and ") + " before",
+                },
+                {
+                  label: "Agreed price range",
+                  value: `within ${c.agreedPriceTolerancePercent}% of the listed price`,
+                  hint: "When a service has a listed price",
+                },
+                {
+                  label: "Automatic job completion",
+                  value: `${c.jobAutoCompleteHours} hours`,
+                  hint: "After the artisan marks a job finished, if the customer doesn't respond",
+                },
+              ]}
+            />
           </TabsContent>
 
-          {/* Notifications */}
           <TabsContent value="notifications" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Bell className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">System Notification Settings</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Control which notifications are sent system-wide
-                    </p>
-                  </div>
-                </div>
+            {isLoadingNotifs ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-              <CardContent className="p-6 space-y-4">
-                {[
-                  { label: "New Order Alerts", desc: "Notify admins when a new order is placed", on: true },
-                  { label: "Cancellation Alerts", desc: "Notify when an order is cancelled", on: true },
-                  { label: "Payment Received", desc: "Notify when a payment is successfully processed", on: true },
-                  { label: "New User Registration", desc: "Notify when a new user or artisan registers", on: false },
-                  { label: "Low Stock Warnings", desc: "Alert when product stock drops below threshold", on: true },
-                  { label: "Artisan Rating Alerts", desc: "Notify when a artisan receives a low rating", on: true },
-                  { label: "Daily Summary Email", desc: "Send a daily digest of platform activity", on: false },
-                  { label: "Weekly Revenue Report", desc: "Send weekly revenue summaries via email", on: true },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+            ) : (
+              <>
+                <Card>
+                  <div className="border-b p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg bg-muted p-2">
+                        <Bell className="h-5 w-5 text-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Notification Preferences</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Choose which platform events you want to be alerted about
+                        </p>
+                      </div>
                     </div>
-                    <Switch defaultChecked={item.on} />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Notifications
-              </Button>
-            </div>
+                  <CardContent className="p-6 space-y-4">
+                    {ADMIN_EVENT_ROWS.map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key]}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <div className="border-b p-6">
+                    <h3 className="font-semibold">Notification Channels</h3>
+                    <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
+                  </div>
+                  <CardContent className="p-6 space-y-4">
+                    {/*
+                      PR2: the SMS row is deliberately absent, not disabled — no SMS delivery
+                      capability exists anywhere on the platform. Same treatment as the Customer
+                      and Artisan tabs.
+                    */}
+                    {([
+                      { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
+                      { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
+                    ] as { key: keyof AdminNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="text-sm text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs[key]}
+                          onCheckedChange={(v) => toggleNotif(key, v)}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end">
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={handleSaveNotifications}
+                    disabled={isSavingNotifs}
+                  >
+                    {isSavingNotifs && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Notifications
+                  </Button>
+                </div>
+              </>
+            )}
           </TabsContent>
 
           {/* Security */}
           <TabsContent value="security" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <Shield className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Security Configuration</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Manage system-wide security and access policies
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">Two-Factor Authentication (System-wide)</p>
-                      <p className="text-sm text-muted-foreground">
-                        Require 2FA for all admin and artisan accounts
-                      </p>
-                    </div>
-                    <Switch />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">Session Timeout</p>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically log out inactive users after a set time
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">IP Whitelisting for Admin Panel</p>
-                      <p className="text-sm text-muted-foreground">
-                        Restrict admin access to specific IP addresses
-                      </p>
-                    </div>
-                    <Switch />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">Login Attempt Limits</p>
-                      <p className="text-sm text-muted-foreground">
-                        Lock accounts after 5 consecutive failed login attempts
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-
-                <div className="border-t pt-6">
-                  <h4 className="font-medium mb-4">Password Policy</h4>
-                  <div className="grid gap-6 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="minLength">Minimum Password Length</Label>
-                      <Input id="minLength" type="number" defaultValue="8" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="expiry">Password Expiry (days)</Label>
-                      <Input id="expiry" type="number" defaultValue="90" />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Save Security Settings
-              </Button>
-            </div>
-          </TabsContent>
-
-          {/* Product Management */}
-          <TabsContent value="products" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-muted p-2">
-                      <Package className="h-5 w-5 text-foreground" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">Product Management</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Delete or manage products from the system inventory
-                      </p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="border-foreground/20">
-                    {products.length} products
-                  </Badge>
-                </div>
-              </div>
-              <CardContent className="p-6">
-                <div className="mb-4 relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search products by name or SKU..."
-                    className="pl-10"
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  {filteredProducts.length === 0 ? (
-                    <div className="py-12 text-center text-muted-foreground">
-                      <Package className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                      <p>No products found</p>
-                    </div>
-                  ) : (
-                    filteredProducts.map((product) => (
-                      <div
-                        key={product.id}
-                        className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/30"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                            <Package className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{product.name}</p>
-                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                              <span className="font-mono">{product.sku}</span>
-                              <span>{'|'}</span>
-                              <span>{product.category}</span>
-                              <span>{'|'}</span>
-                              <span className="font-semibold text-foreground">
-                                GH₵ {product.price.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className={stockBadge(product.status)}>
-                            {stockLabel(product.status)}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">
-                            Stock: {product.stock}
-                          </span>
-
-                          {deleteConfirm === product.id ? (
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDeleteProduct(product.id)}
-                              >
-                                Confirm
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setDeleteConfirm(null)}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => setDeleteConfirm(product.id)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete Product
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Danger Zone */}
-            <Card className="border-red-200">
-              <div className="border-b border-red-200 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-red-50 p-2">
-                    <AlertTriangle className="h-5 w-5 text-red-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-red-700">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Irreversible system-wide actions. Proceed with caution.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border border-red-100 p-4">
-                  <div>
-                    <p className="font-medium">Purge All Cancelled Orders</p>
-                    <p className="text-sm text-muted-foreground">
-                      Permanently remove all cancelled order records from the system
-                    </p>
-                  </div>
-                  <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 bg-transparent">
-                    Purge Orders
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-red-100 p-4">
-                  <div>
-                    <p className="font-medium">Deactivate All Inactive Artisans</p>
-                    <p className="text-sm text-muted-foreground">
-                      Mark all artisans with no jobs in 60+ days as inactive
-                    </p>
-                  </div>
-                  <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 bg-transparent">
-                    Deactivate
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-red-100 p-4">
-                  <div>
-                    <p className="font-medium">Reset System Data</p>
-                    <p className="text-sm text-muted-foreground">
-                      Clear all data and reset the platform to its default state
-                    </p>
-                  </div>
-                  <Button variant="destructive">
-                    Reset System
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <PlatformRulesCard
+              icon={<Shield className="h-5 w-5 text-foreground" />}
+              title="Accounts and sign-in"
+              description="Applied to every customer, artisan and admin account"
+              config={config}
+              failed={configFailed}
+              rows={(c) => [
+                {
+                  label: "Email verification",
+                  value: c.emailVerificationRequired ? "Required before first sign-in" : "Not required",
+                },
+                { label: "Password rule", value: `${c.passwordMinLength}+ characters`, hint: c.passwordRule },
+                {
+                  label: "Banned accounts",
+                  value: "Signed out everywhere",
+                  hint: "A ban ends every session and blocks sign-in until the account is unbanned",
+                },
+                {
+                  label: "Suspended accounts",
+                  value: "Can sign in, can't transact",
+                  hint: "Hidden from search; can't book, post jobs, apply or message",
+                },
+              ]}
+            />
           </TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>
+  )
+}
+
+function PlatformRulesCard({
+  icon,
+  title,
+  description,
+  config,
+  failed,
+  rows,
+}: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  config: PlatformConfig | null
+  failed: boolean
+  rows: (c: PlatformConfig) => Array<{ label: string; value: string; hint?: string }>
+}) {
+  return (
+    <Card>
+      <div className="border-b p-6">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-muted p-2">{icon}</div>
+          <div>
+            <h3 className="font-semibold">{title}</h3>
+            <p className="text-sm text-muted-foreground">{description}</p>
+          </div>
+        </div>
+      </div>
+      <CardContent className="p-6 pt-3">
+        {failed ? (
+          <p className="py-4 text-sm text-muted-foreground">Couldn&apos;t load these settings. Refresh to try again.</p>
+        ) : !config ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          rows(config).map((r) => <ConfigRow key={r.label} {...r} />)
+        )}
+        <p className="mt-4 text-xs text-muted-foreground">
+          These are set in the platform&apos;s configuration and can&apos;t be changed from this screen.
+        </p>
+      </CardContent>
+    </Card>
   )
 }

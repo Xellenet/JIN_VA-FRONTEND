@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
+import { CircleAlert } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
@@ -218,14 +219,20 @@ function FieldError({
     return null
   }
 
+  // design-spec §1.3/§1.6 (google-signup-prefill): no `role="alert"` — each
+  // form announces through its single polite live region instead, so errors
+  // aren't read twice. The icon means colour is never the only signal (V8).
   return (
     <div
-      role="alert"
       data-slot="field-error"
-      className={cn('text-destructive text-sm font-normal', className)}
+      className={cn(
+        'text-destructive flex items-start gap-1.5 text-sm font-normal',
+        className,
+      )}
       {...props}
     >
-      {content}
+      <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>{content}</span>
     </div>
   )
 }

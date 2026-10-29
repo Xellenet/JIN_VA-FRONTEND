@@ -3,7 +3,7 @@ import { VerifyEmailForm } from "@/components/auth/verify-email-form"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Verify Email - JinVa",
+  title: "Verify Email",
   description: "Verify your JinVa account email",
 }
 

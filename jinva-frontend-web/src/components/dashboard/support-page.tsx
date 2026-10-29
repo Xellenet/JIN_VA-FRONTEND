@@ -30,7 +30,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback  } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Accordion,
@@ -52,7 +52,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { UserRole } from "@/lib/types"
-import { naviiAvatar } from "@/lib/utils"
 
 interface SupportPageProps {
   role: UserRole
@@ -63,7 +62,7 @@ const faqsByRole: Record<UserRole, { question: string; answer: string; category:
     { category: "Booking", question: "How do I book a artisan?", answer: "Navigate to 'Find Artisans' from the sidebar, browse available artisans by specialization, rating, or availability, then click 'Book Now' on any artisan card. Fill in the booking form with your service details, preferred date and time, and submit your request." },
     { category: "Booking", question: "Can I cancel or reschedule a booking?", answer: "Yes. Go to 'My Bookings', find the booking you want to modify, and click 'View Details'. From there you can cancel the booking using the 'Cancel Booking' button. To reschedule, cancel the current booking and create a new one with your preferred date." },
     { category: "Payment", question: "What payment methods are accepted?", answer: "We accept all major credit and debit cards, mobile money, and bank transfers. Payment is processed securely after the job is completed and you confirm satisfaction with the work." },
-    { category: "Payment", question: "How do refunds work?", answer: "If a booking is cancelled before the artisan arrives, a full refund is issued within 3-5 business days. If the job was partially completed, a proportional refund will be calculated and processed." },
+    { category: "Payment", question: "How do refunds work?", answer: "If a booking is cancelled before the artisan arrives, a full refund is issued within 5–10 business days. If the job was partially completed, a proportional refund will be calculated and processed." },
     { category: "Account", question: "How do I update my profile information?", answer: "Go to Settings from the sidebar, then update your name, email, phone number, and address in the Profile tab. Make sure to click 'Save Changes' to apply your updates." },
     { category: "Service", question: "What types of plumbing services are available?", answer: "We offer a wide range of services including emergency leak repair, pipe installation, water heater maintenance, bathroom fixture installation, pipe inspection, drain cleaning, and more. Browse all available services in the 'Services' section." },
     { category: "Service", question: "How are artisan ratings calculated?", answer: "Artisan ratings are based on an average of all client reviews. After each completed job, clients can leave a star rating (1-5) and a written review. The overall rating reflects the artisan's quality and reliability over time." },
@@ -160,7 +159,7 @@ export function SupportPage({ role }: SupportPageProps) {
               <p className="text-sm font-semibold text-foreground">Live Chat</p>
               <p className="text-xs text-muted-foreground">Avg. response: 2 min</p>
             </div>
-            <Badge className="ml-auto bg-green-100 text-green-700 hover:bg-green-100">Online</Badge>
+            <Badge className="ml-auto bg-success/10 text-success hover:bg-success/10">Online</Badge>
           </CardContent>
         </Card>
         <Card className="group cursor-pointer border-border transition-shadow hover:shadow-md">
@@ -287,8 +286,8 @@ export function SupportPage({ role }: SupportPageProps) {
           {ticketSubmitted ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                  <CheckCircle2 className="h-8 w-8 text-green-600" />
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+                  <CheckCircle2 className="h-8 w-8 text-success" />
                 </div>
                 <h3 className="text-xl font-semibold text-foreground">Ticket Submitted Successfully</h3>
                 <p className="mt-2 max-w-md text-sm text-muted-foreground">
@@ -410,7 +409,7 @@ export function SupportPage({ role }: SupportPageProps) {
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
                       {ticket.status === "resolved" ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <CheckCircle2 className="h-5 w-5 text-success" />
                       ) : (
                         <Clock className="h-5 w-5 text-primary" />
                       )}
@@ -422,7 +421,7 @@ export function SupportPage({ role }: SupportPageProps) {
                           variant="secondary"
                           className={
                             ticket.status === "resolved"
-                              ? "bg-green-100 text-green-700 hover:bg-green-100"
+                              ? "bg-success/10 text-success hover:bg-success/10"
                               : "bg-muted text-primary hover:bg-muted"
                           }
                         >
@@ -456,7 +455,7 @@ export function SupportPage({ role }: SupportPageProps) {
                     variant="secondary"
                     className={
                       selectedTicket?.status === "resolved"
-                        ? "bg-green-100 text-green-700 hover:bg-green-100"
+                        ? "bg-success/10 text-success hover:bg-success/10"
                         : "bg-muted text-primary hover:bg-muted"
                     }
                   >
@@ -469,7 +468,6 @@ export function SupportPage({ role }: SupportPageProps) {
                 <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-4">
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src={naviiAvatar("current-user", 32)} />
                       <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
                     </Avatar>
                     <div>
@@ -481,7 +479,6 @@ export function SupportPage({ role }: SupportPageProps) {
                   </div>
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src={naviiAvatar("support-agent", 32)} />
                       <AvatarFallback><UserRound className="h-3 w-3" /></AvatarFallback>
                     </Avatar>
                     <div>

@@ -10,22 +10,238 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Eye, EyeOff } from "lucide-react"
-import { persistAuthTokens, dashboardPathForRole } from "@/lib/auth"
+import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
+import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
+import {
+  persistAuthTokens,
+  dashboardPathForRole,
+  safeInternalRedirect,
+  ACCOUNT_DELETED_PARAM,
+  RESTORABLE_UNTIL_PARAM,
+} from "@/lib/auth"
+import { setFlashToast } from "@/lib/flash"
 import { AuthSplitLayout } from "./auth-split-layout"
+import { EMAIL_MESSAGES, PASSWORD_MESSAGES, validateEmail } from "./signup-fields"
+
+/*
+ * google-signup-prefill V1–V8 (design-spec §1, §6.3): inline errors under each
+ * field instead of native bubbles, no placeholders. Wrong credentials and the
+ * other account states keep their toast / banner treatment.
+ */
+type Field = "email" | "password"
+
+const FIELDS: readonly Field[] = ["email", "password"]
+
+const LABELS: Record<Field, string> = {
+  email: "Email",
+  password: "Password",
+}
+
+/** A 400 from the ValidationPipe is not about the credentials being wrong; never show its DTO text (V6). */
+const LOGIN_FAILED = "Check your email and password, then try again."
+
+/**
+ * Both dates on the pending-deletion banner come from the server
+ * (`meta.details`) — a client-side "+30 days" would drift from the date the
+ * purge job actually enforces and from the one the deletion email states.
+ * Returns null for anything unparseable so the banner can drop the sentence
+ * rather than print "Invalid Date".
+ */
+function formatWindowDate(iso: string | undefined): string | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+}
+
+/**
+ * Copy for the `?error=` codes other auth screens redirect here with.
+ * `oauth_failed` comes from /auth/callback when no session could be
+ * established; `signup_expired` from /auth/complete-signup when the Google
+ * sign-up's 15-minute pending entry is gone (closed tab, expiry, or cancel).
+ * Unknown codes show nothing rather than a generic error.
+ */
+const BANNED_MESSAGE = "This account has been banned. Contact support if you think this is a mistake."
+
+const LOGIN_ERROR_COPY: Record<string, string> = {
+  oauth_failed: "Something went wrong signing you in with Google. Please try again.",
+  signup_expired: "Your sign-up session expired. Please continue with Google again.",
+  account_banned: BANNED_MESSAGE,
+}
+
+interface PendingDeletion {
+  deletedAt?: string
+  restorableUntil?: string
+  /** The backend's own message — the fallback if either date is unusable. */
+  message?: string
+}
 
 export function LoginForm() {
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  // QA AUTH-31: now sent with the login. Ticked by default, because every
+  // sign-in was remembered before the box did anything.
+  const [rememberMe, setRememberMe] = useState(true)
+  const [isResending, setIsResending] = useState(false)
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
+  // G10: distinct state for "this account signs in with Google" — kept
+  // separate from the generic invalid-credentials toast per api-contract.md.
+  const [socialOnlyError, setSocialOnlyError] = useState<string | null>(null)
+  // QA AUTH-17: a banned account's login is refused with its own code; say so
+  // plainly instead of offering "resend verification".
+  const [bannedError, setBannedError] = useState<string | null>(null)
+  // C1.4: the account is soft-deleted but still inside its recovery window.
+  // This is the only place a deleted-but-restorable user can find out their
+  // account is recoverable, so it is a banner with an action, never a toast.
+  const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
+  // Set when restore comes back 410 — the window closed (or the row was
+  // already purged) between the login rejection and the restore call. The
+  // banner swaps to this copy plus a way to sign up rather than dead-ending.
+  const [restoreWindowClosed, setRestoreWindowClosed] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   })
 
+  // C1.3: the user arrived here straight from deleting their own account. The
+  // confirmation has to live on THIS page, because the deletion redirect is a
+  // hard navigation and a toast fired before it is torn down unseen
+  // (qa-report.md FE-1). Read from the URL rather than from state so it also
+  // survives a refresh of this page.
+  const justDeletedAccount = searchParams.get(ACCOUNT_DELETED_PARAM) === "1"
+  const deletionRestorableUntil = formatWindowDate(
+    searchParams.get(RESTORABLE_UNTIL_PARAM) ?? undefined,
+  )
+  const redirectError = LOGIN_ERROR_COPY[searchParams.get("error") ?? ""] ?? null
+
+  // Login checks only that a password was entered: its strength rules belong
+  // to the moment it was created, and an older password may predate them.
+  const validateField = (field: Field, mode: ValidationMode): string | null => {
+    const submit = mode === "submit"
+    switch (field) {
+      case "email":
+        return validateEmail(formData.email, submit)
+      case "password":
+        return submit && !formData.password ? PASSWORD_MESSAGES.enter : null
+    }
+  }
+
+  const v = useFormValidation<Field>({ fields: FIELDS, values: formData, validate: validateField, labels: LABELS })
+
+  const handleResendVerification = async (email: string) => {
+    setIsResending(true)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.message || "Failed to resend email")
+      toast.success("Verification email has been resent.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to resend email")
+    } finally {
+      setIsResending(false)
+    }
+  }
+
+  /**
+   * The post-authentication redirect, shared by password login and by a
+   * successful restore — a restore issues the same tokens and cookies as
+   * `POST /auth/login`, so it is treated as a completed login (api-contract.md).
+   *
+   * F1: the `?redirect=` target is attacker-controllable (it's just a link
+   * someone can send), so it is never navigated to as given — `safeInternalRedirect`
+   * reduces it to a same-origin path or discards it for the role dashboard. The
+   * guard lives in lib/auth.ts beside `dashboardPathForRole` so this decision
+   * can't be re-derived, differently and more weakly, by the next surface that
+   * grows a `?redirect=`.
+   */
+  const redirectAfterLogin = (role: string | undefined) => {
+    const roleDashboard = dashboardPathForRole(role ?? "")
+    globalThis.location.href = safeInternalRedirect(searchParams.get("redirect"), roleDashboard)
+  }
+
+  const handleRestoreAccount = async () => {
+    setIsRestoring(true)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/restore-account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        // Email *and* password: the restore endpoint requires both, because an
+        // email-only endpoint would let anyone un-delete a stranger's account.
+        body: JSON.stringify(formData),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        // 410 — the caller proved ownership but there is nothing left to
+        // restore (window elapsed, or the purge job won the race). Both codes
+        // mean the same thing to the user, so both get the same copy: state
+        // the fact, name the only remaining path, don't apologise for it.
+        //
+        // We say it in our own words rather than echoing `message`, because we
+        // can name the actual deletion date the server already gave us on the
+        // login rejection, and because the backend's phrasing opens with the
+        // same words as this banner's heading.
+        if (response.status === 410) {
+          const deletedOn = formatWindowDate(pendingDeletion?.deletedAt)
+          setRestoreWindowClosed(
+            deletedOn
+              ? `This account was deleted on ${deletedOn} and the 30-day recovery window has closed. You'll need to create a new account.`
+              : (data.message ??
+                  "This account can no longer be restored. You'll need to create a new account."),
+          )
+          return
+        }
+        throw new Error(data.message || "Failed to restore account")
+      }
+
+      // Restore takes precedence over S4's verification gate, and then the
+      // ordinary gate applies to the now-restored account — so branch on
+      // `requiresEmailVerification`, not on the status code, and hand off to
+      // the existing resend-verification prompt instead of reporting a failure.
+      if (data.requiresEmailVerification) {
+        setPendingDeletion(null)
+        setUnverifiedEmail(formData.email)
+        toast.success(data.message || "Your account has been restored. Verify your email address to sign in.")
+        return
+      }
+
+      persistAuthTokens(data.access_token)
+      // Handed to the next page rather than shown here: `redirectAfterLogin` is
+      // a hard navigation, which destroys a toast raised on this page before it
+      // can be read (qa-report.md FE-1). lib/flash.ts parks it for the
+      // dashboard we're about to land on.
+      setFlashToast("Welcome back — your account has been restored.")
+      redirectAfterLogin(data.data?.role)
+    } catch (err) {
+      // QA DEL-08: a wrong password gets the server's own answer ("Unable to
+      // restore this account with the provided credentials."), not a generic
+      // "try again". Only a network failure falls back to our copy.
+      toast.error(
+        err instanceof Error && err.message && !(err instanceof TypeError)
+          ? err.message
+          : "We couldn't restore your account. Please try again, or contact support if this keeps happening.",
+      )
+    } finally {
+      setIsRestoring(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!v.validateAll()) return
     setIsLoading(true)
+    setUnverifiedEmail(null)
+    setSocialOnlyError(null)
+    setBannedError(null)
+    setPendingDeletion(null)
+    setRestoreWindowClosed(null)
 
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
@@ -33,27 +249,74 @@ export function LoginForm() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        credentials: "include",
+        body: JSON.stringify({ ...formData, rememberMe }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
+        // C1.4: a soft-deleted-but-restorable account, rejected only *after*
+        // the submitted password verified — so this branch is unreachable
+        // without proving ownership and can't be used to enumerate accounts.
+        // Shares the 403 status with the unverified case, so it must be
+        // checked first and by `meta.error`, never by the message text.
+        if (response.status === 403 && data?.meta?.error === "ACCOUNT_PENDING_DELETION") {
+          const details = data?.meta?.details as
+            | { deletedAt?: string; restorableUntil?: string }
+            | undefined
+          setPendingDeletion({
+            deletedAt: details?.deletedAt,
+            restorableUntil: details?.restorableUntil,
+            message: data.message,
+          })
+          return
+        }
+        if (response.status === 403 && data?.meta?.error === "ACCOUNT_BANNED") {
+          setBannedError(data.message || BANNED_MESSAGE)
+          return
+        }
+        // S4: unverified accounts are rejected with a distinct 403 (see auth.service.ts).
+        // Surface a specific message plus a resend path instead of a generic error.
+        if (response.status === 403) {
+          setUnverifiedEmail(formData.email)
+          toast.error(data.message || "Please verify your email before logging in.")
+          return
+        }
+        // G10: social-only accounts (no usable password) get a distinct 401
+        // shape — check meta.error, not just status, so it never gets folded
+        // into the generic invalid-credentials toast below.
+        if (response.status === 401 && data?.meta?.error === "SocialOnlyAccountException") {
+          setSocialOnlyError(
+            data.message ||
+              'This account signs in with Google. Continue with Google, or use "Forgot password" to set a password for this account.',
+          )
+          return
+        }
+        // V5: the only field-level answer login can give is a malformed
+        // email; anything else in a 400 is DTO text, not for the user (V6).
+        if (response.status === 400) {
+          const message = Array.isArray(data?.message) ? data.message.join(" ") : String(data?.message ?? "")
+          if (/email/i.test(message)) {
+            v.setServerError("email", EMAIL_MESSAGES.invalid)
+          } else {
+            toast.error(LOGIN_FAILED)
+          }
+          return
+        }
         throw new Error(data.message || "Login failed")
       }
 
-      persistAuthTokens(data.access_token, data.refresh_token, rememberMe)
+      // Login returns { access_token, expires_at, message, data: user } — the
+      // refresh token is never in the body, it arrives as an httpOnly
+      // Set-Cookie the browser stores automatically (credentials: "include").
+      const role = data.data?.role
+
+      persistAuthTokens(data.access_token)
 
       toast.success("You have been logged in successfully.")
 
-      const redirectTarget = searchParams.get("redirect")
-      const roleDashboard = dashboardPathForRole(data.user?.role ?? "")
-      const destination =
-        redirectTarget?.startsWith("/") && !redirectTarget.startsWith("//")
-          ? redirectTarget
-          : roleDashboard
-
-      globalThis.location.href = destination
+      redirectAfterLogin(role)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Invalid credentials");
     } finally {
@@ -61,100 +324,192 @@ export function LoginForm() {
     }
   }
 
-  const handleSocialLogin = async (provider: string) => {
-    setIsLoading(true)
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/oauth/${provider}`)
-      const data = await response.json()
-
-      // Redirect to OAuth provider
-      globalThis.location.href = data.authUrl
-    } catch (error) {
-      toast.error("Failed to initiate social login" + (error instanceof Error ? `: ${error.message}` : ""));
-      setIsLoading(false)
-    }
+  // G1/G8: unlike other providers, Google's flow is a real backend route
+  // (`GET /auth/google`) that itself 302s straight to Google's consent
+  // screen — per api-contract.md this must be a full-page navigation, not a
+  // fetch-then-redirect. No `role` param from the login page (G9 only
+  // applies on signup).
+  const handleGoogleLogin = () => {
+    globalThis.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`
   }
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 bg-white md:rounded-lg md:p-8 p-4 w-full md:w-auto md:border-0">
+      <div className="space-y-8 bg-background md:rounded-lg md:p-8 p-4 w-full md:w-auto md:border-0">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Sign In</h1>
-          <p className="text-gray-600">
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Sign In</h1>
+          <p className="text-muted-foreground">
             {"Don't have an account? "}
-            <Link href="/signup" className="text-gray-900 underline hover:text-gray-700 transition-colors">
+            <Link href="/signup" className="text-foreground underline hover:text-muted-foreground transition-colors">
               Create now
             </Link>
           </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email Field */}
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm text-gray-600">
-              E-mail
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="example@gmail.com"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="h-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-              required
-              disabled={isLoading}
-            />
+        {/* C1.3: post-deletion confirmation. Above the form because it explains
+            why the user is looking at a login screen at all, and it is a banner
+            rather than a toast so it is still there to be read (and re-read)
+            after the hard navigation that brought them here. Suppressed once
+            the pending-deletion banner is up — that one says the same thing and
+            carries the restore action, so showing both would just be noise. */}
+        {justDeletedAccount && !pendingDeletion && (
+          <div className="rounded-md border border-info/30 bg-info/10 p-3 text-sm text-foreground">
+            <p className="font-medium">Account deleted</p>
+            <p className="mt-0.5">
+              {deletionRestorableUntil
+                ? `You can restore it until ${deletionRestorableUntil} — just sign in again below with the same email. After that it's gone for good.`
+                : "You have 30 days to restore it — just sign in again below with the same email."}
+            </p>
           </div>
+        )}
 
-          {/* Password Field */}
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm text-gray-600">
-              Password
-            </Label>
-            <div className="relative">
+        {redirectError && (
+          <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+            <p>{redirectError}</p>
+          </div>
+        )}
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
+          <FormAnnouncer message={v.announcement} />
+
+          <FormField id="email" label="Email" error={v.errors.email}>
+            {(control) => (
               <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="@#*%"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="h-10 pr-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                {...control}
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                enterKeyHint="next"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onBlur={() => v.handleBlur("email")}
+                className={AUTH_INPUT_CLASS}
                 required
                 disabled={isLoading}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
+            )}
+          </FormField>
+
+          <FormField id="password" label="Password" error={v.errors.password}>
+            {(control) => (
+              <div className="relative">
+                <Input
+                  {...control}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  enterKeyHint="go"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onBlur={() => v.handleBlur("password")}
+                  className={`${AUTH_INPUT_CLASS} pr-10`}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            )}
+          </FormField>
 
           {/* Remember Me & Forgot Password */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Checkbox id="remember" checked={rememberMe} onCheckedChange={(checked) => setRememberMe(!!checked)} className="shadow-md" />
-              <Label htmlFor="remember" className="text-sm text-gray-500 cursor-pointer font-normal">
+              <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer font-normal">
                 Remember me
               </Label>
             </div>
             <Link
               href="/forgot-password"
-              className="text-sm text-gray-900 underline hover:text-gray-700 transition-colors"
+              className="text-sm text-foreground underline hover:text-muted-foreground transition-colors"
             >
               Forgot Password?
             </Link>
           </div>
 
+          {/* S4: unverified-account block — offer a resend path */}
+          {unverifiedEmail && (
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+              <p>Please verify your email before logging in.</p>
+              <button
+                type="button"
+                onClick={() => handleResendVerification(unverifiedEmail)}
+                disabled={isResending}
+                className="mt-1 font-medium underline underline-offset-2 hover:text-warning disabled:opacity-60"
+              >
+                {isResending ? "Resending..." : "Resend verification email"}
+              </button>
+            </div>
+          )}
+
+          {/* G10: social-only account — shown distinctly from the generic
+              invalid-credentials toast. No embedded Google button here on
+              purpose: the real "Continue with Google" button is already
+              visible further down this same form, so this stays a message
+              only rather than duplicating it. */}
+          {bannedError && (
+            <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-foreground">
+              <p>{bannedError}</p>
+            </div>
+          )}
+          {socialOnlyError && (
+            <div className="rounded-md border border-info/30 bg-info/10 p-3 text-sm text-foreground">
+              <p>{socialOnlyError}</p>
+            </div>
+          )}
+
+          {/* C1.4: scheduled-for-deletion block — the primary recovery path.
+              Sits in the form's normal DOM order, so it lands in tab order
+              between the password field and Sign In, and its heading states the
+              situation in words rather than relying on the warning tint. */}
+          {pendingDeletion && (
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+              {restoreWindowClosed ? (
+                <>
+                  <p className="font-medium">This account can no longer be restored</p>
+                  <p className="mt-0.5">{restoreWindowClosed}</p>
+                  <Link
+                    href="/signup"
+                    className="mt-1 inline-block font-medium underline underline-offset-2 hover:text-warning"
+                  >
+                    Create an account
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium">This account is scheduled for deletion</p>
+                  <p className="mt-0.5">
+                    {formatWindowDate(pendingDeletion.deletedAt) && formatWindowDate(pendingDeletion.restorableUntil)
+                      ? `You deleted it on ${formatWindowDate(pendingDeletion.deletedAt)}. You can restore it until ${formatWindowDate(pendingDeletion.restorableUntil)} — after that it's gone for good.`
+                      : (pendingDeletion.message ??
+                        "You can still restore it before the recovery window closes.")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRestoreAccount}
+                    disabled={isRestoring}
+                    className="mt-1 font-medium underline underline-offset-2 hover:text-warning disabled:opacity-60"
+                  >
+                    {isRestoring ? "Restoring..." : "Restore my account"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Sign In Button */}
           <Button
             type="submit"
-            className="w-full h-10 bg-[#1c4532] hover:bg-[#2d5a42] text-white font-medium text-base"
+            className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             disabled={isLoading}
           >
             {isLoading ? "Signing in..." : "Sign in"}
@@ -163,10 +518,10 @@ export function LoginForm() {
           {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-200" />
+              <span className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-gray-500">OR</span>
+              <span className="bg-background px-2 text-muted-foreground">OR</span>
             </div>
           </div>
 
@@ -174,11 +529,11 @@ export function LoginForm() {
           <div className="space-y-3">
             <Button
               type="button"
-              onClick={() => handleSocialLogin("google")}
+              onClick={handleGoogleLogin}
               disabled={isLoading}
-              className="w-full h-10 border border-gray-800 bg-gray-900 hover:bg-gray-800 font-normal text-gray-400 hover:text-gray-400 transition-colors"
+              className="w-full h-10 border border-input bg-background hover:bg-accent font-normal text-foreground hover:text-accent-foreground transition-colors"
             >
-              <svg className="mr-3 h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+              <svg className="mr-3 h-5 w-5 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -186,18 +541,7 @@ export function LoginForm() {
               </svg>
               Continue with Google
             </Button>
-
-            <Button
-              type="button"
-              onClick={() => handleSocialLogin("facebook")}
-              disabled={isLoading}
-              className="w-full h-10 border border-gray-800 bg-gray-900 hover:bg-gray-800 font-normal text-gray-400 hover:text-gray-400 transition-colors"
-            >
-              <svg className="mr-3 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
-              Continue with Facebook
-            </Button>
+            {/* QA AUTH-32: no Facebook sign-in on the backend, so no button. */}
           </div>
         </form>
       </div>

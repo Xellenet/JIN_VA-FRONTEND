@@ -3,6 +3,9 @@ export type UserRole = "admin" | "artisan" | "user"
 export interface User {
   id: string
   name: string
+  /** The stored parts of `name`; splitting `name` breaks a two-word first name. */
+  firstname?: string
+  lastname?: string
   email: string
   phone?: string
   address?: { id?: number; street?: string; city?: string; country?: string; zipCode?: string }
@@ -77,34 +80,108 @@ export interface Client {
   joinedDate: string
 }
 
-export interface Product {
-  id: string
-  name: string
-  category: string
-  description: string
-  price: number
-  stock: number
-  sku: string
-  status: "in-stock" | "low-stock" | "out-of-stock"
-  image?: string
+export type PortfolioStatus = "PENDING" | "APPROVED" | "REJECTED"
+
+// Matches api-contract.md §8 `PortfolioItem` — the real, backend-backed
+// portfolio record.
+export interface ApiPortfolioItem {
+  id: number
+  artisanId: number
+  fileUrl: string
+  fileType: string
+  caption: string | null
+  tag: string | null
+  status: PortfolioStatus
+  rejectionReason: string | null
+  sortOrder: number
+  createdAt: string
 }
 
-export interface PortfolioItem {
-  id: string
+// Matches api-contract.md §3 `ReviewResponseDto` — shape returned by every
+// review read/write endpoint (POST /reviews, GET /reviews*, PATCH
+// /reviews/:id, POST /reviews/:id/replies). Reviewer/artisan/job sub-objects
+// are deliberately scoped DTOs, not the raw entities (see api-contract §0).
+export type ReviewStatus = "ACTIVE" | "FLAGGED" | "REMOVED"
+
+export interface ReviewPhoto {
+  id: number
+  url: string
+  fileType: string
+  createdAt: string
+}
+
+export interface ReviewUserSummary {
+  id: number
+  firstname: string
+  lastname: string
+  profilePicture?: string | null
+}
+
+export interface ReviewArtisanSummary {
+  id: number
+  businessName?: string | null
+  averageRating: number
+  totalReviews: number
+  isVerified: boolean
+}
+
+export interface ReviewJobSummary {
+  id: number
   title: string
-  description: string
-  category: string
-  image: string
-  date: string
-  type: "image" | "video"
-  videoUrl?: string
+  status: string
+}
+
+export interface ApiReview {
+  id: number
+  rating: number
+  review: string | null
+  reviewerName: string
+  status: ReviewStatus
+  verifiedBooking: boolean
+  editedAt: string | null
+  artisanReply: string | null
+  artisanRepliedAt: string | null
+  photos: ReviewPhoto[]
+  reviewerUser?: ReviewUserSummary
+  reviewedUser?: ReviewUserSummary
+  artisanProfile?: ReviewArtisanSummary
+  job?: ReviewJobSummary
+  createdAt: string
+  updatedAt: string
+}
+
+// AM2 — GET /admin/reviews adds `flags` (sourced from the moderation log,
+// api-contract.md §12) on top of every ReviewResponseDto field.
+export interface AdminApiReview extends ApiReview {
+  flags: { reason: string; actorName: string; createdAt: string }[]
+}
+
+// AM5 — GET /admin/reviews/moderation-log, api-contract.md §9. No FKs by
+// design: every field is a snapshot captured at the moment of the action.
+export type ModerationAction = "FLAG" | "REMOVE" | "RESTORE"
+
+export interface ReviewModerationLogEntry {
+  id: number
+  reviewId: number
+  action: ModerationAction
+  reason: string | null
+  actorId: number
+  actorName: string
+  actorRole: string
+  reviewerId: number
+  reviewerName: string
+  artisanProfileId: number
+  artisanName: string
+  rating: number
+  reviewExcerpt: string
+  createdAt: string
 }
 
 export interface Notification {
   id: string
   title: string
   message: string
-  type: "booking" | "payment" | "system" | "review" | "assignment" | "message"
+  type: "booking" | "payment" | "system" | "review" | "assignment" | "message" | "dispute"
   isRead: boolean
   time: string
   link?: string

@@ -13,7 +13,6 @@ import {
   Users,
   UserCircle,
   ClipboardList,
-  FileText,
   Settings,
   HelpCircle,
   Search,
@@ -27,6 +26,8 @@ import {
   Star,
   MessageSquare,
   Plus,
+  Wallet,
+  ShieldCheck,
 } from "lucide-react"
 import type { UserRole } from "@/lib/types"
 
@@ -46,6 +47,8 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     { href: "/dashboard/admin/clients",           label: "Clients",         icon: UserCircle    },
     { href: "/dashboard/admin/orders",            label: "Jobs",            icon: ClipboardList },
     { href: "/dashboard/admin/portfolio-queue",   label: "Portfolio Queue", icon: ImageIcon     },
+    // Placed with the other moderation queue so the two sit together (AT1).
+    { href: "/dashboard/admin/verifications",      label: "Verifications",   icon: ShieldCheck   },
     { href: "/dashboard/admin/reviews",           label: "Reviews",         icon: Star          },
     { href: "/dashboard/admin/transactions",      label: "Transactions",    icon: CreditCard    },
     { href: "/dashboard/admin/disputes",          label: "Disputes",        icon: AlertTriangle },
@@ -55,9 +58,13 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
   const artisanLinks = [
     { href: "/dashboard/artisan",                 label: "Overview",  icon: LayoutGrid    },
     { href: "/dashboard/artisan/jobs",            label: "My Jobs",   icon: ClipboardList },
+    { href: "/dashboard/artisan/earnings",        label: "Earnings",  icon: Wallet        },
     { href: "/dashboard/artisan/profile",         label: "Profile",   icon: UserCircle    },
+    // QA KYC-01: the only way to submit ID documents for verification.
+    { href: "/dashboard/artisan/verification",    label: "Verification", icon: ShieldCheck },
     { href: "/dashboard/artisan/services",        label: "Services",  icon: Wrench        },
     { href: "/dashboard/artisan/portfolio",       label: "Portfolio", icon: ImageIcon     },
+    { href: "/dashboard/artisan/reviews",         label: "Reviews",   icon: Star          },
     { href: "/dashboard/artisan/calendar",        label: "Calendar",  icon: CalendarDays  },
     { href: "/dashboard/artisan/analytics",       label: "Analytics", icon: BarChart2     },
     { href: "/dashboard/artisan/messages",        label: "Messages",  icon: MessageSquare },
@@ -67,7 +74,8 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     { href: "/dashboard/user",                    label: "Overview",      icon: LayoutGrid    },
     { href: "/dashboard/user/post-job",           label: "Post a Job",    icon: Plus          },
     { href: "/dashboard/user/search",             label: "Find Artisans", icon: Search        },
-    { href: "/dashboard/user/bookings",           label: "My Jobs",       icon: ClipboardList },
+    { href: "/dashboard/user/bookings",           label: "My Bookings",   icon: CalendarDays  },
+    { href: "/dashboard/user/jobs",               label: "My Jobs",       icon: ClipboardList },
     { href: "/dashboard/user/favourites",         label: "Favourites",    icon: Heart         },
     { href: "/dashboard/user/messages",           label: "Messages",      icon: MessageSquare },
   ]
@@ -83,7 +91,6 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
   const workspaceLinks = [
     { href: `${roleBase}/settings`, label: "Settings", icon: Settings },
     { href: `${roleBase}/support`,  label: "Support",  icon: HelpCircle },
-    { href: `${roleBase}/report`,   label: "Report",   icon: FileText },
   ]
 
   const userInitials = user?.name
@@ -121,7 +128,8 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
-        <Logo />
+        {/* The sidebar surface is brand green in both themes — DT4's on-brand tone */}
+        <Logo tone="on-brand" />
         <button
           type="button"
           onClick={onClose}

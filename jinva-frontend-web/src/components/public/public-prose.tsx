@@ -28,7 +28,8 @@ export function PublicProse({
   children,
   footer,
 }: Readonly<{
-  eyebrow: string
+  /** Optional quiet, sentence-case context line above the title (no tracked caps). */
+  eyebrow?: string
   title: string
   standfirst?: React.ReactNode
   children: React.ReactNode
@@ -43,8 +44,8 @@ export function PublicProse({
     <main className="py-12 md:py-16">
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
         <Reveal>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{eyebrow}</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-balance sm:text-4xl">{title}</h1>
+          {eyebrow ? <p className="mb-2 text-sm text-muted-foreground">{eyebrow}</p> : null}
+          <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">{title}</h1>
           {standfirst ? (
             <p className="mt-3 text-base leading-relaxed text-muted-foreground">{standfirst}</p>
           ) : null}

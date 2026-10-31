@@ -43,6 +43,7 @@ export function PublicThemeToggle({ showLabel = false }: { readonly showLabel?: 
       variant="ghost"
       size="icon"
       aria-label="Toggle theme"
+      className="max-sm:size-11"
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
       <Icon className="h-[1.1rem] w-[1.1rem] text-muted-foreground" />

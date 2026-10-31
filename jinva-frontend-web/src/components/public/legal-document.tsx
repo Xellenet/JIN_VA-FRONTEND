@@ -32,7 +32,6 @@ export function LegalDocument({
 }>) {
   return (
     <PublicProse
-      eyebrow="Legal"
       title={title}
       standfirst={standfirst}
       footer={

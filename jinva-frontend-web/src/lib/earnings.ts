@@ -168,9 +168,11 @@ export function monthName(key: string): string {
   return new Intl.DateTimeFormat("en-GB", { month: "long", timeZone: "UTC" }).format(monthDate(key))
 }
 
-/** "Oct 2026" */
+/** "Oct 2026"; "Sep 2026", never ICU's "Sept 2026". */
 export function monthShort(key: string): string {
-  return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(monthDate(key))
+  return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" })
+    .format(monthDate(key))
+    .replace(/\bSept\b/, "Sep")
 }
 
 // ── Money (strings with two decimals from the API) ───────────────────────────

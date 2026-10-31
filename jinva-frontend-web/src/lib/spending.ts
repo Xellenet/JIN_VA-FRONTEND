@@ -117,12 +117,17 @@ const TZ = "Africa/Accra"
 
 const isValidDate = (d: Date) => !Number.isNaN(d.getTime())
 
+/** Newer ICU writes en-GB September as "Sept"; the product uses three letters ("Sep"). */
+export const threeLetterMonth = (s: string) => s.replace(/\bSept\b/g, "Sep")
+
 /** "30 Oct 2026" */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return ""
   const d = new Date(iso)
   if (!isValidDate(d)) return ""
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: TZ }).format(d)
+  return threeLetterMonth(
+    new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: TZ }).format(d),
+  )
 }
 
 /** "Thu 11 Jun 2026, 1:10 pm" */
@@ -141,7 +146,7 @@ export function formatDateTime(iso: string | null | undefined): string {
     timeZone: TZ,
   }).formatToParts(d)
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ""
-  return `${get("weekday")} ${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")} ${get("dayPeriod").toLowerCase()}`
+  return `${get("weekday")} ${get("day")} ${threeLetterMonth(get("month"))} ${get("year")}, ${get("hour")}:${get("minute")} ${get("dayPeriod").toLowerCase()}`
 }
 
 /** A `YYYY-MM-DD` / `YYYY-MM` bucket key as a UTC date (Accra is UTC+0, no DST). */
@@ -151,7 +156,7 @@ function bucketDate(bucketStart: string): Date {
 }
 
 const fmtUtc = (d: Date, opts: Intl.DateTimeFormatOptions) =>
-  new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: "UTC" }).format(d)
+  threeLetterMonth(new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: "UTC" }).format(d))
 
 /**
  * The bucket as words: "August 2026", "the week of 3 Aug 2026", "12 Aug 2026".

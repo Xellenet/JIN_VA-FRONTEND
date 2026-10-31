@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { AlertTriangle, CalendarDays, CircleDollarSign, Gavel, Inbox, Lock, MapPin, Send, StickyNote, type LucideIcon } from "lucide-react"
+import { AlertTriangle, CalendarDays, Gavel, Inbox, Lock, MapPin, Send, StickyNote, Wallet, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   artisanActionRows,
@@ -31,7 +31,7 @@ const ACTION_ICONS: Record<ArtisanActionKind, LucideIcon> = {
   bookingRequests: Inbox,
   disputes: Gavel,
   payoutsNeedAction: AlertTriangle,
-  payoutMethod: CircleDollarSign,
+  payoutMethod: Wallet,
 }
 
 /**

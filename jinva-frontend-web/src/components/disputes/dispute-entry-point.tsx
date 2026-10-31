@@ -132,7 +132,7 @@ export function DisputeEntryPoint({
         {existing.canRespond && (
           <p className="text-xs font-medium text-primary">Your response is needed</p>
         )}
-        <Button variant="outline" className="w-full bg-transparent" asChild>
+        <Button variant="outline" className="h-11 w-full bg-transparent sm:h-9" asChild>
           <Link href={`${disputeHrefBase}/${existing.id}`}>
             {isRaiser ? "View your report" : "View dispute"}
             <ArrowRight className="ml-2 h-4 w-4" />

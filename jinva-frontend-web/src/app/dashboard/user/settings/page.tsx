@@ -46,6 +46,7 @@ import { loginUrlAfterAccountDeletion } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import { PaymentsTab } from "@/components/settings/payments-tab"
 import { ProfilePhotoCard } from "@/components/settings/profile-photo-card"
 import { useLeaveGuard } from "@/components/settings/use-leave-guard"
@@ -116,7 +117,7 @@ function UserSettingsContent() {
       if (err instanceof ApiError && err.status === 409) {
         setDeleteRefusal(err.message)
       } else {
-        toast.error(err instanceof Error ? err.message : "Failed to delete account.")
+        toast.error(err instanceof Error ? err.message : "Couldn't delete your account. Try again.")
       }
       setIsDeleting(false)
     }
@@ -131,13 +132,15 @@ function UserSettingsContent() {
   }
   const [notifPrefs, setNotifPrefs] = useState<Partial<CustomerNotifPrefs>>({})
   const [isLoadingNotifs, setIsLoadingNotifs] = useState(false)
+  // Saving defaults over preferences we never read would silently change them, so a failed load hides the form.
+  const [notifsLoadFailed, setNotifsLoadFailed] = useState(false)
   const [isSavingNotifs, setIsSavingNotifs] = useState(false)
 
   useEffect(() => {
     setIsLoadingNotifs(true)
     apiFetch<CustomerNotifPrefs>("/notifications/preferences")
       .then(setNotifPrefs)
-      .catch(() => {})
+      .catch(() => setNotifsLoadFailed(true))
       .finally(() => setIsLoadingNotifs(false))
   }, [])
 
@@ -160,7 +163,7 @@ function UserSettingsContent() {
       })
       toast.success("Notification preferences saved.")
     } catch {
-      toast.error("Failed to save notification preferences.")
+      toast.error("Couldn't save your notification preferences. Try again.")
     } finally {
       setIsSavingNotifs(false)
     }
@@ -188,7 +191,7 @@ function UserSettingsContent() {
     row.querySelector<HTMLElement>("button[role=switch]")?.focus({ preventScroll: true })
   }, [activeTab, highlight, isLoadingNotifs])
 
-  // Phones: the tab strip scrolls; keep the active tab in view.
+  // Keep the active tab in view.
   const tabsListRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     tabsListRef.current
@@ -275,13 +278,13 @@ function UserSettingsContent() {
         })
       }
       await refreshUser()
-      toast.success("Profile updated successfully.")
+      toast.success("Profile saved.")
     } catch (err: unknown) {
       if (err instanceof ApiError && err.code === PHONE_IN_USE_CODE) {
         setPhoneError(PHONE_MESSAGES.inUse)
         return
       }
-      const reason = err instanceof Error ? err.message : "Failed to save changes."
+      const reason = err instanceof Error ? err.message : "Couldn't save your changes."
       if (accountSaved) {
         await refreshUser()
         toast.error(`Your details were saved, but your address wasn't: ${reason}`)
@@ -323,7 +326,7 @@ function UserSettingsContent() {
       setNewPass("")
       setConfirmPass("")
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update password.")
+      toast.error(err instanceof Error ? err.message : "Couldn't update your password. Try again.")
     } finally {
       setIsUpdatingPass(false)
     }
@@ -333,9 +336,9 @@ function UserSettingsContent() {
     <DashboardLayout>
       <div className="max-w-[1080px] space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">Account Settings</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">Settings</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage your personal information, notifications, payments and security
+            Manage your details, notifications, payments and security
           </p>
         </div>
 
@@ -344,21 +347,22 @@ function UserSettingsContent() {
           onValueChange={(tab) => changeTab(tab)}
           className="space-y-6"
         >
-          <TabsList ref={tabsListRef} className="h-auto w-full justify-start overflow-x-auto bg-muted sm:w-fit">
-            <TabsTrigger value="profile" className="gap-2">
-              <User className="h-4 w-4" />
+          {/* A 2×2 grid on phones (as on the artisan Settings), so Security is never clipped off-screen. */}
+          <TabsList ref={tabsListRef} className="grid h-auto w-full grid-cols-2 gap-1 bg-muted sm:inline-flex sm:w-fit sm:gap-0">
+            <TabsTrigger value="profile" className="min-h-11 gap-2 sm:min-h-0">
+              <User className="h-4 w-4" aria-hidden="true" />
               Profile
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-2">
-              <Bell className="h-4 w-4" />
+            <TabsTrigger value="notifications" className="min-h-11 gap-2 sm:min-h-0">
+              <Bell className="h-4 w-4" aria-hidden="true" />
               Notifications
             </TabsTrigger>
-            <TabsTrigger value="payments" className="gap-2">
-              <CreditCard className="h-4 w-4" />
+            <TabsTrigger value="payments" className="min-h-11 gap-2 sm:min-h-0">
+              <CreditCard className="h-4 w-4" aria-hidden="true" />
               Payments
             </TabsTrigger>
-            <TabsTrigger value="security" className="gap-2">
-              <Shield className="h-4 w-4" />
+            <TabsTrigger value="security" className="min-h-11 gap-2 sm:min-h-0">
+              <Shield className="h-4 w-4" aria-hidden="true" />
               Security
             </TabsTrigger>
           </TabsList>
@@ -369,17 +373,18 @@ function UserSettingsContent() {
 
             <Card className="gap-0 py-0">
               <div className="border-b p-4 sm:p-6">
-                <h3 className="font-semibold">Personal Information</h3>
+                <h3 className="font-semibold">Your details</h3>
                 <p className="text-sm text-muted-foreground">
-                  Update your name, contact details, and address
+                  Update your name, contact details and address
                 </p>
               </div>
               <CardContent className="p-4 sm:p-6">
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
+                    <Label htmlFor="firstName">First name</Label>
                     <Input
                       id="firstName"
+                      className="max-sm:h-11"
                       maxLength={NAME_MAX}
                       value={firstname}
                       onChange={(e) => setFirstname(e.target.value)}
@@ -387,9 +392,10 @@ function UserSettingsContent() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
+                    <Label htmlFor="lastName">Last name</Label>
                     <Input
                       id="lastName"
+                      className="max-sm:h-11"
                       maxLength={NAME_MAX}
                       value={lastname}
                       onChange={(e) => setLastname(e.target.value)}
@@ -397,13 +403,13 @@ function UserSettingsContent() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
+                    <Label htmlFor="email">Email</Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Lock className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                      <Mail aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Lock aria-hidden="true" className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
                       <Input
                         id="email"
-                        className="cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground"
+                        className="cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground max-sm:h-11"
                         value={email}
                         readOnly
                       />
@@ -412,7 +418,8 @@ function UserSettingsContent() {
                   </div>
                   <PhoneField
                     id="phone"
-                    label="Phone Number"
+                    label="Phone number"
+                    className="max-sm:[&_button]:min-h-11 max-sm:[&_input]:h-11"
                     value={phone}
                     country={phoneCountry}
                     onChange={(value) => {
@@ -427,15 +434,15 @@ function UserSettingsContent() {
                     disabled={isSaving}
                   />
                   <div className="space-y-2">
-                    <Label htmlFor="nationalId">National Identification</Label>
+                    <Label htmlFor="nationalId">National ID</Label>
                     <div className="relative">
-                      <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <CreditCard aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       {user.nationalId && (
-                        <Lock className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                        <Lock aria-hidden="true" className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
                       )}
                       <Input
                         id="nationalId"
-                        className={user.nationalId ? "cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground" : "pl-10"}
+                        className={user.nationalId ? "cursor-not-allowed bg-muted/50 pl-10 pr-9 text-muted-foreground max-sm:h-11" : "pl-10 max-sm:h-11"}
                         value={nationalId}
                         onChange={user.nationalId ? undefined : (e) => setNationalId(e.target.value)}
                         readOnly={!!user.nationalId}
@@ -452,10 +459,10 @@ function UserSettingsContent() {
                   <div className="space-y-2 md:col-span-2">
                     <Label htmlFor="street">Street</Label>
                     <div className="relative">
-                      <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <MapPin aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         id="street"
-                        className="pl-10"
+                        className="pl-10 max-sm:h-11"
                         value={street}
                         onChange={(e) => setStreet(e.target.value)}
                         placeholder="Street address"
@@ -466,6 +473,7 @@ function UserSettingsContent() {
                     <Label htmlFor="city">City</Label>
                     <Input
                       id="city"
+                      className="max-sm:h-11"
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
                       placeholder="City"
@@ -475,15 +483,17 @@ function UserSettingsContent() {
                     <Label htmlFor="country">Country</Label>
                     <Input
                       id="country"
+                      className="max-sm:h-11"
                       value={country}
                       onChange={(e) => setCountry(e.target.value)}
                       placeholder="Country"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="zipCode">Zip Code</Label>
+                    <Label htmlFor="zipCode">Zip code</Label>
                     <Input
                       id="zipCode"
+                      className="max-sm:h-11"
                       value={zipCode}
                       onChange={(e) => setZipCode(e.target.value)}
                       placeholder="Zip / Postal code"
@@ -495,12 +505,12 @@ function UserSettingsContent() {
 
             <div className="flex justify-end">
               <Button
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                className="max-sm:h-11 max-sm:w-full"
                 onClick={handleSaveProfile}
                 disabled={isSaving}
               >
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                Save changes
               </Button>
             </div>
           </TabsContent>
@@ -509,19 +519,26 @@ function UserSettingsContent() {
           <TabsContent value="notifications" className="space-y-6">
             {isLoadingNotifs ? (
               <div className="flex justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Loading" />
               </div>
+            ) : notifsLoadFailed ? (
+              <Card className="gap-0 py-0">
+                <CardContent className="flex flex-col items-center px-6 py-12 text-center">
+                  <p className="text-sm font-semibold text-foreground">Couldn&apos;t load your notification preferences</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Refresh the page to try again.</p>
+                </CardContent>
+              </Card>
             ) : (
               <>
                 <Card className="gap-0 py-0">
                   <div className="border-b p-4 sm:p-6">
                     <div className="flex items-center gap-3">
                       <div className="rounded-lg bg-muted p-2">
-                        <Bell className="h-5 w-5 text-foreground" />
+                        <Bell className="h-5 w-5 text-foreground" aria-hidden="true" />
                       </div>
                       <div>
-                        <h3 className="font-semibold">Notification Preferences</h3>
-                        <p className="text-sm text-muted-foreground">Choose which notifications you want to receive</p>
+                        <h3 className="font-semibold">What we tell you about</h3>
+                        <p className="text-sm text-muted-foreground">Choose which updates you receive</p>
                       </div>
                     </div>
                   </div>
@@ -534,42 +551,44 @@ function UserSettingsContent() {
                       a real review-nudge trigger exists.
                     */}
                     {([
-                      { key: "bookingConfirmations", label: "Booking Confirmations",  desc: "Get notified when an artisan applies to your job" },
-                      { key: "jobStatusUpdates",     label: "Job Status Updates",      desc: "Receive updates when your job status changes" },
-                      { key: "paymentReceipts",      label: "Payment Receipts",        desc: "Receive receipts for completed payments" },
-                      { key: "promotionalOffers",    label: "Promotional Offers",      desc: "Get notified about discounts and special offers" },
-                      { key: "serviceReminders",     label: "Service Reminders",       desc: "Reminders for upcoming scheduled services" },
-                      { key: "jobExpired",           label: "Job Expired",             desc: "Get notified when your job posting expires without being filled" },
-                      { key: "messageReceived",      label: "New Messages",            desc: "Get notified when you receive a direct message" },
+                      { key: "bookingConfirmations", label: "Applications",              desc: "When an artisan applies to a job you posted" },
+                      { key: "jobStatusUpdates",     label: "Job updates",               desc: "When one of your jobs changes stage" },
+                      { key: "paymentReceipts",      label: "Payment receipts",          desc: "A receipt for each completed payment" },
+                      { key: "promotionalOffers",    label: "Offers",                    desc: "Discounts and special offers from JinVa" },
+                      { key: "serviceReminders",     label: "Service reminders",         desc: "Reminders before a booked visit" },
+                      { key: "jobExpired",           label: "Expired jobs",              desc: "When a job you posted expires without an artisan" },
+                      { key: "messageReceived",      label: "New messages",              desc: "When an artisan sends you a message" },
                     ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
-                      <div
+                      <Label
                         key={key}
+                        htmlFor={`notif-switch-${key}`}
                         id={key === "paymentReceipts" ? "payment-receipts" : undefined}
-                        className={`flex scroll-mt-24 items-center justify-between gap-4 rounded-lg border p-4 ${
-                          key === "paymentReceipts" && highlight ? "border-primary/40 bg-primary/[0.04]" : ""
-                        }`}
+                        className={cn(
+                          "flex min-h-11 scroll-mt-24 cursor-pointer items-center justify-between gap-4 rounded-lg border p-4 text-base leading-normal font-normal transition-colors hover:bg-muted/50 motion-reduce:transition-none",
+                          key === "paymentReceipts" && highlight && "border-primary/40 bg-primary/[0.04]",
+                        )}
                       >
-                        <div>
-                          <p className="font-medium">{label}</p>
-                          <p className="text-sm text-muted-foreground">{desc}</p>
-                        </div>
+                        <span className="min-w-0">
+                          <span id={`notif-${key}`} className="block font-medium">{label}</span>
+                          <span id={`notif-${key}-desc`} className="block text-sm text-muted-foreground">{desc}</span>
+                        </span>
                         <Switch
-                          aria-label={label}
+                          id={`notif-switch-${key}`}
+                          aria-labelledby={`notif-${key}`}
+                          aria-describedby={`notif-${key}-desc`}
                           checked={notifPrefs[key] ?? true}
                           onCheckedChange={(v) => toggleNotif(key, v)}
                         />
-                      </div>
+                      </Label>
                     ))}
                   </CardContent>
                 </Card>
 
                 <Card className="gap-0 py-0">
                   <div className="border-b p-4 sm:p-6">
-                    <h3 className="font-semibold">Notification Channels</h3>
-                    <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Email and SMS coverage varies by notification type — in-app notifications always
-                      fire when the toggle above is on.
+                    <h3 className="font-semibold">How we reach you</h3>
+                    <p className="text-sm text-muted-foreground">
+                      In-app notifications always arrive when an update is on. Not every update is sent by email.
                     </p>
                   </div>
                   <CardContent className="space-y-4 p-4 sm:p-6">
@@ -582,31 +601,38 @@ function UserSettingsContent() {
                       delivery is ever built.
                     */}
                     {([
-                      { key: "emailEnabled", label: "Email Notifications", desc: "Receive notifications via email" },
-                      { key: "pushEnabled",  label: "Push Notifications",  desc: "Receive browser push notifications" },
+                      { key: "emailEnabled", label: "Email", desc: "Send updates to your email address" },
+                      { key: "pushEnabled",  label: "Push notifications", desc: "Show updates as browser notifications on this device" },
                     ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
-                        <div>
-                          <p className="font-medium">{label}</p>
-                          <p className="text-sm text-muted-foreground">{desc}</p>
-                        </div>
+                      <Label
+                        key={key}
+                        htmlFor={`notif-switch-${key}`}
+                        className="flex min-h-11 cursor-pointer items-center justify-between gap-4 rounded-lg border p-4 text-base leading-normal font-normal transition-colors hover:bg-muted/50 motion-reduce:transition-none"
+                      >
+                        <span className="min-w-0">
+                          <span id={`notif-${key}`} className="block font-medium">{label}</span>
+                          <span id={`notif-${key}-desc`} className="block text-sm text-muted-foreground">{desc}</span>
+                        </span>
                         <Switch
+                          id={`notif-switch-${key}`}
+                          aria-labelledby={`notif-${key}`}
+                          aria-describedby={`notif-${key}-desc`}
                           checked={notifPrefs[key] ?? (key === "emailEnabled" || key === "pushEnabled")}
                           onCheckedChange={(v) => toggleNotif(key, v)}
                         />
-                      </div>
+                      </Label>
                     ))}
                   </CardContent>
                 </Card>
 
                 <div className="flex justify-end">
                   <Button
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    className="max-sm:h-11 max-sm:w-full"
                     onClick={handleSaveNotifications}
                     disabled={isSavingNotifs}
                   >
-                    {isSavingNotifs && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Save Notifications
+                    {isSavingNotifs && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                    Save notifications
                   </Button>
                 </div>
               </>
@@ -629,10 +655,10 @@ function UserSettingsContent() {
               <div className="border-b p-4 sm:p-6">
                 <div className="flex items-center gap-3">
                   <div className="rounded-lg bg-muted p-2">
-                    <Shield className="h-5 w-5 text-foreground" />
+                    <Shield className="h-5 w-5 text-foreground" aria-hidden="true" />
                   </div>
                   <div>
-                    <h3 className="font-semibold">Change Password</h3>
+                    <h3 className="font-semibold">Change password</h3>
                     <p className="text-sm text-muted-foreground">Update your account password</p>
                   </div>
                 </div>
@@ -640,9 +666,10 @@ function UserSettingsContent() {
               <CardContent className="p-4 sm:p-6">
                 <div className="max-w-md space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="currentPass">Current Password</Label>
+                    <Label htmlFor="currentPass">Current password</Label>
                     <Input
                       id="currentPass"
+                      className="max-sm:h-11"
                       type="password"
                       placeholder="Enter current password"
                       value={currentPass}
@@ -650,9 +677,10 @@ function UserSettingsContent() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="newPass">New Password</Label>
+                    <Label htmlFor="newPass">New password</Label>
                     <Input
                       id="newPass"
+                      className="max-sm:h-11"
                       type="password"
                       placeholder="Enter new password"
                       value={newPass}
@@ -660,9 +688,10 @@ function UserSettingsContent() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPass">Confirm New Password</Label>
+                    <Label htmlFor="confirmPass">Confirm new password</Label>
                     <Input
                       id="confirmPass"
+                      className="max-sm:h-11"
                       type="password"
                       placeholder="Confirm new password"
                       value={confirmPass}
@@ -670,12 +699,12 @@ function UserSettingsContent() {
                     />
                   </div>
                   <Button
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    className="max-sm:h-11 max-sm:w-full"
                     onClick={handleUpdatePassword}
                     disabled={isUpdatingPass || !currentPass || !newPass || !confirmPass}
                   >
-                    {isUpdatingPass && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Update Password
+                    {isUpdatingPass && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                    Update password
                   </Button>
                 </div>
               </CardContent>
@@ -687,25 +716,26 @@ function UserSettingsContent() {
               <div className="border-b border-destructive/30 p-4 sm:p-6">
                 <div className="flex items-center gap-3">
                   <div className="rounded-lg bg-destructive/10 p-2">
-                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <AlertTriangle className="h-5 w-5 text-destructive" aria-hidden="true" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-destructive">Danger Zone</h3>
-                    <p className="text-sm text-muted-foreground">Permanent account actions</p>
+                    <h3 className="font-semibold text-destructive">Delete account</h3>
+                    <p className="text-sm text-muted-foreground">This closes your account for everyone</p>
                   </div>
                 </div>
               </div>
               <CardContent className="p-4 sm:p-6">
-                <div className="flex items-center justify-between rounded-lg border border-destructive/20 p-4">
-                  <div>
-                    <p className="font-medium">Delete Account</p>
-                    <p className="text-sm text-muted-foreground">
-                      Close your account and remove your profile from JinVa. You can restore it within 30 days.
-                    </p>
-                  </div>
-                  <Button variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Account
+                <div className="flex flex-col gap-4 rounded-lg border border-destructive/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Close your account and remove your profile from JinVa. You can restore it within 30 days.
+                  </p>
+                  <Button
+                    variant="destructive"
+                    className="shrink-0 max-sm:h-11 max-sm:w-full"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    Delete account
                   </Button>
                 </div>
               </CardContent>
@@ -739,17 +769,17 @@ function UserSettingsContent() {
             </div>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Keep my account</AlertDialogCancel>
+            <AlertDialogCancel className="max-sm:h-11" disabled={isDeleting}>Keep my account</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
                 handleDeleteAccount()
               }}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 max-sm:h-11"
             >
-              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete Account
+              {isDeleting && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              Delete account
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -171,6 +171,42 @@ for (const f of files) {
   check(`copy: no dangerouslySetInnerHTML in ${f}`, text.includes("dangerouslySetInnerHTML"), false)
 }
 
+
+// ── Artisan Overview and Calendar (artisan fixes H3, H4): src/lib/artisan-overview.ts ──
+{
+  const a = await import(pathToFileURL(join(process.cwd(), "src", "lib", "artisan-overview.ts")).href)
+  const t0 = new Date("2026-10-31T10:00:00.000Z")
+  check("A respondBy expired", a.respondByText("2026-10-31T09:59:00.000Z", t0).expired, true)
+  check("A respondBy <1h", a.respondByText("2026-10-31T10:30:00.000Z", t0), { expired: false, text: "Less than an hour left to reply", urgent: true })
+  check("A respondBy 1h", a.respondByText("2026-10-31T11:10:00.000Z", t0).text, "1 hour left to reply")
+  check("A respondBy 20h not urgent", a.respondByText("2026-11-01T06:00:00.000Z", t0).urgent, false)
+  check("A respondBy bad", a.respondByText("nope", t0).text, "")
+  check("A title never 'Service — Name'", a.bookingTitle(null, "Ama Mensah"), "Booking with Ama Mensah")
+  check("A title service", a.bookingTitle({ name: "Plumbing" }, "Ama"), "Plumbing")
+  check("A client fallback", a.clientLabel("  "), "Client")
+  check("A location null", a.locationText(null), "Location shared in messages")
+  check("A location", a.locationText(" 12 Ring Road "), "12 Ring Road")
+  const b = (status, scheduledDate, endTime) => ({ status, scheduledDate, endTime })
+  check("A group pending", a.calendarGroup(b("PENDING", "2026-10-01", "10:00"), t0), "requests")
+  check("A group upcoming", a.calendarGroup(b("CONFIRMED", "2026-10-31", "11:00:00"), t0), "upcoming")
+  check("A group follow-up (past confirmed)", a.calendarGroup(b("CONFIRMED", "2026-10-31", "09:00"), t0), "followUp")
+  check("A group history", a.calendarGroup(b("NO_SHOW", "2026-11-05", "09:00"), t0), "history")
+  check("A jobs href", a.artisanJobsHref("awaiting_client"), "/dashboard/artisan/jobs?stage=awaiting_client")
+  check("A jobs href hostile", a.artisanJobsHref("<x>"), "/dashboard/artisan/jobs")
+  check("A booking param", a.parseBookingParam("42"), 42)
+  for (const bad of ["-1", "0", "4e2", "42abc", "<script>", "9".repeat(20)]) check(`A booking param ${bad}`, a.parseBookingParam(bad), null)
+  check("A job href bad", a.artisanJobHref("../x"), null)
+  check("A summary", a.artisanSummary({ toStart: 1, inProgress: 2, awaitingClient: 0, done: 0, closed: 0, total: 3, applied: 0 }, 3, 1),
+    "3 booking requests to answer, 1 appointment today, 1 job to start, 2 jobs in progress.")
+  check("A summary failed", a.artisanSummary(null, null, null), "Here is what needs you today.")
+  check("A summary new", a.artisanSummary({ toStart: 0, inProgress: 0, awaitingClient: 0, done: 0, closed: 0, total: 0, applied: 0 }, 0, 0),
+    "Apply for open jobs below to get your first booking.")
+  const rows = a.artisanActionRows({ requests: 2, disputes: 1, earnings: { needsAction: "120.00", needsActionCount: 1, hasPayoutMethod: false } })
+  check("A action rows", rows.map((r) => [r.kind, r.href]), [["bookingRequests", "#booking-requests"], ["disputes", "/dashboard/artisan/disputes"], ["payoutMethod", "/dashboard/artisan/earnings"]])
+  check("A action rows failed sections", a.artisanActionRows({ requests: null, disputes: null, earnings: null }), [])
+  check("A money", a.formatGhs("1840"), "GH₵ 1,840.00")
+}
+
 if (failures > 0) {
   console.error(`\n${failures} failed, ${passes} passed`)
   process.exit(1)

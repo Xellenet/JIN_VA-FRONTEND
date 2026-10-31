@@ -76,30 +76,64 @@ export function RailNeedsAction({
 function ActionList({ items, layout }: { items: ActionItems; layout: RailLayout }) {
   const rows = actionRows(items)
   if (rows.length === 0) {
-    return (
-      <div className="mt-3 flex items-start gap-3 rounded-lg px-1 py-2">
-        <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
-          <CheckCheck className="h-4 w-4" />
-        </span>
-        <div>
-          <p className="text-sm font-medium text-foreground">You&apos;re all caught up</p>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Nothing needs you right now. Requests from artisans will show here.
-          </p>
-        </div>
-      </div>
-    )
+    return <CaughtUp text="Nothing needs you right now. Requests from artisans will show here." />
   }
+  return (
+    <ActionRowList
+      layout={layout}
+      rows={rows.map((row) => ({
+        key: row.kind,
+        href: row.href,
+        icon: ICONS[row.kind],
+        label: ACTION_LABELS[row.kind],
+        detail: row.jobTitle,
+        count: row.count,
+        ariaLabel: actionAriaLabel(row.kind, row.count, row.single),
+      }))}
+    />
+  )
+}
 
+/** The calm "nothing to do" state, shared by both roles' rails. */
+export function CaughtUp({ text }: { text: string }) {
+  return (
+    <div className="mt-3 flex items-start gap-3 rounded-lg px-1 py-2">
+      <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
+        <CheckCheck className="h-4 w-4" />
+      </span>
+      <div>
+        <p className="text-sm font-medium text-foreground">You&apos;re all caught up</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">{text}</p>
+      </div>
+    </div>
+  )
+}
+
+export interface ActionListRow {
+  key: string
+  href: string
+  icon: LucideIcon
+  label: string
+  /** Second line (a job title, an amount). */
+  detail: string | null
+  count: number
+  ariaLabel: string
+}
+
+/**
+ * The "Needs your action" rows, for either role. Each row is one link at
+ * least 44px tall, with the count in the attention tone and as text.
+ */
+export function ActionRowList({ rows, layout }: { rows: ActionListRow[]; layout: RailLayout }) {
   return (
     <ul className="-mx-2 mt-2">
       {rows.map((row) => {
-        const Icon = ICONS[row.kind]
+        const Icon = row.icon
         return (
-          <li key={row.kind}>
+          <li key={row.key}>
             <Link
               href={row.href}
-              aria-label={actionAriaLabel(row.kind, row.count, row.single)}
+              aria-label={row.ariaLabel}
               className={cn(
                 "group flex min-h-11 items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-150 motion-reduce:transition-none",
                 layout === "rail" ? "hover:bg-card" : "hover:bg-muted/60",
@@ -113,10 +147,10 @@ function ActionList({ items, layout }: { items: ActionItems; layout: RailLayout 
                 <Icon className="h-4 w-4" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-foreground">{ACTION_LABELS[row.kind]}</span>
-                {row.jobTitle && (
+                <span className="block text-sm font-medium text-foreground">{row.label}</span>
+                {row.detail && (
                   <span dir="auto" className="block truncate text-xs text-muted-foreground [unicode-bidi:isolate]">
-                    {row.jobTitle}
+                    {row.detail}
                   </span>
                 )}
               </span>

@@ -1,202 +1,352 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { AlertCircle, CalendarDays, ListChecks, Search } from "lucide-react"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { StatsCard } from "@/components/dashboard/admin/stats-card"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Star, Calendar, DollarSign, Briefcase, Loader2, UserRound } from "lucide-react"
-import { apiFetch } from "@/lib/api"
-import { useAuth } from "@/contexts/auth-context"
-import { cn, resolveAvatarUrl } from "@/lib/utils"
+import { ApplyJobDialog } from "@/components/dashboard/apply-job-dialog"
+import { useBookingResponse } from "@/components/artisan/booking-response"
+import { BookingRequests } from "@/components/dashboard/overview/booking-requests"
+import { OpenJobsList, type OpenJobsState } from "@/components/dashboard/overview/open-jobs-list"
+import { StageStrip } from "@/components/dashboard/overview/stage-strip"
 import {
-  ProfileCompleteness,
-  type ProfileCompletenessSource,
-} from "@/components/artisan/profile-completeness"
+  ArtisanRail,
+  RailAppointments,
+  RailArtisanActions,
+  RailEarnings,
+  type ArtisanRailStates,
+} from "@/components/dashboard/overview/artisan-rail"
+import type { RailSectionState } from "@/components/dashboard/overview/rail-section"
+import { Button } from "@/components/ui/button"
+import { useAuth } from "@/contexts/auth-context"
+import { apiFetch } from "@/lib/api"
+import {
+  ARTISAN_STAGES,
+  artisanActionRows,
+  artisanJobsHref,
+  artisanStopLabel,
+  artisanSummary,
+  type ArtisanOverview,
+  type ArtisanOverviewSection,
+  type BookingRequest,
+} from "@/lib/artisan-overview"
+import { getArtisanBookings, getArtisanOverview, getOpenJobs, type OpenJob } from "@/lib/artisan-overview-api"
+import { isAbortError, isRateLimited, retryAfter } from "@/lib/customer-api"
+import { ProfileCompleteness, type ProfileCompletenessSource } from "@/components/artisan/profile-completeness"
 
-interface BackendJob {
-  id: string
-  title: string
-  description?: string
-  location?: string
-  status: string
-  createdAt: string
-  customer?: { id: string; firstname: string; lastname: string; profilePicture?: string }
-  service?: { id: string; name: string }
-}
+/** The overview refetches on focus at most this often (same as the customer rail). */
+const REFRESH_MS = 30_000
+const OPEN_JOBS_COUNT = 5
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  IN_PROGRESS: { label: "In Progress", className: "bg-muted text-muted-foreground border-border" },
-  COMPLETED:   { label: "Completed",   className: "bg-primary/10 text-primary border-primary/20" },
-  CANCELLED:   { label: "Cancelled",   className: "bg-destructive/10 text-destructive border-destructive/20" },
-  PENDING:     { label: "Pending",     className: "bg-muted text-muted-foreground border-border" },
-  OPEN:        { label: "Open",        className: "bg-primary/5 text-primary border-primary/15" },
-}
+type OverviewState =
+  | { kind: "loading" }
+  | { kind: "error"; rateLimited: boolean }
+  | { kind: "ready"; data: ArtisanOverview }
 
 export default function ArtisanDashboard() {
+  return (
+    <DashboardLayout>
+      <OverviewContent />
+    </DashboardLayout>
+  )
+}
+
+/**
+ * Artisan Overview (H3): "what needs me now". Booking requests to answer,
+ * today's and the next appointment, jobs by stage, earnings, disputes that
+ * need a response, then open jobs to apply for. Everything except open jobs
+ * comes from `GET /artisans/me/overview`; a section that failed there shows
+ * its own error while the rest still render.
+ */
+function OverviewContent() {
   const { user } = useAuth()
-  const router = useRouter()
-  const [jobs, setJobs] = useState<BackendJob[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  // C2.3: this is where an invisible artisan notices the symptom — an empty
-  // job list and no enquiries — so it's where the reason belongs. Stays null
-  // if the fetch fails, which the banner reads as "unknown" and renders
-  // nothing for rather than guessing.
+  const [now, setNow] = useState(() => new Date())
+
+  // ── B1 overview ────────────────────────────────────────────────────────────
+  const [overview, setOverview] = useState<OverviewState>({ kind: "loading" })
+  const abortRef = useRef<AbortController | null>(null)
+  const lastFetch = useRef(0)
+  const rateTimer = useRef<number | undefined>(undefined)
+
+  const load = useCallback((showSkeleton: boolean) => {
+    abortRef.current?.abort()
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    lastFetch.current = Date.now()
+    if (showSkeleton) setOverview({ kind: "loading" })
+    getArtisanOverview(ctrl.signal)
+      .then((data) => {
+        setOverview({ kind: "ready", data })
+        setNow(new Date())
+      })
+      .catch((err) => {
+        if (isAbortError(err)) return
+        if (isRateLimited(err)) {
+          setOverview((prev) => (prev.kind === "ready" && !showSkeleton ? prev : { kind: "error", rateLimited: true }))
+          window.clearTimeout(rateTimer.current)
+          rateTimer.current = window.setTimeout(
+            () => setOverview((prev) => (prev.kind === "error" ? { kind: "error", rateLimited: false } : prev)),
+            retryAfter(err) * 1000,
+          )
+          return
+        }
+        setOverview((prev) => (prev.kind === "ready" && !showSkeleton ? prev : { kind: "error", rateLimited: false }))
+      })
+  }, [])
+
+  // ── Agreed prices of pending requests (so Accept can be one tap) ──────────
+  const [prices, setPrices] = useState<Map<number, string | null>>(new Map())
+  const loadPrices = useCallback(() => {
+    getArtisanBookings({ status: "PENDING", limit: 100 })
+      .then((rows) => setPrices(new Map(rows.map((b) => [b.id, b.agreedPrice != null ? String(b.agreedPrice) : null]))))
+      .catch(() => setPrices(new Map()))
+  }, [])
+
+  // ── Open jobs ──────────────────────────────────────────────────────────────
+  const [openJobs, setOpenJobs] = useState<OpenJobsState>({ kind: "loading" })
+  const [appliedNow, setAppliedNow] = useState<Set<number>>(new Set())
+  const [applyTarget, setApplyTarget] = useState<OpenJob | null>(null)
+  const loadOpenJobs = useCallback(() => {
+    setOpenJobs({ kind: "loading" })
+    getOpenJobs(OPEN_JOBS_COUNT)
+      .then(({ items, total }) => setOpenJobs({ kind: "ready", items: items.slice(0, OPEN_JOBS_COUNT), total }))
+      .catch(() => setOpenJobs({ kind: "error" }))
+  }, [])
+
+  // C2.3: the hidden-from-search banner. Stays null if the fetch fails.
   const [completeness, setCompleteness] = useState<ProfileCompletenessSource | null>(null)
 
   useEffect(() => {
-    apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs")
-      .then((data) => {
-        const items = Array.isArray(data) ? data : (data.items ?? [])
-        setJobs(items)
-      })
-      .catch(() => setJobs([]))
-      .finally(() => setIsLoading(false))
-  }, [])
-
-  useEffect(() => {
+    load(true)
+    loadPrices()
+    loadOpenJobs()
     apiFetch<ProfileCompletenessSource>("/users/me/artisan-profile")
       .then(setCompleteness)
       .catch(() => {})
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - lastFetch.current < REFRESH_MS) return
+      load(false)
+      loadPrices()
+    }
+    // The reply countdowns move on while the page is open.
+    const tick = window.setInterval(() => setNow(new Date()), 60_000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+      window.clearInterval(tick)
+      abortRef.current?.abort()
+      window.clearTimeout(rateTimer.current)
+    }
+  }, [load, loadPrices, loadOpenJobs])
+
+  const retry = useCallback(() => load(true), [load])
+
+  // ── Accept / Decline ───────────────────────────────────────────────────────
+  const dropRequest = useCallback((id: number) => {
+    setOverview((prev) => {
+      if (prev.kind !== "ready" || !prev.data.pendingRequests) return prev
+      const items = prev.data.pendingRequests.items.filter((r) => r.bookingId !== id)
+      if (items.length === prev.data.pendingRequests.items.length) return prev
+      return {
+        kind: "ready",
+        data: { ...prev.data, pendingRequests: { total: Math.max(0, prev.data.pendingRequests.total - 1), items } },
+      }
+    })
   }, [])
+
+  const { accept, decline, respondingId, dialogs } = useBookingResponse({
+    onAccepted: (id) => {
+      dropRequest(id)
+      // The accepted booking becomes a job to start and may be today's appointment.
+      load(false)
+    },
+    onDeclined: dropRequest,
+  })
+
+  const toTarget = (r: BookingRequest) => ({
+    id: r.bookingId,
+    clientName: r.clientName,
+    agreedPrice: prices.has(r.bookingId) ? prices.get(r.bookingId) : undefined,
+  })
+
+  // ── Section states ─────────────────────────────────────────────────────────
+  const sections = useMemo(() => {
+    type S<T> = RailSectionState<T>
+    if (overview.kind !== "ready") {
+      const s = overview.kind === "loading" ? ({ kind: "loading" } as const) : overview
+      return {
+        requests: s as S<NonNullable<ArtisanOverview["pendingRequests"]>>,
+        counts: s as S<NonNullable<ArtisanOverview["stageCounts"]>>,
+        rail: { actions: s, appointments: s, earnings: s } as ArtisanRailStates,
+      }
+    }
+    const d = overview.data
+    const failed = (k: ArtisanOverviewSection) => d.failedSections.includes(k)
+    const err = { kind: "error", rateLimited: false } as const
+    const requestsOk = d.pendingRequests && !failed("pendingRequests")
+    const earningsOk = d.earnings && !failed("earnings")
+    const disputesOk = d.disputesNeedingResponse != null && !failed("disputes")
+    const bookingsOk = !failed("bookings") && d.todayBookings != null
+    const partial = !requestsOk || !earningsOk || !disputesOk
+    return {
+      requests: requestsOk ? { kind: "ready" as const, data: d.pendingRequests! } : err,
+      counts: d.stageCounts && !failed("stageCounts") ? { kind: "ready" as const, data: d.stageCounts } : err,
+      rail: {
+        actions:
+          !requestsOk && !earningsOk && !disputesOk
+            ? err
+            : {
+                kind: "ready",
+                data: {
+                  requests: requestsOk ? d.pendingRequests!.total : null,
+                  disputes: disputesOk ? d.disputesNeedingResponse : null,
+                  earnings: earningsOk ? d.earnings : null,
+                  partial,
+                },
+              },
+        appointments: bookingsOk
+          ? { kind: "ready", data: { today: d.todayBookings ?? [], next: d.nextBooking ?? null } }
+          : err,
+        earnings: earningsOk ? { kind: "ready", data: d.earnings! } : err,
+      } satisfies ArtisanRailStates,
+    }
+  }, [overview])
 
   if (!user) return null
 
-  const activeJobs    = jobs.filter((j) => j.status === "IN_PROGRESS").length
-  const completedJobs = jobs.filter((j) => j.status === "COMPLETED").length
+  const counts = sections.counts.kind === "ready" ? sections.counts.data : null
+  const requestTotal = sections.requests.kind === "ready" ? sections.requests.data.total : null
+  const todayCount = sections.rail.appointments.kind === "ready" ? sections.rail.appointments.data.today.length : null
+  const showActionsCard =
+    sections.rail.actions.kind === "error" ||
+    (sections.rail.actions.kind === "ready" &&
+      (artisanActionRows(sections.rail.actions.data).length > 0 || sections.rail.actions.data.partial))
+
+  const stops = ARTISAN_STAGES.map((s) => {
+    const count = counts ? counts[s.key] : null
+    return {
+      key: s.stage,
+      label: s.label,
+      count,
+      href: artisanJobsHref(s.stage),
+      ariaLabel: artisanStopLabel(s.label, count),
+      aside: s.stage === "closed",
+    }
+  })
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        {/* Page header */}
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Artisan Dashboard
-            </p>
-            <h1 className="mt-0.5 text-2xl font-bold text-foreground">
-              Good day, {user.name.split(" ")[0]}!
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Here&apos;s your job overview and upcoming appointments
-            </p>
-          </div>
-          <Button className="mt-2 sm:mt-0 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-            <Link href="/dashboard/artisan/jobs">View All Jobs</Link>
-          </Button>
-        </div>
-
-        {/* C2.3: hidden-from-search banner (nothing at all while it loads) */}
-        <ProfileCompleteness variant="compact" profile={completeness} actionLabel="Finish my profile" />
-
-        {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <StatsCard
-            icon={<Briefcase className="h-4 w-4 text-muted-foreground" />}
-            title="Jobs Completed"
-            value={completedJobs}
-            subtitle="Successfully finished"
-          />
-          <StatsCard
-            icon={<Star className="h-4 w-4 text-muted-foreground" />}
-            title="Average Rating"
-            value={user.rating != null ? Number(user.rating).toFixed(1) : "—"}
-            subtitle="Based on client feedback"
-          />
-          <StatsCard
-            icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
-            title="Active Jobs"
-            value={activeJobs}
-            subtitle="Currently in progress"
-          />
-          <StatsCard
-            icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
-            title="Total Reviews"
-            value={user.reviews ?? 0}
-            subtitle="Reviews from clients"
-          />
-        </div>
-
-        {/* Available Jobs */}
-        <Card className="shadow-sm">
-          <div className="border-b p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Available Jobs</h2>
-                <p className="text-sm text-muted-foreground">Browse and apply for open jobs near you</p>
-              </div>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/dashboard/artisan/jobs">View All</Link>
+    <div className="w-full max-w-[1600px] min-[1600px]:p-2">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] min-[1600px]:grid-cols-[minmax(0,1fr)_360px] min-[1600px]:gap-8">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
+          <header data-enter className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">
+                Welcome back, {user.name.split(" ")[0]}
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+                {overview.kind === "loading" ? "Loading your work…" : artisanSummary(counts, requestTotal, todayCount)}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+              <Button className="h-11 sm:h-9" asChild>
+                <Link href="/dashboard/artisan/jobs">
+                  <Search aria-hidden className="h-4 w-4" />
+                  Find jobs
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-11 bg-transparent sm:h-9" asChild>
+                <Link href="/dashboard/artisan/calendar">
+                  <CalendarDays aria-hidden className="h-4 w-4" />
+                  Calendar
+                </Link>
               </Button>
             </div>
+          </header>
+
+          <ProfileCompleteness variant="compact" profile={completeness} actionLabel="Finish my profile" />
+
+          {showActionsCard && (
+            <div className="xl:hidden">
+              <RailArtisanActions state={sections.rail.actions} layout="cards" onRetry={retry} />
+            </div>
+          )}
+
+          <BookingRequests
+            state={sections.requests}
+            prices={prices}
+            now={now}
+            respondingId={respondingId}
+            onAccept={(r) => accept(toTarget(r))}
+            onDecline={(r) => decline(toTarget(r))}
+            onRetry={retry}
+          />
+
+          <div className="xl:hidden">
+            <RailAppointments state={sections.rail.appointments} layout="cards" now={now} onRetry={retry} />
           </div>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="flex justify-center py-10">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : jobs.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">No jobs available right now.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Client</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Service</th>
-                      <th className="hidden px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">Posted</th>
-                      <th className="hidden px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground lg:table-cell">Location</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobs.slice(0, 8).map((job) => {
-                      const clientName = job.customer
-                        ? `${job.customer.firstname} ${job.customer.lastname}`.trim()
-                        : "Unknown"
-                      const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
-                      return (
-                        <tr
-                          key={job.id}
-                          className="border-b last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
-                          onClick={() => router.push(`/dashboard/artisan/jobs/${job.id}`)}
-                        >
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-2.5">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={resolveAvatarUrl(job.customer?.profilePicture)} />
-                                <AvatarFallback><UserRound className="h-3.5 w-3.5" /></AvatarFallback>
-                              </Avatar>
-                              <span className="font-medium text-foreground">{clientName}</span>
-                            </div>
-                          </td>
-                          <td className="px-5 py-3.5 text-muted-foreground">{job.service?.name ?? job.title}</td>
-                          <td className="hidden px-5 py-3.5 text-muted-foreground md:table-cell">
-                            {new Date(job.createdAt).toLocaleDateString()}
-                          </td>
-                          <td className="hidden px-5 py-3.5 text-muted-foreground lg:table-cell">
-                            {job.location ?? "—"}
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <Badge variant="outline" className={cn("text-xs", cfg.className)}>
-                              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                              {cfg.label}
-                            </Badge>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+
+          <section aria-labelledby="stages-label" data-enter style={{ "--reveal-delay": "80ms" } as React.CSSProperties}>
+            <div className="mb-2 flex min-h-6 flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <h2 id="stages-label" className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <ListChecks aria-hidden className="h-4 w-4 text-muted-foreground" />
+                Your jobs
+              </h2>
+              {sections.counts.kind === "loading" ? (
+                <span aria-hidden className="h-4 w-24 rounded bg-muted motion-safe:animate-pulse" />
+              ) : sections.counts.kind === "error" ? (
+                <p className="flex items-center gap-2 text-sm text-destructive">
+                  <AlertCircle aria-hidden className="h-4 w-4 shrink-0" />
+                  <span>{sections.counts.rateLimited ? "Too many requests, please wait a moment" : "Couldn't load job counts."}</span>
+                  {!sections.counts.rateLimited && (
+                    <button
+                      type="button"
+                      onClick={retry}
+                      className="inline-flex min-h-11 items-center rounded font-medium text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:min-h-0 dark:focus-visible:ring-ring"
+                    >
+                      Try again
+                    </button>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm tabular-nums text-muted-foreground">
+                  {sections.counts.data.total} {sections.counts.data.total === 1 ? "job" : "jobs"} in total
+                </p>
+              )}
+            </div>
+            <StageStrip stops={stops} loading={sections.counts.kind === "loading"} labelledBy="stages-label" />
+            {counts && counts.applied > 0 && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                You&apos;ve applied to {counts.applied} open {counts.applied === 1 ? "job" : "jobs"} that{" "}
+                {counts.applied === 1 ? "is" : "are"} waiting for the client to choose.
+              </p>
             )}
-          </CardContent>
-        </Card>
+          </section>
+
+          <OpenJobsList
+            state={openJobs}
+            applied={appliedNow}
+            onApply={setApplyTarget}
+            onRetry={loadOpenJobs}
+          />
+
+          <div className="xl:hidden">
+            <RailEarnings state={sections.rail.earnings} layout="cards" onRetry={retry} />
+          </div>
+        </div>
+
+        <ArtisanRail layout="rail" states={sections.rail} now={now} onRetry={retry} className="hidden xl:block" />
       </div>
-    </DashboardLayout>
+
+      {dialogs}
+      <ApplyJobDialog
+        job={applyTarget}
+        open={applyTarget != null}
+        onOpenChange={(open) => !open && setApplyTarget(null)}
+        onApplied={(id) => setAppliedNow((prev) => new Set(prev).add(Number(id)))}
+      />
+    </div>
   )
 }

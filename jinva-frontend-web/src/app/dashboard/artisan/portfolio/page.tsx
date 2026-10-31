@@ -1,20 +1,19 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   Select,
@@ -34,20 +33,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
-  Upload,
-  ImageIcon,
-  Video,
-  Trash2,
-  Plus,
-  Clock,
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
   CheckCircle,
-  XCircle,
-  GripVertical,
+  Clock,
+  ImageIcon,
   Loader2,
-  AlertTriangle,
+  Plus,
   RotateCcw,
+  Trash2,
+  Upload,
+  Video,
+  XCircle,
 } from "lucide-react"
 import { cn, resolveMediaUrl } from "@/lib/utils"
+import { formatDate } from "@/lib/spending"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
 import type { ApiPortfolioItem, PortfolioStatus } from "@/lib/types"
@@ -55,12 +56,15 @@ import type { ApiPortfolioItem, PortfolioStatus } from "@/lib/types"
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "video/mp4"]
 const MAX_SIZE_BYTES = 50 * 1024 * 1024
 
+const FOCUS_RING =
+  "outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-ring"
+
 function validateFile(file: File): string | null {
   if (!ACCEPTED_TYPES.includes(file.type)) {
-    return "Unsupported file type. Please upload a JPEG, PNG, or MP4 file."
+    return "That file type isn't supported. Upload a JPEG, PNG or MP4."
   }
   if (file.size > MAX_SIZE_BYTES) {
-    return "File exceeds the 50MB size limit."
+    return "That file is over 50 MB. Choose a smaller one."
   }
   return null
 }
@@ -69,23 +73,29 @@ function isVideo(item: ApiPortfolioItem) {
   return item.fileType?.startsWith("video/")
 }
 
+// M2: the status sits on a solid strip under the photo (never on top of it),
+// with an icon and a word, so it reads on any image and never by colour alone.
 const statusConfig: Record<PortfolioStatus, { label: string; className: string; icon: typeof CheckCircle }> = {
-  APPROVED: { label: "Published", className: "bg-primary/10 text-primary border-primary/20", icon: CheckCircle },
-  PENDING: { label: "Under Review", className: "bg-muted text-muted-foreground border-border", icon: Clock },
-  REJECTED: { label: "Rejected", className: "bg-destructive/10 text-destructive border-destructive/20", icon: XCircle },
+  APPROVED: { label: "Published", className: "text-primary", icon: CheckCircle },
+  PENDING: { label: "In review", className: "text-muted-foreground", icon: Clock },
+  REJECTED: { label: "Not approved", className: "text-destructive", icon: XCircle },
 }
 
-const SERVICE_CATEGORIES = [
-  "Plumbing", "Electrical", "Carpentry", "Painting", "Cleaning",
-  "Roofing", "HVAC", "Landscaping", "Masonry", "General",
-]
+type Filter = "ALL" | PortfolioStatus
+
+interface ArtisanProfileServices {
+  id: string
+  services?: { id: string | number; name: string }[]
+}
 
 function FileDropzone({
+  id,
   file,
   onFile,
   accept = "image/jpeg,image/png,video/mp4",
-  label = "Click to upload, or drag and drop",
+  label = "Choose a photo or video",
 }: {
+  id: string
   file: File | null
   onFile: (f: File | null) => void
   accept?: string
@@ -107,45 +117,76 @@ function FileDropzone({
   }
 
   return (
-    <div
-      className={cn(
-        "flex h-36 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed bg-muted/30 px-4 text-center transition-colors hover:bg-muted/50",
-        isDragging ? "border-primary bg-primary/5" : "border-border",
-      )}
-      onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-      onDragLeave={() => setIsDragging(false)}
-      onDrop={(e) => {
-        e.preventDefault()
-        setIsDragging(false)
-        handleFiles(e.dataTransfer.files)
-      }}
-    >
+    <>
       <input
         ref={inputRef}
+        id={id}
         type="file"
         accept={accept}
-        className="hidden"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden
         onChange={(e) => handleFiles(e.target.files)}
       />
-      <Upload className="mb-1 h-8 w-8 text-muted-foreground" />
-      {file ? (
-        <>
-          <p className="max-w-full truncate text-sm font-medium text-foreground">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{(file.size / (1024 * 1024)).toFixed(1)} MB — click to replace</p>
-        </>
-      ) : (
-        <>
-          <p className="text-sm font-medium text-foreground">{label}</p>
-          <p className="text-xs text-muted-foreground">JPEG, PNG, MP4 · max 50MB</p>
-        </>
-      )}
-    </div>
+      <button
+        type="button"
+        className={cn(
+          FOCUS_RING,
+          "flex h-36 w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed bg-muted/30 px-4 text-center transition-colors hover:bg-muted/50",
+          isDragging ? "border-primary bg-primary/5" : "border-border",
+        )}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setIsDragging(false)
+          handleFiles(e.dataTransfer.files)
+        }}
+      >
+        <Upload aria-hidden className="mb-1 h-7 w-7 text-muted-foreground" />
+        {file ? (
+          <>
+            <span className="max-w-full truncate text-sm font-medium text-foreground">{file.name}</span>
+            <span className="text-xs text-muted-foreground">
+              {(file.size / (1024 * 1024)).toFixed(1)} MB. Tap to choose a different file
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-sm font-medium text-foreground">{label}</span>
+            <span className="text-xs text-muted-foreground">JPEG, PNG or MP4, up to 50 MB</span>
+          </>
+        )}
+      </button>
+    </>
+  )
+}
+
+/** P3: categories are the artisan's own services, plus an item's existing tag so a resubmit can keep it. */
+function CategorySelect({
+  id,
+  value,
+  onChange,
+  options,
+}: Readonly<{ id: string; value: string; onChange: (v: string) => void; options: string[] }>) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger id={id} className="h-11 w-full sm:h-9">
+        <SelectValue placeholder="Choose one of your services" />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((c) => (
+          <SelectItem key={c} value={c}>{c}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
 export default function ArtisanPortfolioPage() {
   const [artisanId, setArtisanId] = useState<string | null>(null)
+  const [serviceNames, setServiceNames] = useState<string[]>([])
   const [items, setItems] = useState<ApiPortfolioItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -156,7 +197,7 @@ export default function ArtisanPortfolioPage() {
   const [tag, setTag] = useState("")
   const [isUploading, setIsUploading] = useState(false)
 
-  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ApiPortfolioItem | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
   const [resubmitTarget, setResubmitTarget] = useState<ApiPortfolioItem | null>(null)
@@ -165,8 +206,9 @@ export default function ArtisanPortfolioPage() {
   const [resubmitTag, setResubmitTag] = useState("")
   const [isResubmitting, setIsResubmitting] = useState(false)
 
-  const [activeFilter, setActiveFilter] = useState<"ALL" | "APPROVED" | "PENDING" | "REJECTED">("ALL")
+  const [activeFilter, setActiveFilter] = useState<Filter>("ALL")
   const [draggedId, setDraggedId] = useState<number | null>(null)
+  const [isReordering, setIsReordering] = useState(false)
 
   const fetchItems = useCallback((id: string) => {
     setIsLoading(true)
@@ -177,10 +219,17 @@ export default function ArtisanPortfolioPage() {
       .finally(() => setIsLoading(false))
   }, [])
 
-  useEffect(() => {
-    apiFetch<{ id: string }>("/users/me/artisan-profile")
+  const load = useCallback(() => {
+    setIsLoading(true)
+    setLoadError(false)
+    apiFetch<ArtisanProfileServices>("/users/me/artisan-profile")
       .then((profile) => {
         setArtisanId(profile.id)
+        setServiceNames(
+          Array.from(new Set((profile.services ?? []).map((s) => s.name).filter(Boolean))).sort((a, b) =>
+            a.localeCompare(b, "en-GB"),
+          ),
+        )
         fetchItems(profile.id)
       })
       .catch(() => {
@@ -189,14 +238,18 @@ export default function ArtisanPortfolioPage() {
       })
   }, [fetchItems])
 
+  useEffect(() => { load() }, [load])
+
   const counts = {
-    total: items.length,
-    approved: items.filter((i) => i.status === "APPROVED").length,
-    pending: items.filter((i) => i.status === "PENDING").length,
-    rejected: items.filter((i) => i.status === "REJECTED").length,
+    ALL: items.length,
+    APPROVED: items.filter((i) => i.status === "APPROVED").length,
+    PENDING: items.filter((i) => i.status === "PENDING").length,
+    REJECTED: items.filter((i) => i.status === "REJECTED").length,
   }
 
   const displayed = activeFilter === "ALL" ? items : items.filter((i) => i.status === activeFilter)
+  const canReorder = activeFilter === "ALL" && items.length > 1
+  const hasServices = serviceNames.length > 0
 
   const resetUploadForm = () => {
     setUploadFile(null)
@@ -204,9 +257,16 @@ export default function ArtisanPortfolioPage() {
     setTag("")
   }
 
+  const openUpload = () => {
+    resetUploadForm()
+    // One service: nothing to choose, so pick it.
+    if (serviceNames.length === 1) setTag(serviceNames[0])
+    setUploadOpen(true)
+  }
+
   const handleUpload = async () => {
-    if (!uploadFile) { toast.error("Please select a photo or video to upload."); return }
-    if (!tag) { toast.error("Please choose a service category."); return }
+    if (!uploadFile) { toast.error("Choose a photo or video to upload."); return }
+    if (!tag) { toast.error("Choose which service this work is for."); return }
     const err = validateFile(uploadFile)
     if (err) { toast.error(err); return }
 
@@ -221,28 +281,29 @@ export default function ArtisanPortfolioPage() {
       // Backend always assigns sortOrder = currentMax + 1 (end of the list),
       // so append here to match the real order instead of jumping to the front.
       setItems((prev) => [...prev, created])
-      toast.success("Submitted for review — admin will approve within 24 hours.")
+      // P3: no time promise — review has no guaranteed turnaround.
+      toast.success("Uploaded. It will appear on your profile once our team approves it.")
       resetUploadForm()
       setUploadOpen(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Upload failed. Please try again.")
+      toast.error(e instanceof Error ? e.message : "Upload failed. Try again.")
     } finally {
       setIsUploading(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!deleteId) return
+    if (!deleteTarget) return
     setIsDeleting(true)
     try {
-      await apiFetch(`/portfolio/${deleteId}`, { method: "DELETE" })
-      setItems((prev) => prev.filter((i) => String(i.id) !== deleteId))
-      toast.success("Portfolio item removed.")
+      await apiFetch(`/portfolio/${deleteTarget.id}`, { method: "DELETE" })
+      setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id))
+      toast.success("Removed from your portfolio.")
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to remove item.")
+      toast.error(e instanceof Error ? e.message : "Couldn't remove it. Try again.")
     } finally {
       setIsDeleting(false)
-      setDeleteId(null)
+      setDeleteTarget(null)
     }
   }
 
@@ -255,7 +316,7 @@ export default function ArtisanPortfolioPage() {
 
   const handleResubmit = async () => {
     if (!resubmitTarget) return
-    if (!resubmitFile) { toast.error("Please choose a new file to resubmit."); return }
+    if (!resubmitFile) { toast.error("Choose a new file to send for review."); return }
     const err = validateFile(resubmitFile)
     if (err) { toast.error(err); return }
 
@@ -271,19 +332,20 @@ export default function ArtisanPortfolioPage() {
         body: formData,
       })
       setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
-      toast.success("Resubmitted for review.")
+      toast.success("Sent for review again.")
       setResubmitTarget(null)
       setResubmitFile(null)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Resubmit failed. Please try again.")
+      toast.error(e instanceof Error ? e.message : "Couldn't send it for review. Try again.")
     } finally {
       setIsResubmitting(false)
     }
   }
 
-  // PF7: drag-and-drop reordering, persisted via PATCH /portfolio/:id/reorder.
-  // Only enabled on the "All" tab so sortOrder always reflects the full list.
+  // PF7: reordering is persisted via PATCH /portfolio/:id/reorder. Only on the
+  // "All" view so sortOrder always reflects the full list.
   const persistOrder = async (ordered: ApiPortfolioItem[]) => {
+    setIsReordering(true)
     try {
       await Promise.all(
         ordered.map((item, idx) =>
@@ -298,291 +360,389 @@ export default function ArtisanPortfolioPage() {
         return idx === -1 ? it : { ...it, sortOrder: idx }
       }))
     } catch {
-      toast.error("Couldn't save the new order. Refreshing your portfolio.")
+      toast.error("Couldn't save the new order. Reloading your portfolio.")
       if (artisanId) fetchItems(artisanId)
+    } finally {
+      setIsReordering(false)
     }
   }
 
-  const handleDrop = (targetId: number) => {
-    if (draggedId === null || draggedId === targetId || activeFilter !== "ALL") {
-      setDraggedId(null)
-      return
-    }
+  const moveItem = (fromIdx: number, toIdx: number) => {
+    if (!canReorder || isReordering || toIdx < 0 || toIdx >= items.length || fromIdx === toIdx) return
     const list = [...items]
-    const fromIdx = list.findIndex((i) => i.id === draggedId)
-    const toIdx = list.findIndex((i) => i.id === targetId)
-    if (fromIdx === -1 || toIdx === -1) { setDraggedId(null); return }
     const [moved] = list.splice(fromIdx, 1)
     list.splice(toIdx, 0, moved)
     setItems(list)
-    setDraggedId(null)
     persistOrder(list)
   }
 
-  const filterTabs: { key: typeof activeFilter; label: string; count: number }[] = [
-    { key: "ALL", label: "All", count: counts.total },
-    { key: "APPROVED", label: "Published", count: counts.approved },
-    { key: "PENDING", label: "Pending", count: counts.pending },
-    { key: "REJECTED", label: "Rejected", count: counts.rejected },
+  const handleDrop = (targetId: number) => {
+    const fromIdx = items.findIndex((i) => i.id === draggedId)
+    const toIdx = items.findIndex((i) => i.id === targetId)
+    setDraggedId(null)
+    if (fromIdx === -1 || toIdx === -1) return
+    moveItem(fromIdx, toIdx)
+  }
+
+  const filterTabs: { key: Filter; label: string }[] = [
+    { key: "ALL", label: "All" },
+    { key: "APPROVED", label: "Published" },
+    { key: "PENDING", label: "In review" },
+    { key: "REJECTED", label: "Not approved" },
   ]
+
+  const resubmitOptions =
+    resubmitTarget?.tag && !serviceNames.includes(resubmitTarget.tag)
+      ? [resubmitTarget.tag, ...serviceNames]
+      : serviceNames
 
   return (
     <DashboardLayout>
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Portfolio</h1>
-            <p className="text-sm text-muted-foreground">
-              Showcase your work — all uploads require admin approval before going live
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">Portfolio</h1>
+            <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground sm:text-base">
+              Photos and videos of your finished work. Our team checks each one before clients can see it.
             </p>
           </div>
-          <Dialog open={uploadOpen} onOpenChange={(o) => { setUploadOpen(o); if (!o) resetUploadForm() }}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground hover:bg-primary/90 sm:shrink-0" disabled={!artisanId}>
-                <Plus className="mr-2 h-4 w-4" />
-                Upload Work
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Upload Portfolio Item</DialogTitle>
-                <DialogDescription>
-                  Add a photo or video of completed work. It will be reviewed before publishing.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <FileDropzone file={uploadFile} onFile={setUploadFile} />
-                <div className="space-y-2">
-                  <Label htmlFor="caption">Caption (optional)</Label>
-                  <Input
-                    id="caption"
-                    placeholder="Briefly describe the work done"
-                    value={caption}
-                    onChange={(e) => setCaption(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Service Category *</Label>
-                  <Select value={tag} onValueChange={setTag}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SERVICE_CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 bg-transparent" onClick={() => setUploadOpen(false)} disabled={isUploading}>
-                    Cancel
-                  </Button>
-                  <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleUpload} disabled={isUploading}>
-                    {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Submit for Review
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "Total Items", value: counts.total, color: "text-foreground" },
-            { label: "Published", value: counts.approved, color: "text-primary" },
-            { label: "Under Review", value: counts.pending, color: "text-muted-foreground" },
-            { label: "Rejected", value: counts.rejected, color: "text-destructive" },
-          ].map(({ label, value, color }) => (
-            <Card key={label}>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className={cn("mt-0.5 text-2xl font-bold", color)}>{value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Filter tabs */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-1 rounded-lg border bg-muted/30 p-1 w-fit">
-            {filterTabs.map(({ key, label, count }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setActiveFilter(key)}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-all",
-                  activeFilter === key
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-                <span className={cn(
-                  "ml-1.5 rounded-full px-1.5 py-0.5 text-xs",
-                  activeFilter === key ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
-                )}>
-                  {count}
-                </span>
-              </button>
-            ))}
-          </div>
-          {activeFilter === "ALL" && items.length > 1 && (
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <GripVertical className="h-3.5 w-3.5" /> Drag items to reorder
-            </p>
+          {items.length > 0 && hasServices && (
+            <Button className={cn(FOCUS_RING, "h-11 w-full sm:h-10 sm:w-auto sm:shrink-0")} onClick={openUpload}>
+              <Plus aria-hidden className="h-4 w-4" />
+              Upload work
+            </Button>
           )}
         </div>
 
-        {/* Grid */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
+          <GridSkeleton />
         ) : loadError ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <AlertTriangle className="mb-4 h-12 w-12 text-destructive/60" />
-              <h3 className="font-semibold text-foreground">Couldn&apos;t load your portfolio</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Please refresh the page to try again.</p>
-            </CardContent>
-          </Card>
-        ) : displayed.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <ImageIcon className="mb-4 h-12 w-12 text-muted-foreground/40" />
-              <h3 className="font-semibold text-foreground">No {activeFilter !== "ALL" ? activeFilter.toLowerCase() : ""} items</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Upload photos and videos of your completed work.</p>
-            </CardContent>
-          </Card>
+          <section
+            aria-labelledby="portfolio-error-title"
+            className="flex flex-col items-start gap-3 rounded-xl border bg-card px-5 py-6 sm:px-6"
+          >
+            <AlertCircle aria-hidden className="h-6 w-6 text-destructive" />
+            <div>
+              <h2 id="portfolio-error-title" className="font-semibold text-foreground">
+                Couldn&apos;t load your portfolio
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">Check your connection and try again.</p>
+            </div>
+            <Button variant="outline" className={cn(FOCUS_RING, "h-11 bg-transparent sm:h-9")} onClick={load}>
+              Try again
+            </Button>
+          </section>
+        ) : items.length === 0 ? (
+          <section
+            aria-labelledby="portfolio-empty-title"
+            className="flex flex-col items-start gap-4 rounded-xl border border-dashed px-5 py-8 sm:px-8 sm:py-10"
+          >
+            <span aria-hidden className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <ImageIcon className="h-6 w-6" />
+            </span>
+            <div>
+              <h2 id="portfolio-empty-title" className="text-lg font-semibold text-foreground">
+                Show clients what you can do
+              </h2>
+              <p className="mt-1.5 max-w-[56ch] text-sm text-muted-foreground sm:text-base">
+                {hasServices
+                  ? "Add photos or videos of jobs you've finished. Clear before-and-after shots help clients choose you."
+                  : "Each piece of work is filed under one of your services. Add a service first, then upload your work."}
+              </p>
+            </div>
+            {hasServices ? (
+              <Button className={cn(FOCUS_RING, "h-11 w-full sm:w-auto")} onClick={openUpload}>
+                <Plus aria-hidden className="h-4 w-4" />
+                Upload work
+              </Button>
+            ) : (
+              <Button asChild className={cn(FOCUS_RING, "h-11 w-full sm:w-auto")}>
+                <Link href="/dashboard/artisan/services">Add a service</Link>
+              </Button>
+            )}
+          </section>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {displayed.map((item) => {
-              const cfg = statusConfig[item.status]
-              const StatusIcon = cfg.icon
-              const draggable = activeFilter === "ALL"
-              return (
-                <Card
-                  key={item.id}
-                  className={cn(
-                    "group overflow-hidden transition-shadow hover:shadow-md",
-                    draggedId === item.id && "opacity-50",
-                  )}
-                  draggable={draggable}
-                  onDragStart={() => draggable && setDraggedId(item.id)}
-                  onDragOver={(e) => draggable && e.preventDefault()}
-                  onDrop={() => draggable && handleDrop(item.id)}
-                >
-                  <div className="relative h-44 bg-muted">
-                    {isVideo(item) ? (
-                      <video src={resolveMediaUrl(item.fileUrl)} className="h-full w-full object-cover" muted preload="metadata" />
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={resolveMediaUrl(item.fileUrl)}
-                        alt={item.caption || item.tag || "Portfolio item"}
-                        className="h-full w-full object-cover"
-                      />
-                    )}
-                    {item.status === "REJECTED" && (
-                      <div className="absolute inset-0 bg-destructive/10" />
-                    )}
-                    {draggable && (
-                      <div className="absolute left-2 top-2 flex h-6 w-6 cursor-grab items-center justify-center rounded-full bg-background/80 text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                        <GripVertical className="h-3.5 w-3.5" />
-                      </div>
-                    )}
-                    <div className={cn("absolute top-2", draggable ? "left-9" : "left-2")}>
-                      <Badge variant="outline" className={cn("text-xs", cfg.className)}>
-                        <StatusIcon className="mr-1 h-3 w-3" />
-                        {cfg.label}
-                      </Badge>
-                    </div>
-                    <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Button
-                        size="icon"
-                        variant="destructive"
-                        className="h-7 w-7"
-                        onClick={() => setDeleteId(String(item.id))}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                  <CardContent className="p-3">
-                    <p className="truncate text-sm font-medium text-foreground">{item.caption || "Untitled"}</p>
-                    <div className="mt-1.5 flex items-center justify-between">
-                      {item.tag && <Badge variant="secondary" className="text-xs">{item.tag}</Badge>}
-                      {isVideo(item) && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Video className="h-3 w-3" /> Video
-                        </span>
+          <>
+            {!hasServices && (
+              <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                To upload more work, first{" "}
+                <Link href="/dashboard/artisan/services" className="font-medium text-primary underline-offset-4 hover:underline">
+                  add a service
+                </Link>
+                .
+              </p>
+            )}
+
+            {/* M2/M4: one compact segmented control carries the counts — no stat cards. */}
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div
+                role="group"
+                aria-label="Show"
+                className="grid w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted p-1 sm:inline-flex sm:w-auto"
+              >
+                {filterTabs.map(({ key, label }) => {
+                  const on = activeFilter === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setActiveFilter(key)}
+                      className={cn(
+                        FOCUS_RING,
+                        "flex h-11 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm sm:h-9",
+                        on
+                          ? "bg-card font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgb(0_0_0/0.06)]"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
-                    </div>
-                    {item.status === "REJECTED" && (
-                      <div className="mt-2 space-y-2">
-                        {item.rejectionReason && (
-                          <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
-                            <XCircle className="mr-1 inline h-3 w-3" />
+                    >
+                      {label}
+                      <span className="tabular-nums text-muted-foreground">{counts[key]}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              {canReorder && (
+                <p className="text-sm text-muted-foreground">
+                  Clients see your published work in this order. Use the arrows to move an item.
+                </p>
+              )}
+            </div>
+
+            {displayed.length === 0 ? (
+              <div className="rounded-xl border border-dashed px-5 py-8 text-center">
+                <p className="font-medium text-foreground">
+                  {activeFilter === "APPROVED"
+                    ? "Nothing published yet"
+                    : activeFilter === "PENDING"
+                      ? "Nothing waiting for review"
+                      : "Nothing was turned down"}
+                </p>
+                <Button
+                  variant="link"
+                  className={cn(FOCUS_RING, "mt-1 h-11")}
+                  onClick={() => setActiveFilter("ALL")}
+                >
+                  Show all work
+                </Button>
+              </div>
+            ) : (
+              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" aria-busy={isReordering || undefined}>
+                {displayed.map((item) => {
+                  const cfg = statusConfig[item.status]
+                  const StatusIcon = cfg.icon
+                  const index = items.findIndex((i) => i.id === item.id)
+                  const name = item.caption || item.tag || "Untitled work"
+                  return (
+                    <li
+                      key={item.id}
+                      className={cn(
+                        "flex flex-col overflow-hidden rounded-xl border bg-card",
+                        draggedId === item.id && "opacity-50",
+                      )}
+                      draggable={canReorder}
+                      onDragStart={() => canReorder && setDraggedId(item.id)}
+                      onDragEnd={() => setDraggedId(null)}
+                      onDragOver={(e) => canReorder && e.preventDefault()}
+                      onDrop={() => canReorder && handleDrop(item.id)}
+                    >
+                      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+                        {isVideo(item) ? (
+                          <video
+                            src={resolveMediaUrl(item.fileUrl)}
+                            className="absolute inset-0 h-full w-full object-cover"
+                            muted
+                            preload="metadata"
+                            aria-label={name}
+                          />
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={resolveMediaUrl(item.fileUrl)}
+                            alt={item.caption || `Work for ${item.tag ?? "a client"}`}
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                        )}
+                        {isVideo(item) && (
+                          <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs font-medium text-white">
+                            <Video aria-hidden className="h-3.5 w-3.5" />
+                            Video
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-1 flex-col gap-2 p-4">
+                        <p className={cn("flex items-center gap-1.5 text-sm font-medium", cfg.className)}>
+                          <StatusIcon aria-hidden className="h-4 w-4" />
+                          {cfg.label}
+                        </p>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">{item.caption || "No caption"}</p>
+                          <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                            {[item.tag, item.createdAt ? `Added ${formatDate(item.createdAt)}` : null]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </p>
+                        </div>
+
+                        {item.status === "REJECTED" && item.rejectionReason && (
+                          <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
                             {item.rejectionReason}
                           </p>
                         )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 w-full gap-1.5 bg-transparent text-xs"
-                          onClick={() => openResubmit(item)}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          Resubmit
-                        </Button>
+
+                        <div className="mt-auto flex items-center gap-1 pt-1">
+                          {item.status === "REJECTED" && (
+                            <Button
+                              variant="outline"
+                              className={cn(FOCUS_RING, "h-11 gap-1.5 bg-transparent sm:h-9")}
+                              onClick={() => openResubmit(item)}
+                            >
+                              <RotateCcw aria-hidden className="h-4 w-4" />
+                              Send again
+                            </Button>
+                          )}
+                          {canReorder && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(FOCUS_RING, "h-11 w-11 sm:h-9 sm:w-9")}
+                                aria-label={`Move ${name} earlier`}
+                                disabled={index <= 0 || isReordering}
+                                onClick={() => moveItem(index, index - 1)}
+                              >
+                                <ArrowLeft aria-hidden className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(FOCUS_RING, "h-11 w-11 sm:h-9 sm:w-9")}
+                                aria-label={`Move ${name} later`}
+                                disabled={index >= items.length - 1 || isReordering}
+                                onClick={() => moveItem(index, index + 1)}
+                              >
+                                <ArrowRight aria-hidden className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              FOCUS_RING,
+                              "ml-auto h-11 w-11 text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-9",
+                            )}
+                            aria-label={`Remove ${name}`}
+                            onClick={() => setDeleteTarget(item)}
+                          >
+                            <Trash2 aria-hidden className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </>
         )}
       </div>
 
-      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+      <Dialog open={uploadOpen} onOpenChange={(o) => { setUploadOpen(o); if (!o) resetUploadForm() }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload work</DialogTitle>
+            <DialogDescription>
+              Add a photo or video of a finished job. Our team checks it before clients can see it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <FileDropzone id="upload-file" file={uploadFile} onFile={setUploadFile} />
+            <div className="space-y-2">
+              <Label htmlFor="upload-service">Service</Label>
+              <CategorySelect id="upload-service" value={tag} onChange={setTag} options={serviceNames} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="caption">Caption (optional)</Label>
+              <Input
+                id="caption"
+                className="h-11 sm:h-9"
+                placeholder="What did you do on this job?"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button
+                variant="outline"
+                className="h-11 flex-1 bg-transparent sm:h-9"
+                onClick={() => setUploadOpen(false)}
+                disabled={isUploading}
+              >
+                Cancel
+              </Button>
+              <Button className="h-11 flex-1 sm:h-9" onClick={handleUpload} disabled={isUploading}>
+                {isUploading && <Loader2 aria-hidden className="h-4 w-4 motion-safe:animate-spin" />}
+                Upload
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Portfolio Item</AlertDialogTitle>
+            <AlertDialogTitle>Remove this work?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove the item from your portfolio. This action cannot be undone.
+              It will be deleted from your portfolio and clients won&apos;t see it any more. You can&apos;t undo this.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 sm:h-9" disabled={isDeleting}>Keep it</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="h-11 bg-destructive text-white hover:bg-destructive/90 sm:h-9"
             >
-              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isDeleting && <Loader2 aria-hidden className="h-4 w-4 motion-safe:animate-spin" />}
               Remove
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* PF7a: resubmit a rejected item — picks a new file, resets to PENDING */}
+      {/* PF7a: send a rejected item again — picks a new file, resets to PENDING */}
       <Dialog open={!!resubmitTarget} onOpenChange={(o) => { if (!o) { setResubmitTarget(null); setResubmitFile(null) } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Resubmit Portfolio Item</DialogTitle>
+            <DialogTitle>Send for review again</DialogTitle>
             <DialogDescription>
-              Upload a new file to replace the rejected one. It will go back into the review queue.
+              Choose a new file to replace the one that wasn&apos;t approved. It goes back to our team to check.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <FileDropzone file={resubmitFile} onFile={setResubmitFile} label="Click to upload a replacement file" />
+            {resubmitTarget?.rejectionReason && (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                Reason: {resubmitTarget.rejectionReason}
+              </p>
+            )}
+            <FileDropzone
+              id="resubmit-file"
+              file={resubmitFile}
+              onFile={setResubmitFile}
+              label="Choose a replacement file"
+            />
+            <div className="space-y-2">
+              <Label htmlFor="resubmit-service">Service</Label>
+              <CategorySelect
+                id="resubmit-service"
+                value={resubmitTag}
+                onChange={setResubmitTag}
+                options={resubmitOptions}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="resubmit-caption">Caption (optional)</Label>
               <Textarea
@@ -592,31 +752,39 @@ export default function ArtisanPortfolioPage() {
                 onChange={(e) => setResubmitCaption(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Service Category</Label>
-              <Select value={resubmitTag} onValueChange={setResubmitTag}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SERVICE_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 bg-transparent" onClick={() => setResubmitTarget(null)} disabled={isResubmitting}>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button
+                variant="outline"
+                className="h-11 flex-1 bg-transparent sm:h-9"
+                onClick={() => setResubmitTarget(null)}
+                disabled={isResubmitting}
+              >
                 Cancel
               </Button>
-              <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleResubmit} disabled={isResubmitting}>
-                {isResubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Resubmit for Review
+              <Button className="h-11 flex-1 sm:h-9" onClick={handleResubmit} disabled={isResubmitting}>
+                {isResubmitting && <Loader2 aria-hidden className="h-4 w-4 motion-safe:animate-spin" />}
+                Send for review
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
     </DashboardLayout>
+  )
+}
+
+function GridSkeleton() {
+  return (
+    <div aria-hidden className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="overflow-hidden rounded-xl border bg-card">
+          <Skeleton className="aspect-[4/3] w-full rounded-none" />
+          <div className="space-y-2 p-4">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }

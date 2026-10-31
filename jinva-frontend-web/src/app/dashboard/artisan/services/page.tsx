@@ -1,14 +1,23 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Search, Wrench, Plus, Minus, Loader2, CheckCircle2 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { AlertCircle, CheckCircle2, Loader2, Plus, Search, Wrench } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { formatCurrency } from "@/lib/utils"
+import { cn, formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   readProfileCompleteness,
@@ -32,18 +41,25 @@ interface ArtisanProfile extends ProfileCompletenessSource {
   services?: { id: string; name: string }[]
 }
 
+const FOCUS_RING =
+  "outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-ring"
+
+type LoadState = "loading" | "error" | "ready"
+
 export default function ArtisanServicesPage() {
   const [allServices, setAllServices] = useState<BackendService[]>([])
   const [enrolledIds, setEnrolledIds] = useState<Set<string>>(new Set())
-  const [isLoading, setIsLoading] = useState(true)
+  const [loadState, setLoadState] = useState<LoadState>("loading")
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [confirmRemove, setConfirmRemove] = useState<BackendService | null>(null)
   // FE-3: what the search gate said about this artisan *before* the next add.
   // Stays null if the profile fetch fails, which `readProfileCompleteness`
   // reads as "unknown" — and unknown never earns a visibility claim.
   const [completeness, setCompleteness] = useState<ProfileCompletenessSource | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoadState("loading")
     Promise.all([
       apiFetch<BackendService[] | { items: BackendService[] }>("/services"),
       apiFetch<ArtisanProfile>("/users/me/artisan-profile"),
@@ -53,25 +69,32 @@ export default function ArtisanServicesPage() {
           ? servicesResult
           : (servicesResult as { items: BackendService[] }).items ?? []
         setAllServices(services)
-        setEnrolledIds(new Set(profile.services?.map((s) => s.id) ?? []))
+        // String ids on both sides: the profile and the catalogue don't agree
+        // on number vs string, and a Set compares by identity.
+        setEnrolledIds(new Set(profile.services?.map((s) => String(s.id)) ?? []))
         setCompleteness({
           isProfileComplete: profile.isProfileComplete,
           missingFields: profile.missingFields,
         })
+        setLoadState("ready")
       })
-      .catch(() => toast.error("Could not load services."))
-      .finally(() => setIsLoading(false))
+      .catch(() => setLoadState("error"))
   }, [])
 
-  const filtered = allServices.filter(
-    (s) =>
-      !searchQuery ||
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.description ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  useEffect(() => { load() }, [load])
 
-  const myServices = filtered.filter((s) => enrolledIds.has(s.id))
-  const availableServices = filtered.filter((s) => !enrolledIds.has(s.id))
+  const query = searchQuery.trim().toLowerCase()
+  // P2: your services are always shown first and never hidden by the search —
+  // the search only narrows the catalogue you're adding from.
+  const myServices = allServices.filter((s) => enrolledIds.has(String(s.id)))
+  const availableServices = allServices.filter(
+    (s) =>
+      !enrolledIds.has(String(s.id)) &&
+      (!query ||
+        s.name.toLowerCase().includes(query) ||
+        (s.description ?? "").toLowerCase().includes(query)),
+  )
+  const notYetAddedCount = allServices.length - myServices.length
 
   const handleAdd = async (serviceId: string) => {
     setActionLoading(serviceId)
@@ -82,7 +105,7 @@ export default function ArtisanServicesPage() {
       const saved = await apiFetch<ArtisanProfile>(`/artisans/me/services/${serviceId}`, {
         method: "POST",
       })
-      setEnrolledIds((prev) => new Set([...prev, serviceId]))
+      setEnrolledIds((prev) => new Set([...prev, String(serviceId)]))
       setCompleteness({
         isProfileComplete: saved.isProfileComplete,
         missingFields: saved.missingFields,
@@ -90,19 +113,16 @@ export default function ArtisanServicesPage() {
 
       // Exactly one toast, never the ordinary one stacked with a second. The
       // visibility variant needs completeness to be *known* on both sides of
-      // the write and to have actually flipped: other gaps still open, an
-      // artisan who was already complete, and a response that doesn't carry
-      // completeness all fall through to the ordinary toast. C2's "render
-      // nothing when unknown" rule applies to this claim too — never guess
-      // whether someone is in customer search.
+      // the write and to have actually flipped (C2: never guess whether
+      // someone is in client search).
       const nowComplete = readProfileCompleteness(saved).state === "complete"
       toast.success(
         wasIncomplete && nowComplete
-          ? "Service added — customers can now find you in search."
+          ? "Service added. Clients can now find you in search."
           : "Service added to your profile.",
       )
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to add service.")
+      toast.error(err instanceof Error ? err.message : "Couldn't add the service. Try again.")
     } finally {
       setActionLoading(null)
     }
@@ -116,145 +136,262 @@ export default function ArtisanServicesPage() {
       })
       setEnrolledIds((prev) => {
         const next = new Set(prev)
-        next.delete(serviceId)
+        next.delete(String(serviceId))
         return next
       })
-      // No "you've dropped out of search" message this round (the hero badge and
-      // the checklist already carry that) — but the stored completeness is
-      // updated anyway, so that re-adding a service straight afterwards judges
-      // its transition against the real state rather than a stale one.
+      // Stored so that re-adding a service straight afterwards judges its
+      // transition against the real state rather than a stale one.
       setCompleteness({
         isProfileComplete: saved.isProfileComplete,
         missingFields: saved.missingFields,
       })
       toast.success("Service removed from your profile.")
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove service.")
+      toast.error(err instanceof Error ? err.message : "Couldn't remove the service. Try again.")
     } finally {
       setActionLoading(null)
     }
   }
 
-  const ServiceCard = ({ service, enrolled }: { service: BackendService; enrolled: boolean }) => (
-    <Card className={`overflow-hidden transition-shadow hover:shadow-md ${!enrolled ? "opacity-90" : ""}`}>
-      <CardContent className="p-0">
-        <div className={`p-5 ${enrolled ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground" : "bg-muted/40"}`}>
-          <div className="flex items-center justify-between">
-            <div className={`rounded-lg p-2.5 ${enrolled ? "bg-white/20" : "bg-background"}`}>
-              <Wrench className={`h-5 w-5 ${enrolled ? "" : "text-muted-foreground"}`} />
-            </div>
-            {enrolled && (
-              <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                <CheckCircle2 className="mr-1 h-3 w-3" />
-                Active
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-3 p-5">
-          <div>
-            <h3 className="font-semibold text-foreground">{service.name}</h3>
-            {/* `!= null` on purpose: the API returns `price: null` for a service
-                with no set price, and `!== undefined` let that through — which
-                formats as "From GH₵ 0.00" and states a price of zero that
-                nobody set. No price means no price line. */}
-            {service.price != null && (
-              <p className="text-sm text-muted-foreground">From {formatCurrency(service.price)}</p>
-            )}
-          </div>
-          {service.description && (
-            <p className="text-sm text-muted-foreground line-clamp-2">{service.description}</p>
-          )}
-          <Button
-            size="sm"
-            disabled={actionLoading === service.id}
-            onClick={() => enrolled ? handleRemove(service.id) : handleAdd(service.id)}
-            className={
-              enrolled
-                ? "w-full bg-transparent border border-destructive/50 text-destructive hover:bg-destructive/5"
-                : "w-full bg-primary text-primary-foreground hover:bg-primary/90"
-            }
-            variant={enrolled ? "outline" : "default"}
-          >
-            {actionLoading === service.id ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : enrolled ? (
-              <><Minus className="mr-1.5 h-3.5 w-3.5" />Remove</>
-            ) : (
-              <><Plus className="mr-1.5 h-3.5 w-3.5" />Add to Profile</>
-            )}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
+  const removingLast = confirmRemove !== null && myServices.length === 1
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Artisan</p>
-          <h1 className="mt-0.5 text-2xl font-bold text-foreground">My Services</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage the services you offer on your profile
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">Services</h1>
+          <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground sm:text-base">
+            The work you take on. Clients find you in search by these services.
           </p>
         </div>
 
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search services..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
+        {loadState === "loading" ? (
+          <ListSkeleton />
+        ) : loadState === "error" ? (
+          <section
+            aria-labelledby="services-error-title"
+            className="flex flex-col items-start gap-3 rounded-xl border bg-card px-5 py-6 sm:px-6"
+          >
+            <AlertCircle aria-hidden className="h-6 w-6 text-destructive" />
+            <div>
+              <h2 id="services-error-title" className="font-semibold text-foreground">
+                Couldn&apos;t load your services
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">Check your connection and try again.</p>
+            </div>
+            <Button variant="outline" className={cn(FOCUS_RING, "h-11 bg-transparent sm:h-9")} onClick={load}>
+              Try again
+            </Button>
+          </section>
         ) : (
-          <div className="space-y-8">
-            {myServices.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-base font-semibold text-foreground">
-                  Active Services
-                  <Badge variant="secondary" className="ml-2">{myServices.length}</Badge>
+          <>
+            {/* Your services — pinned first */}
+            <section aria-labelledby="my-services-title" className="overflow-hidden rounded-xl border bg-card">
+              <div className="flex min-h-[49px] items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
+                <h2 id="my-services-title" className="text-[15px] font-semibold text-foreground">
+                  Your services
                 </h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {myServices.map((s) => <ServiceCard key={s.id} service={s} enrolled={true} />)}
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {myServices.length === 1 ? "1 service" : `${myServices.length} services`}
+                </span>
+              </div>
+              {myServices.length === 0 ? (
+                <div className="px-4 py-6 sm:px-5">
+                  <p className="font-medium text-foreground">You don&apos;t offer any services yet</p>
+                  <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
+                    Clients can&apos;t find you in search until you add at least one. Pick from the list below.
+                  </p>
                 </div>
-              </section>
-            )}
+              ) : (
+                <ul className="divide-y">
+                  {myServices.map((s) => (
+                    <ServiceRow
+                      key={s.id}
+                      service={s}
+                      enrolled
+                      busy={actionLoading === String(s.id)}
+                      disabled={actionLoading !== null}
+                      onAction={() => setConfirmRemove(s)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </section>
 
-            {availableServices.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-base font-semibold text-foreground">
-                  Available to Add
-                  <Badge variant="secondary" className="ml-2">{availableServices.length}</Badge>
+            {/* Catalogue to add from */}
+            <section aria-labelledby="add-services-title" className="overflow-hidden rounded-xl border bg-card">
+              <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <h2 id="add-services-title" className="text-[15px] font-semibold text-foreground">
+                  Add a service
+                  <span className="ml-2 text-sm font-normal tabular-nums text-muted-foreground">
+                    {notYetAddedCount} available
+                  </span>
                 </h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {availableServices.map((s) => <ServiceCard key={s.id} service={s} enrolled={false} />)}
-                </div>
-              </section>
-            )}
-
-            {filtered.length === 0 && (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="rounded-full bg-muted p-4">
-                    <Search className="h-8 w-8 text-muted-foreground" />
+                {notYetAddedCount > 0 && (
+                  <div className="relative w-full sm:max-w-xs">
+                    <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      aria-label="Search services to add"
+                      placeholder="Search services"
+                      className="h-11 pl-9 sm:h-9"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold text-foreground">No services found</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Try adjusting your search</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                )}
+              </div>
+              {notYetAddedCount === 0 ? (
+                <p className="px-4 py-6 text-sm text-muted-foreground sm:px-5">
+                  You offer every service on JinVa.
+                </p>
+              ) : availableServices.length === 0 ? (
+                <div className="flex flex-col items-start gap-3 px-4 py-6 sm:px-5">
+                  <p className="text-sm text-muted-foreground">
+                    No services match &ldquo;<span className="text-foreground">{searchQuery.trim()}</span>&rdquo;.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className={cn(FOCUS_RING, "h-11 bg-transparent sm:h-9")}
+                    onClick={() => setSearchQuery("")}
+                  >
+                    Clear search
+                  </Button>
+                </div>
+              ) : (
+                <ul className="divide-y">
+                  {availableServices.map((s) => (
+                    <ServiceRow
+                      key={s.id}
+                      service={s}
+                      enrolled={false}
+                      busy={actionLoading === String(s.id)}
+                      disabled={actionLoading !== null}
+                      onAction={() => handleAdd(String(s.id))}
+                    />
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <p className="text-sm text-muted-foreground">
+              Typical starting prices are a guide for clients. You agree the final price with each client.
+            </p>
+          </>
         )}
       </div>
+
+      <AlertDialog open={confirmRemove !== null} onOpenChange={(o) => !o && setConfirmRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {confirmRemove?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removingLast
+                ? "This is your only service. Once it's removed, clients won't find you in search until you add a service again."
+                : "Clients won't find you for this service any more. You can add it back at any time."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-11 sm:h-9">Keep service</AlertDialogCancel>
+            <AlertDialogAction
+              className="h-11 bg-destructive text-white hover:bg-destructive/90 sm:h-9"
+              onClick={() => {
+                if (confirmRemove) handleRemove(String(confirmRemove.id))
+                setConfirmRemove(null)
+              }}
+            >
+              Remove service
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
+  )
+}
+
+function ServiceRow({
+  service,
+  enrolled,
+  busy,
+  disabled,
+  onAction,
+}: Readonly<{
+  service: BackendService
+  enrolled: boolean
+  busy: boolean
+  disabled: boolean
+  onAction: () => void
+}>) {
+  return (
+    <li className="flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5">
+      <span
+        aria-hidden
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+          enrolled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {enrolled ? <CheckCircle2 className="h-5 w-5" /> : <Wrench className="h-4 w-4" />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-foreground">{service.name}</p>
+        {service.description && (
+          <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground sm:line-clamp-1">{service.description}</p>
+        )}
+        {/* `!= null` on purpose: the API returns `price: null` for a service
+            with no set price. No price means no price line. P2: this is the
+            catalogue's typical price, not one the artisan has set. */}
+        {service.price != null && (
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Typical starting price{" "}
+            <span className="tnum font-medium tabular-nums text-foreground">{formatCurrency(service.price)}</span>
+          </p>
+        )}
+      </div>
+      <Button
+        variant="outline"
+        aria-label={enrolled ? `Remove ${service.name}` : `Add ${service.name}`}
+        disabled={disabled}
+        onClick={onAction}
+        className={cn(
+          FOCUS_RING,
+          "h-11 min-w-[5.5rem] shrink-0 bg-transparent sm:h-9",
+          enrolled
+            ? "text-muted-foreground hover:border-destructive/50 hover:text-destructive"
+            : "border-primary/40 text-primary hover:bg-primary/5",
+        )}
+      >
+        {busy ? (
+          <Loader2 aria-hidden className="h-4 w-4 motion-safe:animate-spin" />
+        ) : enrolled ? (
+          "Remove"
+        ) : (
+          <>
+            <Plus aria-hidden className="h-4 w-4" />
+            Add
+          </>
+        )}
+      </Button>
+    </li>
+  )
+}
+
+function ListSkeleton() {
+  return (
+    <div aria-hidden className="overflow-hidden rounded-xl border bg-card">
+      <div className="border-b px-4 py-3 sm:px-5">
+        <Skeleton className="h-5 w-32" />
+      </div>
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="flex items-center gap-3 border-b px-4 py-3 last:border-b-0 sm:px-5">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3.5 w-64 max-w-full" />
+          </div>
+          <Skeleton className="h-9 w-20" />
+        </div>
+      ))}
+    </div>
   )
 }

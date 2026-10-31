@@ -72,7 +72,7 @@ function mapArtisan(a: BackendArtisan) {
   return {
     id: a.id,
     name: `${a.user.firstname} ${a.user.lastname}`.trim(),
-    specialization: a.businessName || a.services?.[0]?.name || "General Service",
+    specialization: a.businessName || a.services?.[0]?.name || "General service",
     avatar: a.user.profilePicture,
     avgRating: Number(a.averageRating ?? 0),
     totalReviews: Number(a.totalReviews ?? 0),
@@ -90,7 +90,7 @@ function mapArtisan(a: BackendArtisan) {
 type MappedArtisan = ReturnType<typeof mapArtisan>
 
 const ratingOptions = [
-  { label: "All Ratings", value: 0 },
+  { label: "Any rating", value: 0 },
   { label: "4.5 & above", value: 4.5 },
   { label: "4.0 & above", value: 4.0 },
   { label: "3.5 & above", value: 3.5 },
@@ -102,8 +102,8 @@ const ratingOptions = [
 // api-contract.md §1 note) and "nearest" is deferred (Decision #1) — neither
 // is offered here so we never send an unsupported value.
 const sortOptions = [
-  { label: "Highest Rated", value: "rating" },
-  { label: "Most Experienced", value: "experience" },
+  { label: "Highest rated", value: "rating" },
+  { label: "Most experienced", value: "experience" },
 ]
 
 const availabilityWindowOptions = [
@@ -119,7 +119,7 @@ export default function SearchArtisansPage() {
   const [keyword, setKeyword] = useState("")
   const [location, setLocation] = useState("")
   const [selectedServiceId, setSelectedServiceId] = useState("")
-  const [selectedServiceName, setSelectedServiceName] = useState("All Services")
+  const [selectedServiceName, setSelectedServiceName] = useState("All services")
   const [minRating, setMinRating] = useState(0)
   const [availabilityFilter, setAvailabilityFilter] = useState("")
   const [availabilityWindow, setAvailabilityWindow] = useState("")
@@ -238,7 +238,7 @@ export default function SearchArtisansPage() {
 
   const clearFilters = () => {
     setSelectedServiceId("")
-    setSelectedServiceName("All Services")
+    setSelectedServiceName("All services")
     setMinRating(0)
     setAvailabilityFilter("")
     setAvailabilityWindow("")
@@ -258,9 +258,8 @@ export default function SearchArtisansPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Find Artisans</p>
-          <h1 className="mt-0.5 text-2xl font-bold text-foreground">Discover Professionals</h1>
-          <p className="text-sm text-muted-foreground">Search and book trusted artisans in your area</p>
+          <h1 className="text-2xl font-bold text-foreground">Find an artisan</h1>
+          <p className="mt-1 text-muted-foreground">Search and book trusted artisans in your area.</p>
         </div>
 
         {/* Search and Filters */}
@@ -270,8 +269,8 @@ export default function SearchArtisansPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name or keyword..."
-                  className="pl-10"
+                  placeholder="Search by name or keyword"
+                  className="h-11 pl-10 sm:h-9"
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                 />
@@ -281,7 +280,7 @@ export default function SearchArtisansPage() {
                 <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Location (e.g. Accra)"
-                  className="pl-10"
+                  className="h-11 pl-10 sm:h-9"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                 />
@@ -291,19 +290,19 @@ export default function SearchArtisansPage() {
             <div className="mt-4 flex flex-wrap gap-3">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2 bg-transparent">
+                  <Button variant="outline" className="h-11 gap-2 bg-transparent sm:h-9">
                     {selectedServiceName}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuLabel>Service Type</DropdownMenuLabel>
+                  <DropdownMenuLabel>Service type</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={() => { setSelectedServiceId(""); setSelectedServiceName("All Services") }}
+                    onClick={() => { setSelectedServiceId(""); setSelectedServiceName("All services") }}
                     className={!selectedServiceId ? "bg-accent text-accent-foreground" : ""}
                   >
-                    All Services
+                    All services
                   </DropdownMenuItem>
                   {services.map((s) => (
                     <DropdownMenuItem
@@ -319,13 +318,13 @@ export default function SearchArtisansPage() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2 bg-transparent">
-                    {minRating > 0 ? `${minRating}+ Stars` : "Rating"}
+                  <Button variant="outline" className="h-11 gap-2 bg-transparent sm:h-9">
+                    {minRating > 0 ? `${minRating}+ stars` : "Rating"}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-48">
-                  <DropdownMenuLabel>Minimum Rating</DropdownMenuLabel>
+                  <DropdownMenuLabel>Minimum rating</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {ratingOptions.map((opt) => (
                     <DropdownMenuItem
@@ -344,7 +343,7 @@ export default function SearchArtisansPage() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2 bg-transparent">
+                  <Button variant="outline" className="h-11 gap-2 bg-transparent sm:h-9">
                     {availabilityFilter === "AVAILABLE" ? "Available" : availabilityFilter === "BUSY" ? "Busy" : "Availability"}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
@@ -353,8 +352,8 @@ export default function SearchArtisansPage() {
                   <DropdownMenuLabel>Availability</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {[
-                    { label: "All Availability", value: "" },
-                    { label: "Available Now (status)", value: "AVAILABLE" },
+                    { label: "Any availability", value: "" },
+                    { label: "Available now", value: "AVAILABLE" },
                     { label: "Busy", value: "BUSY" },
                   ].map((opt) => (
                     <DropdownMenuItem
@@ -376,7 +375,7 @@ export default function SearchArtisansPage() {
               {/* D7: best-effort schedule-based availability window */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2 bg-transparent">
+                  <Button variant="outline" className="h-11 gap-2 bg-transparent sm:h-9">
                     {availabilityWindow
                       ? availabilityWindowOptions.find((o) => o.value === availabilityWindow)?.label
                       : "Schedule"}
@@ -384,7 +383,7 @@ export default function SearchArtisansPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-64">
-                  <DropdownMenuLabel>Availability Window</DropdownMenuLabel>
+                  <DropdownMenuLabel>Availability window</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {availabilityWindowOptions.map((opt) => (
                     <DropdownMenuItem
@@ -406,15 +405,15 @@ export default function SearchArtisansPage() {
               {/* D4: price range filter */}
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="gap-2 bg-transparent">
+                  <Button variant="outline" className="h-11 gap-2 bg-transparent sm:h-9">
                     <Wallet className="h-4 w-4" />
                     {minPrice || maxPrice
                       ? `${minPrice ? formatCurrency(minPrice) : "Any"} – ${maxPrice ? formatCurrency(maxPrice) : "Any"}`
-                      : "Price Range"}
+                      : "Price range"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-72 space-y-3">
-                  <p className="text-sm font-medium text-foreground">Price Range (GH₵)</p>
+                  <p className="text-sm font-medium text-foreground">Price range (GH₵)</p>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 space-y-1">
                       <Label htmlFor="minPrice" className="text-xs text-muted-foreground">Min</Label>
@@ -440,7 +439,7 @@ export default function SearchArtisansPage() {
                     </div>
                   </div>
                   {(minPrice || maxPrice) && (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setMinPrice(""); setMaxPrice("") }}>
+                    <Button variant="ghost" size="sm" className="h-11 text-xs sm:h-7" onClick={() => { setMinPrice(""); setMaxPrice("") }}>
                       Clear price range
                     </Button>
                   )}
@@ -450,14 +449,14 @@ export default function SearchArtisansPage() {
               {/* D2: sort control — "nearest" intentionally excluded (Decision #1) */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2 bg-transparent">
+                  <Button variant="outline" className="h-11 gap-2 bg-transparent sm:h-9">
                     <ArrowUpDown className="h-4 w-4" />
                     {sortBy ? sortOptions.find((o) => o.value === sortBy)?.label : "Sort"}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-52">
-                  <DropdownMenuLabel>Sort By</DropdownMenuLabel>
+                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => setSortBy("")}
@@ -484,7 +483,7 @@ export default function SearchArtisansPage() {
                 {activeFilters.map((f) => (
                   <Badge key={f} variant="secondary" className="gap-1 text-xs">{f}</Badge>
                 ))}
-                <Button variant="ghost" size="sm" className="h-6 text-xs text-primary hover:text-primary/80" onClick={clearFilters}>
+                <Button variant="ghost" size="sm" className="h-11 text-xs text-primary hover:text-primary/80 sm:h-6" onClick={clearFilters}>
                   Clear all
                 </Button>
               </div>
@@ -516,8 +515,8 @@ export default function SearchArtisansPage() {
                       ? "We couldn't load search results. Please try again."
                       : "Try adjusting your filters or search query."}
                   </p>
-                  <Button variant="outline" className="mt-4 bg-transparent" onClick={clearFilters}>
-                    Clear Filters
+                  <Button variant="outline" className="mt-4 h-11 bg-transparent sm:h-9" onClick={clearFilters}>
+                    Clear filters
                   </Button>
                 </CardContent>
               </Card>
@@ -545,12 +544,14 @@ export default function SearchArtisansPage() {
                             type="button"
                             disabled={pendingId === artisan.id}
                             onClick={() => toggleFavourite(artisan.id)}
-                            className="absolute bottom-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-background/80 shadow-sm transition-opacity hover:bg-background disabled:opacity-50"
+                            className="absolute bottom-2 right-2 flex h-11 w-11 items-center justify-center rounded-full bg-background/80 shadow-sm transition-opacity hover:bg-background disabled:opacity-50 sm:bottom-3 sm:right-3 sm:h-7 sm:w-7"
                             title={favouriteIds.has(artisan.id) ? "Remove from favourites" : "Save to favourites"}
+                            aria-label={`${favouriteIds.has(artisan.id) ? "Remove" : "Save"} ${artisan.name} ${favouriteIds.has(artisan.id) ? "from" : "to"} favourites`}
+                            aria-pressed={favouriteIds.has(artisan.id)}
                           >
                             {pendingId === artisan.id
-                              ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                              : <Heart className={`h-3.5 w-3.5 ${favouriteIds.has(artisan.id) ? "fill-destructive text-destructive" : "text-muted-foreground"}`} />
+                              ? <Loader2 aria-hidden className="h-3.5 w-3.5 motion-safe:animate-spin text-primary" />
+                              : <Heart aria-hidden className={`h-3.5 w-3.5 ${favouriteIds.has(artisan.id) ? "fill-destructive text-destructive" : "text-muted-foreground"}`} />
                             }
                           </button>
                         </div>
@@ -585,7 +586,7 @@ export default function SearchArtisansPage() {
                             <div className="flex items-center justify-between pt-2 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1.5">
                                 <Briefcase className="h-3.5 w-3.5" />
-                                {artisan.completedJobsCount} jobs completed
+                                {artisan.completedJobsCount} {artisan.completedJobsCount === 1 ? "job" : "jobs"} completed
                               </span>
                               {artisan.experienceYears && (
                                 <span>{artisan.experienceYears}yr exp</span>
@@ -606,12 +607,12 @@ export default function SearchArtisansPage() {
                           </div>
 
                           <div className="flex gap-2">
-                            <Button variant="outline" className="flex-1 bg-transparent" asChild>
-                              <Link href={`/dashboard/user/artisan/${artisan.id}`}>View Profile</Link>
+                            <Button variant="outline" className="h-11 flex-1 bg-transparent sm:h-9" asChild>
+                              <Link href={`/dashboard/user/artisan/${artisan.id}`}>View profile</Link>
                             </Button>
-                            <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                            <Button className="h-11 flex-1 bg-primary text-primary-foreground hover:bg-primary/90 sm:h-9" asChild>
                               {/* Carry the service filter through so booking opens on what was searched for. */}
-                              <Link href={`/dashboard/user/book/${artisan.id}${selectedServiceId ? `?service=${selectedServiceId}` : ""}`}>Book Now</Link>
+                              <Link href={`/dashboard/user/book/${artisan.id}${selectedServiceId ? `?service=${selectedServiceId}` : ""}`}>Book now</Link>
                             </Button>
                           </div>
                         </div>

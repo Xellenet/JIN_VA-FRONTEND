@@ -104,9 +104,9 @@ export function ProtectionPath() {
         A problem with a payment?{" "}
         <Link
           href="/dashboard/user/support"
-          className="font-medium text-foreground underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-primary dark:focus-visible:ring-ring"
+          className="inline-flex min-h-11 items-center font-medium text-foreground underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-primary sm:min-h-0 dark:focus-visible:ring-ring"
         >
-          Contact Support
+          Contact support
         </Link>
       </p>
     </div>

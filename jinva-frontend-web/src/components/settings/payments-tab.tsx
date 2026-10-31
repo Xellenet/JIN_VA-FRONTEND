@@ -17,6 +17,7 @@ import {
   type PaymentSettingsPatch,
   type PreferredChannel,
 } from "@/lib/customer-api"
+import { threeLetterMonth } from "@/lib/spending"
 import { cn } from "@/lib/utils"
 import { HistoryMovedBanner } from "./history-moved-banner"
 import { ProtectionPath } from "./protection-path"
@@ -85,7 +86,7 @@ function formatSavedAt(iso: string | null): string {
     hour12: true,
   }).formatToParts(d)
   const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? ""
-  return `${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")} ${get("dayPeriod").toLowerCase()}`
+  return `${get("day")} ${threeLetterMonth(get("month"))} ${get("year")}, ${get("hour")}:${get("minute")} ${get("dayPeriod").toLowerCase()}`
 }
 
 // ── The tab ──────────────────────────────────────────────────────────────────
@@ -198,9 +199,12 @@ export function PaymentsTab({
         Your account is suspended, so you can&apos;t change payment settings.{" "}
         <Link
           href="/dashboard/user/support"
-          className={cn("font-medium text-foreground underline decoration-foreground/30 underline-offset-4", FOCUS_RING)}
+          className={cn(
+            "inline-flex min-h-11 items-center font-medium text-foreground underline decoration-foreground/30 underline-offset-4 sm:min-h-0",
+            FOCUS_RING,
+          )}
         >
-          Contact Support
+          Contact support
         </Link>
       </span>
     </p>

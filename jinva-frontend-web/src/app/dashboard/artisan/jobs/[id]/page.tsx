@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useAuth } from "@/contexts/auth-context"
-import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
 import {
   PAYOUT_SETTINGS_HREF,
   artisanJobStatus,
@@ -103,20 +103,12 @@ const STATUS_COPY: Record<ArtisanJobStatusKey, { label: string; className: strin
   other_artisan: { label: "Went to another artisan", className: "bg-muted text-muted-foreground border-border" },
 }
 
-/** Statement pages to scan for this job's payment before giving up. */
-const STATEMENT_MAX_PAGES = 10
-
+/** This job's row of the earnings statement, if it has a payment. */
 async function findStatementItem(jobId: number): Promise<StatementItem | null> {
-  for (let page = 1; page <= STATEMENT_MAX_PAGES; page++) {
-    const { data, meta } = await apiFetchWithMeta<{ items?: StatementItem[] }>(
-      `/payments/my-earnings/statement?period=all&limit=100&page=${page}`,
-    )
-    const hit = data.items?.find((i) => Number(i.jobId) === jobId)
-    if (hit) return hit
-    const totalPages = Number((meta?.pagination as { totalPages?: number } | undefined)?.totalPages ?? 0)
-    if (page >= totalPages) break
-  }
-  return null
+  const data = await apiFetch<{ items?: StatementItem[] }>(
+    `/payments/my-earnings/statement?period=all&jobId=${jobId}&limit=1`,
+  )
+  return data.items?.[0] ?? null
 }
 
 const BACK = (

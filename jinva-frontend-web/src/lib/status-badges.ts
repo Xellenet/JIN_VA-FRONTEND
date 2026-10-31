@@ -154,7 +154,7 @@ export const RETRYABLE_PAYOUT_STATUSES = ["PENDING_TRANSFER", "TRANSFER_FAILED"]
  */
 export const disputeStatusConfig: Record<string, StatusBadgeConfig & { icon: LucideIcon }> = {
   OPEN:         { label: "Open",         className: "bg-destructive/10 text-destructive border-destructive/20", icon: AlertTriangle },
-  UNDER_REVIEW: { label: "Under Review", className: "bg-warning/10 text-warning border-warning/20",             icon: Clock },
+  UNDER_REVIEW: { label: "Under review", className: "bg-warning/10 text-warning border-warning/20",             icon: Clock },
   RESOLVED:     { label: "Resolved",     className: "bg-primary/10 text-primary border-primary/20",             icon: CheckCircle2 },
   CLOSED:       { label: "Closed",       className: "bg-muted text-muted-foreground border-border",             icon: XCircle },
 }

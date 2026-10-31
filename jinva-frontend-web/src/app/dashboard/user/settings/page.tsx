@@ -1,7 +1,6 @@
 "use client"
 
-import { Fragment, useState, useEffect, useRef, Suspense } from "react"
-import Link from "next/link"
+import { useCallback, useState, useEffect, useRef, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -10,11 +9,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,18 +23,13 @@ import {
   User,
   Bell,
   Shield,
-  Camera,
   Mail,
   MapPin,
   Trash2,
   AlertTriangle,
-  UserRound,
   Loader2,
   Lock,
   CreditCard,
-  ChevronDown,
-  ChevronRight,
-  Receipt,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
@@ -57,29 +46,9 @@ import { loginUrlAfterAccountDeletion } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
-import { formatCurrency } from "@/lib/utils"
-import { getCustomerPaymentStatusConfig } from "@/lib/status-badges"
-
-// C4: matches GET /payments/history's real, unpaginated shape verbatim — no
-// client-side pagination is invented for a list the backend doesn't paginate.
-//
-// QA re-verification (2026-08-21, NEW MAJOR): `getMyHistory`'s response
-// shape changed when the backend closed security-report.md finding #5 (it
-// no longer returns the raw Payment entity). The top-level `jobId` field is
-// gone (only `job.id` remains) and `createdAt` was renamed to `date`. This
-// interface and every read site below were updated to match — `jobId` is
-// kept as an optional fallback only, `date` replaces `createdAt`.
-interface BackendPayment {
-  id: number
-  jobId?: number
-  amount: number
-  status: string
-  reference: string
-  paidAt?: string
-  releasedAt?: string | null
-  date: string
-  job?: { id: number; title: string }
-}
+import { PaymentsTab } from "@/components/settings/payments-tab"
+import { ProfilePhotoCard } from "@/components/settings/profile-photo-card"
+import { useLeaveGuard } from "@/components/settings/use-leave-guard"
 
 /** Matches the backend's UpdateMeDto limits. */
 const NAME_MAX = 15
@@ -153,41 +122,6 @@ function UserSettingsContent() {
     }
   }
 
-  // ── Avatar upload ────────────────────────────────────────────────────────
-  const avatarInputRef = useRef<HTMLInputElement>(null)
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
-
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image must be under 5 MB")
-      e.target.value = ""
-      return
-    }
-    if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)) {
-      toast.error("Only JPEG, PNG, and WebP images are supported")
-      e.target.value = ""
-      return
-    }
-
-    const formData = new FormData()
-    formData.append("avatar", file)
-
-    setIsUploadingAvatar(true)
-    try {
-      await apiFetch("/users/me/avatar", { method: "POST", body: formData })
-      await refreshUser()
-      toast.success("Profile photo updated")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to upload photo")
-    } finally {
-      setIsUploadingAvatar(false)
-      e.target.value = ""
-    }
-  }
-
   // ── Notification preferences ────────────────────────────────────────────
   interface CustomerNotifPrefs {
     bookingConfirmations: boolean; jobStatusUpdates: boolean; paymentReceipts: boolean
@@ -232,24 +166,35 @@ function UserSettingsContent() {
     }
   }
 
-  // ── Payment history (C4 / design-spec.md 2.2) ───────────────────────────
-  const [payments, setPayments] = useState<BackendPayment[]>([])
-  const [isLoadingPayments, setIsLoadingPayments] = useState(true)
-  const [paymentsError, setPaymentsError] = useState(false)
-  const [expandedPaymentId, setExpandedPaymentId] = useState<number | null>(null)
+  // ── Payments tab: unsaved-changes guard (FR-5.10) ─────────────────────
+  const [paymentsDirty, setPaymentsDirty] = useState(false)
+  const { confirmLeave, dialog: leaveDialog } = useLeaveGuard(paymentsDirty)
+  const changeTab = useCallback(
+    (tab: string, extra?: Record<string, string>) => {
+      const params = new URLSearchParams({ tab, ...extra })
+      confirmLeave(() => router.replace(`?${params.toString()}`, { scroll: false }))
+    },
+    [confirmLeave, router],
+  )
 
-  const loadPayments = () => {
-    setIsLoadingPayments(true)
-    setPaymentsError(false)
-    apiFetch<BackendPayment[]>("/payments/history")
-      .then(setPayments)
-      .catch(() => setPaymentsError(true))
-      .finally(() => setIsLoadingPayments(false))
-  }
-
+  // "Receipt email settings" lands on the Notifications tab with the
+  // "Payment receipts" switch in view (BR-5.10). Only this one target exists.
+  const highlight = searchParams.get("highlight") === "payment-receipts" ? "payment-receipts" : null
   useEffect(() => {
-    loadPayments()
-  }, [])
+    if (activeTab !== "notifications" || !highlight || isLoadingNotifs) return
+    const row = document.getElementById(highlight)
+    if (!row) return
+    row.scrollIntoView({ block: "center", behavior: "smooth" })
+    row.querySelector<HTMLElement>("button[role=switch]")?.focus({ preventScroll: true })
+  }, [activeTab, highlight, isLoadingNotifs])
+
+  // Phones: the tab strip scrolls; keep the active tab in view.
+  const tabsListRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    tabsListRef.current
+      ?.querySelector<HTMLElement>("[data-state=active]")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [activeTab])
 
   useEffect(() => {
     if (!user) return
@@ -386,20 +331,20 @@ function UserSettingsContent() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="max-w-[1080px] space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Account Settings</h1>
-          <p className="text-muted-foreground">
-            Manage your personal information, notifications, and security preferences
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">Account Settings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage your personal information, notifications, payments and security
           </p>
         </div>
 
         <Tabs
           value={activeTab}
-          onValueChange={(tab) => router.replace(`?tab=${tab}`, { scroll: false })}
+          onValueChange={(tab) => changeTab(tab)}
           className="space-y-6"
         >
-          <TabsList className="h-auto w-full justify-start overflow-x-auto bg-muted sm:w-auto">
+          <TabsList ref={tabsListRef} className="h-auto w-full justify-start overflow-x-auto bg-muted sm:w-fit">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
               Profile
@@ -420,66 +365,16 @@ function UserSettingsContent() {
 
           {/* Profile */}
           <TabsContent value="profile" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <h3 className="font-semibold">Profile Photo</h3>
-                <p className="text-sm text-muted-foreground">
-                  Update your profile picture visible to artisans
-                </p>
-              </div>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-6">
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/webp"
-                    className="hidden"
-                    onChange={handleAvatarUpload}
-                  />
-                  <div className="relative">
-                    <Avatar className="h-24 w-24">
-                      <AvatarImage src={user.avatar} />
-                      <AvatarFallback><UserRound className="h-6 w-6" /></AvatarFallback>
-                    </Avatar>
-                    <Button
-                      size="icon"
-                      variant="secondary"
-                      className="absolute bottom-0 right-0 h-8 w-8 rounded-full border-2 border-background"
-                      onClick={() => avatarInputRef.current?.click()}
-                      disabled={isUploadingAvatar}
-                    >
-                      <Camera className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <div>
-                    <p className="font-medium">{user.name}</p>
-                    <p className="text-sm text-muted-foreground">{user.email}</p>
-                    <div className="mt-2 flex gap-2">
-                      <Button
-                        size="sm"
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                        onClick={() => avatarInputRef.current?.click()}
-                        disabled={isUploadingAvatar}
-                      >
-                        {isUploadingAvatar ? (
-                          <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Uploading…</>
-                        ) : "Upload New Photo"}
-                      </Button>
-                      <Button size="sm" variant="outline">Remove</Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <ProfilePhotoCard user={user} refreshUser={refreshUser} />
 
-            <Card>
-              <div className="border-b p-6">
+            <Card className="gap-0 py-0">
+              <div className="border-b p-4 sm:p-6">
                 <h3 className="font-semibold">Personal Information</h3>
                 <p className="text-sm text-muted-foreground">
                   Update your name, contact details, and address
                 </p>
               </div>
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First Name</Label>
@@ -598,44 +493,6 @@ function UserSettingsContent() {
               </CardContent>
             </Card>
 
-            <Card>
-              <div className="border-b p-6">
-                <h3 className="font-semibold">Booking Preferences</h3>
-                <p className="text-sm text-muted-foreground">
-                  Customize your default booking behavior
-                </p>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Auto-Confirm Bookings</p>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically confirm bookings when an artisan accepts
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Save Payment Method</p>
-                    <p className="text-sm text-muted-foreground">
-                      Remember your preferred payment method for future bookings
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Share Location with Artisan</p>
-                    <p className="text-sm text-muted-foreground">
-                      Allow assigned artisan to see your location for navigation
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
-
             <div className="flex justify-end">
               <Button
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -656,8 +513,8 @@ function UserSettingsContent() {
               </div>
             ) : (
               <>
-                <Card>
-                  <div className="border-b p-6">
+                <Card className="gap-0 py-0">
+                  <div className="border-b p-4 sm:p-6">
                     <div className="flex items-center gap-3">
                       <div className="rounded-lg bg-muted p-2">
                         <Bell className="h-5 w-5 text-foreground" />
@@ -668,7 +525,7 @@ function UserSettingsContent() {
                       </div>
                     </div>
                   </div>
-                  <CardContent className="p-6 space-y-4">
+                  <CardContent className="space-y-4 p-4 sm:p-6">
                     {/*
                       PR2: the "Review Requests" row is deliberately absent, not disabled. No
                       backend trigger sends a post-completion review prompt, so the toggle
@@ -685,12 +542,19 @@ function UserSettingsContent() {
                       { key: "jobExpired",           label: "Job Expired",             desc: "Get notified when your job posting expires without being filled" },
                       { key: "messageReceived",      label: "New Messages",            desc: "Get notified when you receive a direct message" },
                     ] as { key: keyof CustomerNotifPrefs; label: string; desc: string }[]).map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between rounded-lg border p-4">
+                      <div
+                        key={key}
+                        id={key === "paymentReceipts" ? "payment-receipts" : undefined}
+                        className={`flex scroll-mt-24 items-center justify-between gap-4 rounded-lg border p-4 ${
+                          key === "paymentReceipts" && highlight ? "border-primary/40 bg-primary/[0.04]" : ""
+                        }`}
+                      >
                         <div>
                           <p className="font-medium">{label}</p>
                           <p className="text-sm text-muted-foreground">{desc}</p>
                         </div>
                         <Switch
+                          aria-label={label}
                           checked={notifPrefs[key] ?? true}
                           onCheckedChange={(v) => toggleNotif(key, v)}
                         />
@@ -699,8 +563,8 @@ function UserSettingsContent() {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <div className="border-b p-6">
+                <Card className="gap-0 py-0">
+                  <div className="border-b p-4 sm:p-6">
                     <h3 className="font-semibold">Notification Channels</h3>
                     <p className="text-sm text-muted-foreground">Choose how you receive notifications</p>
                     <p className="mt-2 text-xs text-muted-foreground">
@@ -708,7 +572,7 @@ function UserSettingsContent() {
                       fire when the toggle above is on.
                     </p>
                   </div>
-                  <CardContent className="p-6 space-y-4">
+                  <CardContent className="space-y-4 p-4 sm:p-6">
                     {/*
                       PR2: the SMS row is deliberately absent, not disabled. There is no SMS
                       delivery capability anywhere in the platform and SMS is not a PRD-required
@@ -749,185 +613,20 @@ function UserSettingsContent() {
             )}
           </TabsContent>
 
-          {/* Payments (C4, design-spec.md 2.2) */}
-          <TabsContent value="payments" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2">
-                    <CreditCard className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Payment History</h3>
-                    <p className="text-sm text-muted-foreground">Everything you&apos;ve paid for on JinVa, newest first</p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="p-0">
-                {isLoadingPayments ? (
-                  <div className="space-y-3 p-6">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full rounded-lg" />
-                    ))}
-                  </div>
-                ) : paymentsError ? (
-                  <Empty className="border-0 py-12">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <AlertTriangle className="text-muted-foreground" />
-                      </EmptyMedia>
-                      <EmptyTitle>Couldn&apos;t load your payments</EmptyTitle>
-                      <EmptyDescription>Something went wrong fetching your payment history.</EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      <Button variant="outline" className="bg-transparent" onClick={loadPayments}>Try Again</Button>
-                    </EmptyContent>
-                  </Empty>
-                ) : payments.length === 0 ? (
-                  <Empty className="border-0 py-12">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <Receipt className="text-muted-foreground" />
-                      </EmptyMedia>
-                      <EmptyTitle>No payments yet</EmptyTitle>
-                      <EmptyDescription>Payments you make for jobs will show up here.</EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                        <a href="/dashboard/user/search">Browse Artisans</a>
-                      </Button>
-                    </EmptyContent>
-                  </Empty>
-                ) : (
-                  <>
-                    {/* QA MEDIUM (2026-08-20): below md, this table's Status
-                        column was pushed off-screen with no scroll affordance —
-                        replaced with stacked cards carrying the same fields.
-                        Table stays for md+ where it fits without scrolling. */}
-                    <div className="hidden overflow-x-auto md:block">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Job</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="w-8" />
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {payments.map((p) => {
-                            const cfg = getCustomerPaymentStatusConfig(p.status)
-                            const isExpanded = expandedPaymentId === p.id
-                            return (
-                              <Fragment key={p.id}>
-                                <TableRow
-                                  className="cursor-pointer hover:bg-muted/30"
-                                  onClick={() => setExpandedPaymentId(isExpanded ? null : p.id)}
-                                >
-                                  <TableCell className="max-w-[180px] truncate font-medium text-foreground">
-                                    {p.job?.title ?? `Job #${p.job?.id ?? p.jobId}`}
-                                  </TableCell>
-                                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                                    {new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                                  </TableCell>
-                                  <TableCell className="text-right font-medium text-foreground">
-                                    {formatCurrency(p.amount)}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline" className={cfg.className}>
-                                      <cfg.icon className="h-3 w-3" />
-                                      {cfg.label}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                                  </TableCell>
-                                </TableRow>
-                                {isExpanded && (
-                                  <TableRow className="bg-muted/20 hover:bg-muted/20">
-                                    <TableCell colSpan={5} className="text-xs text-muted-foreground">
-                                      <div className="flex flex-wrap gap-x-6 gap-y-1 py-1">
-                                        <span>Reference: <span className="font-mono">{p.reference}</span></span>
-                                        {p.paidAt && (
-                                          <span>Paid at: {new Date(p.paidAt).toLocaleString("en-GB")}</span>
-                                        )}
-                                        {p.releasedAt && (
-                                          <span>Paid to the artisan: {new Date(p.releasedAt).toLocaleString("en-GB")}</span>
-                                        )}
-                                        <Link
-                                          href={`/dashboard/user/jobs/${p.job?.id ?? p.jobId}`}
-                                          className="text-primary hover:underline"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          View Job
-                                        </Link>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                              </Fragment>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <div className="divide-y md:hidden">
-                      {payments.map((p) => {
-                        const cfg = getCustomerPaymentStatusConfig(p.status)
-                        const isExpanded = expandedPaymentId === p.id
-                        return (
-                          <div
-                            key={p.id}
-                            className="cursor-pointer space-y-2 p-4"
-                            onClick={() => setExpandedPaymentId(isExpanded ? null : p.id)}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="truncate font-medium text-foreground">{p.job?.title ?? `Job #${p.job?.id ?? p.jobId}`}</p>
-                              {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <Badge variant="outline" className={cfg.className}>
-                                <cfg.icon className="h-3 w-3" />
-                                {cfg.label}
-                              </Badge>
-                              <span className="font-medium text-foreground">{formatCurrency(p.amount)}</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                            </p>
-                            {isExpanded && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
-                                <span>Reference: <span className="font-mono">{p.reference}</span></span>
-                                {p.paidAt && (
-                                  <span>Paid at: {new Date(p.paidAt).toLocaleString("en-GB")}</span>
-                                )}
-                                {p.releasedAt && (
-                                  <span>Paid to the artisan: {new Date(p.releasedAt).toLocaleString("en-GB")}</span>
-                                )}
-                                <Link
-                                  href={`/dashboard/user/jobs/${p.job?.id ?? p.jobId}`}
-                                  className="text-primary hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  View Job
-                                </Link>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+          {/* Payments (item 5): preferences, receipts and protection. The
+              history moved to Spending (/dashboard/user/report). */}
+          <TabsContent value="payments">
+            <PaymentsTab
+              accountEmail={user.email}
+              onDirtyChange={setPaymentsDirty}
+              onReceiptSettings={() => changeTab("notifications", { highlight: "payment-receipts" })}
+            />
           </TabsContent>
 
           {/* Security */}
           <TabsContent value="security" className="space-y-6">
-            <Card>
-              <div className="border-b p-6">
+            <Card className="gap-0 py-0">
+              <div className="border-b p-4 sm:p-6">
                 <div className="flex items-center gap-3">
                   <div className="rounded-lg bg-muted p-2">
                     <Shield className="h-5 w-5 text-foreground" />
@@ -938,7 +637,7 @@ function UserSettingsContent() {
                   </div>
                 </div>
               </div>
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <div className="max-w-md space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="currentPass">Current Password</Label>
@@ -982,12 +681,12 @@ function UserSettingsContent() {
               </CardContent>
             </Card>
 
-            <Card>
-              <div className="border-b p-6">
+            <Card className="gap-0 py-0">
+              <div className="border-b p-4 sm:p-6">
                 <h3 className="font-semibold">Two-Factor Authentication</h3>
                 <p className="text-sm text-muted-foreground">Add an extra layer of security to your account</p>
               </div>
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div>
                     <p className="font-medium">Enable 2FA</p>
@@ -998,8 +697,8 @@ function UserSettingsContent() {
               </CardContent>
             </Card>
 
-            <Card className="border-destructive/30">
-              <div className="border-b border-destructive/30 p-6">
+            <Card className="gap-0 border-destructive/30 py-0">
+              <div className="border-b border-destructive/30 p-4 sm:p-6">
                 <div className="flex items-center gap-3">
                   <div className="rounded-lg bg-destructive/10 p-2">
                     <AlertTriangle className="h-5 w-5 text-destructive" />
@@ -1010,7 +709,7 @@ function UserSettingsContent() {
                   </div>
                 </div>
               </div>
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <div className="flex items-center justify-between rounded-lg border border-destructive/20 p-4">
                   <div>
                     <p className="font-medium">Delete Account</p>
@@ -1069,6 +768,7 @@ function UserSettingsContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {leaveDialog}
     </DashboardLayout>
   )
 }

@@ -59,7 +59,107 @@ export function mapNotification(n: BackendNotification): Notification {
     type: mapNotificationType(n.type),
     isRead: n.isRead,
     time: formatNotificationTime(n.createdAt),
+    // Item 6 (§6.5): the expanded row needs the original timestamp and the
+    // payload's typed ids. Both used to be dropped here.
+    rawType: n.type,
+    payload: n.payload,
+    createdAt: n.createdAt,
   }
+}
+
+// ── Item 6: read in place (pure helpers; no runtime imports, see 04 §3.2) ──
+
+/** The one action button an expanded notification can show. */
+export interface NotificationAction {
+  label: "View job" | "View booking" | "Open conversation" | "View payment"
+  href: string
+}
+
+/**
+ * Reads a positive safe integer id from a payload key, and nothing else.
+ * Strings are accepted only when they are a plain run of digits (the JSON
+ * column round-trips numbers, but a defensive `"812"` should still work);
+ * `"812/../admin"`, `"12abc"`, `1.5`, `-1`, `0` and URLs all give null.
+ */
+export function typedId(payload: unknown, key: string): number | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null
+  const raw = (payload as Record<string, unknown>)[key]
+  let n: number
+  if (typeof raw === "number") n = raw
+  else if (typeof raw === "string" && /^[1-9][0-9]{0,15}$/.test(raw)) n = Number(raw)
+  else return null
+  return Number.isSafeInteger(n) && n > 0 ? n : null
+}
+
+const CUSTOMER_BASE = "/dashboard/user"
+
+/**
+ * SEC-18 / FR-6.9: the only place a notification's action button is built.
+ *
+ * - Only typed ids are read (`jobId`, `bookingId`, `conversationId`,
+ *   `paymentId`), through `typedId`. Any `url`, `href`, `link` or other string
+ *   key in the payload is ignored, so the data can never pick the destination.
+ * - Every href is a fixed path under `/dashboard/user/`, or there is no
+ *   button (`null`).
+ */
+export function notificationAction(type: string, payload: unknown): NotificationAction | null {
+  const t = typeof type === "string" ? type.toUpperCase() : ""
+  const jobId = typedId(payload, "jobId")
+  const bookingId = typedId(payload, "bookingId")
+  const conversationId = typedId(payload, "conversationId")
+  const paymentId = typedId(payload, "paymentId")
+
+  if (conversationId !== null) {
+    return { label: "Open conversation", href: `${CUSTOMER_BASE}/messages?conversation=${conversationId}` }
+  }
+  const isPayment = !t.includes("DISPUTE") && (t.includes("PAYMENT") || t.includes("REFUND") || t.includes("PAYOUT"))
+  if (isPayment) {
+    // The job page carries the payment panel; without a job the Spending page
+    // (item 4) is the payment's home. Both are fixed internal routes.
+    if (jobId !== null) return { label: "View payment", href: `${CUSTOMER_BASE}/jobs/${jobId}` }
+    if (paymentId !== null) return { label: "View payment", href: `${CUSTOMER_BASE}/report` }
+    return null
+  }
+  if (bookingId !== null) return { label: "View booking", href: `${CUSTOMER_BASE}/bookings/${bookingId}` }
+  if (jobId !== null) return { label: "View job", href: `${CUSTOMER_BASE}/jobs/${jobId}` }
+  return null
+}
+
+/** `notificationAction(...)?.href ?? null`, the name 01 §11.5 uses. */
+export function notificationHref(type: string, payload: unknown): string | null {
+  return notificationAction(type, payload)?.href ?? null
+}
+
+/**
+ * FR-6.11: a message notification's body is the server's first 100
+ * characters followed by "…". Only then does the row add the "start of the
+ * message" line.
+ */
+export function isMessageExcerpt(type: string | undefined, body: string): boolean {
+  return (type ?? "").toUpperCase().includes("MESSAGE") && body.endsWith("…")
+}
+
+/**
+ * FR-6.2 / NFR-7.3: "Thu 30 Oct 2026, 2:14 pm" in Africa/Accra, whatever the
+ * device's own timezone. Returns "" for an unparseable value.
+ */
+export function formatFullDateTime(iso: string | null | undefined): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Accra",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(d)
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ""
+  const period = get("dayPeriod").toLowerCase().replace(/\./g, "")
+  return `${get("weekday")} ${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")} ${period}`
 }
 
 /**

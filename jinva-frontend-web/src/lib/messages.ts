@@ -146,7 +146,7 @@ export function formatMessageTime(iso: string): string {
   if (diff < 60_000) return "just now"
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
   if (diff < 86_400_000) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
 }
 
 /** Day label for the admin dispute thread's date dividers (design-spec.md §4). */
@@ -158,7 +158,7 @@ export function formatMessageDay(iso: string): string {
   const yesterday = new Date(today)
   yesterday.setDate(today.getDate() - 1)
   if (isSameDay(d, yesterday)) return "Yesterday"
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
 }
 
 /**
@@ -188,14 +188,64 @@ export function conversationHref(
   role: string,
   roleBase: string,
   contactId: number | string,
-  context?: { jobId?: number | string; bookingId?: number | string },
+  context?: { jobId?: number | string; bookingId?: number | string; reply?: boolean },
 ): string {
   if (role === "admin") return `${roleBase}/messages`
   const param = role === "artisan" ? "client" : "artisan"
   const query = new URLSearchParams({ [param]: String(contactId) })
   if (context?.jobId != null) query.set("job", String(context.jobId))
   else if (context?.bookingId != null) query.set("booking", String(context.bookingId))
+  // Q9: "Reply" opens the thread with the reply box focused (customer page only).
+  if (context?.reply && role !== "artisan") query.set("reply", "1")
   return `${roleBase}/messages?${query.toString()}`
+}
+
+// ── Item 6: read in place (pure helpers) ────────────────────────────────────
+
+/**
+ * Link to a conversation by its **conversation** id. Used where there is no
+ * usable contact id: a message notification (its payload carries only
+ * `conversationId`) and a deleted contact (FR-6.18). Only the customer
+ * messages page reads `?conversation=`, so other roles get the plain inbox.
+ * Returns null for anything but a positive safe integer (SEC-18).
+ */
+export function conversationIdHref(role: string, roleBase: string, conversationId: number): string | null {
+  if (!Number.isSafeInteger(conversationId) || conversationId <= 0) return null
+  if (role !== "user") return `${roleBase}/messages`
+  return `${roleBase}/messages?${new URLSearchParams({ conversation: String(conversationId) }).toString()}`
+}
+
+/** A contact id that can address a thread, or null (deleted users carry none). */
+export function usableContactId(c: BackendContact | null | undefined): number | null {
+  const id = c?.id
+  return typeof id === "number" && Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
+/**
+ * FR-6.18: a contact with no renderable name, or no id, is a deleted user.
+ * Such a conversation can be opened but not replied to.
+ */
+export function isDeletedContact(c: BackendContact | null | undefined): boolean {
+  return usableContactId(c) === null || contactName(c) === DELETED_PARTICIPANT_NAME
+}
+
+/**
+ * FR-6.16: the strip under an expanded conversation with several unread
+ * messages. One (or none) unread needs no strip, because the latest message
+ * shown is the only unread one.
+ */
+export function unreadLine(unreadCount: number): string | null {
+  if (!Number.isFinite(unreadCount) || unreadCount < 2) return null
+  return `${Math.floor(unreadCount)} unread messages · Open conversation to read all`
+}
+
+/**
+ * FR-6.17: expanding marks a conversation read only when exactly one message
+ * is unread (the one now on screen). With several, nothing is silently
+ * skipped: they stay unread until the thread is opened.
+ */
+export function shouldMarkReadOnExpand(unreadCount: number): boolean {
+  return unreadCount === 1
 }
 
 // ── MC4 attachments ─────────────────────────────────────────────────────────

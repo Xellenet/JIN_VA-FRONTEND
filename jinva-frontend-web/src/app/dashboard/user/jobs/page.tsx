@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { Suspense, useCallback, useState, useMemo, useEffect } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
@@ -29,19 +30,11 @@ import { Calendar, MapPin, Search, ChevronDown, Loader2, Link2 } from "lucide-re
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
+import { getMyJobs, type MyJob } from "@/lib/customer-api"
+import { STAGES, parseStage, stageInfo, type Stage } from "@/lib/overview"
 
-interface BackendJob {
-  id: number
-  title: string
-  location?: string
-  status: string
-  createdAt: string
-  budgetMin?: number
-  budgetMax?: number
-  currency?: string
-  bookingId?: number
-  service?: { id: number; name: string }
-}
+/** A row of `GET /jobs/mine`; the shape is owned by the shared client. */
+type BackendJob = MyJob
 
 const statusOptions = [
   { label: "All Status", value: "all" },
@@ -69,25 +62,87 @@ const statusConfig: Record<string, { label: string; className: string }> = {
  * only). A job with `bookingId` set originated from a confirmed direct
  * booking (R2); one without it came from the open-posting flow.
  */
-export default function UserJobsPage() {
+const PAGE_SIZE = 50
+const STAGE_PREFIX = "stage:"
+
+/** `stage:in_progress` → `in_progress`; anything else → null (always through `parseStage`). */
+function filterStage(filter: string): Stage | null {
+  return filter.startsWith(STAGE_PREFIX) ? parseStage(filter.slice(STAGE_PREFIX.length)) : null
+}
+
+function UserJobsContent() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  // `?stage=` comes from the Overview ("See all completed jobs in My Jobs") and
+  // its rail links. Only the four literals are accepted (SEC-19).
+  const urlStage = parseStage(searchParams.get("stage"))
   const [jobs, setJobs] = useState<BackendJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
+  const [nextPage, setNextPage] = useState(2)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState(urlStage ? `${STAGE_PREFIX}${urlStage}` : "all")
   const [cancelJobId, setCancelJobId] = useState<number | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
+  const activeStage = filterStage(statusFilter)
+
+  // A stage asks the server for just its statuses, so a stage with more than
+  // one page of jobs is still complete here (the Overview stops at 50 rows).
+  const fetchPage = useCallback(
+    (page: number) => getMyJobs({ statuses: activeStage ? stageInfo(activeStage).statuses : undefined, page, limit: PAGE_SIZE }),
+    [activeStage],
+  )
 
   useEffect(() => {
-    // `/jobs` caps `limit` at 50 and 400s above it — asking for 100 made this
-    // list fail outright and render as "no jobs yet".
-    apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs/mine?page=1&limit=50")
-      .then((data) => {
-        const items = Array.isArray(data) ? data : (data.items ?? [])
+    let cancelled = false
+    setIsLoading(true)
+    // `/jobs/mine` caps `limit` at 50 and 400s above it.
+    fetchPage(1)
+      .then(({ items, pagination }) => {
+        if (cancelled) return
         setJobs(items)
+        setHasMore(pagination.page < pagination.totalPages)
+        setNextPage(2)
       })
-      .catch(() => setJobs([]))
-      .finally(() => setIsLoading(false))
-  }, [])
+      .catch(() => {
+        if (!cancelled) setJobs([])
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [fetchPage])
+
+  const loadMore = async () => {
+    setIsLoadingMore(true)
+    try {
+      const { items, pagination } = await fetchPage(nextPage)
+      setJobs((prev) => {
+        const seen = new Set(prev.map((j) => j.id))
+        return [...prev, ...items.filter((j) => !seen.has(j.id))]
+      })
+      setHasMore(pagination.page < pagination.totalPages)
+      setNextPage((p) => p + 1)
+    } catch {
+      toast.error("Couldn't load more jobs. Please try again.")
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
+
+  const chooseFilter = (value: string) => {
+    setStatusFilter(value)
+    const stage = filterStage(value)
+    const params = new URLSearchParams(searchParams.toString())
+    if (stage) params.set("stage", stage)
+    else params.delete("stage")
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
@@ -96,10 +151,14 @@ export default function UserJobsPage() {
         job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (job.service?.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         String(job.id).includes(searchQuery)
-      const matchesStatus = statusFilter === "all" || job.status === statusFilter
+      const matchesStatus =
+        statusFilter === "all" ||
+        (activeStage
+          ? (stageInfo(activeStage).statuses as readonly string[]).includes(job.status)
+          : job.status === statusFilter)
       return matchesSearch && matchesStatus
     })
-  }, [jobs, searchQuery, statusFilter])
+  }, [jobs, searchQuery, statusFilter, activeStage])
 
   const handleCancelJob = async () => {
     if (cancelJobId == null) return
@@ -140,7 +199,9 @@ export default function UserJobsPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="gap-2 bg-transparent">
-                    {statusOptions.find((s) => s.value === statusFilter)?.label ?? "All Status"}
+                    {activeStage
+                      ? `Stage: ${stageInfo(activeStage).label}`
+                      : (statusOptions.find((s) => s.value === statusFilter)?.label ?? "All Status")}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -150,10 +211,21 @@ export default function UserJobsPage() {
                   {statusOptions.map((opt) => (
                     <DropdownMenuItem
                       key={opt.value}
-                      onClick={() => setStatusFilter(opt.value)}
+                      onClick={() => chooseFilter(opt.value)}
                       className={statusFilter === opt.value ? "bg-accent text-accent-foreground" : ""}
                     >
                       {opt.label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Filter by Stage</DropdownMenuLabel>
+                  {STAGES.map((s) => (
+                    <DropdownMenuItem
+                      key={s.stage}
+                      onClick={() => chooseFilter(`${STAGE_PREFIX}${s.stage}`)}
+                      className={activeStage === s.stage ? "bg-accent text-accent-foreground" : ""}
+                    >
+                      {s.label}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -178,7 +250,7 @@ export default function UserJobsPage() {
                     <Button
                       variant="outline"
                       className="mt-4 bg-transparent"
-                      onClick={() => { setSearchQuery(""); setStatusFilter("all") }}
+                      onClick={() => { setSearchQuery(""); chooseFilter("all") }}
                     >
                       Clear Filters
                     </Button>
@@ -253,6 +325,14 @@ export default function UserJobsPage() {
                     )
                   })
                 )}
+                {hasMore && !isLoading && (
+                  <div className="flex justify-center pt-2">
+                    <Button variant="outline" className="bg-transparent" onClick={loadMore} disabled={isLoadingMore}>
+                      {isLoadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Load more jobs
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -281,5 +361,13 @@ export default function UserJobsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </DashboardLayout>
+  )
+}
+
+export default function UserJobsPage() {
+  return (
+    <Suspense>
+      <UserJobsContent />
+    </Suspense>
   )
 }

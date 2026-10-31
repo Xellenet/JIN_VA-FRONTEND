@@ -75,6 +75,7 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
     { href: "/dashboard/user/post-job",           label: "Post a Job",    icon: Plus          },
     { href: "/dashboard/user/search",             label: "Find Artisans", icon: Search        },
     { href: "/dashboard/user/bookings",           label: "My Bookings",   icon: CalendarDays  },
+    { href: "/dashboard/user/report",             label: "Spending",      icon: Wallet        },
     { href: "/dashboard/user/jobs",               label: "My Jobs",       icon: ClipboardList },
     { href: "/dashboard/user/favourites",         label: "Favourites",    icon: Heart         },
     { href: "/dashboard/user/messages",           label: "Messages",      icon: MessageSquare },
@@ -164,7 +165,7 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
         <div className="border-t border-sidebar-border p-3">
           <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
             <Avatar className="h-8 w-8 shrink-0">
-              <AvatarImage src={user.avatar} alt={user.name} />
+              <AvatarImage src={user.avatar || undefined} alt={user.name} />
               <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
                 {userInitials}
               </AvatarFallback>

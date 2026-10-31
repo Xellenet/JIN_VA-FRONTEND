@@ -48,6 +48,14 @@ interface MessagesPageProps {
   readonly jobId?: string
   /** MC2 — booking this conversation was opened from (`&booking=`). */
   readonly bookingId?: string
+  /**
+   * Item 6 — a **conversation** id to pre-open (`?conversation=`), for links
+   * that have no usable contact id (message notifications, deleted contacts).
+   * Already parsed to a positive integer by the route wrapper.
+   */
+  readonly openConversationRowId?: number
+  /** Item 6 / Q9 — `?reply=1`: focus the reply box once the thread is open. */
+  readonly focusReply?: boolean
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -164,7 +172,13 @@ interface MessageContext {
 const MESSAGE_MAX_LENGTH = 2000
 const MESSAGE_COUNTER_FROM = 1800
 
-export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesPageProps) {
+export function MessagesPage({
+  openConversationId,
+  jobId,
+  bookingId,
+  openConversationRowId,
+  focusReply,
+}: MessagesPageProps) {
   const { user } = useAuth()
   const [conversations, setConversations] = useState<BackendConversation[]>([])
   const [selected, setSelected] = useState<BackendConversation | null>(null)
@@ -197,6 +211,9 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   const bottomRef = useRef<HTMLDivElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const replyBoxRef = useRef<HTMLTextAreaElement>(null)
+  /** `?reply=1` focuses the reply box once, not on every later thread switch. */
+  const replyFocusPendingRef = useRef(!!focusReply)
   const attachmentToken = useRef(0)
   /** The page the poll watches — it moves forward as the thread grows. */
   const newestPageRef = useRef(1)
@@ -248,6 +265,11 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   // Initial load + deep-link resolution.
   useEffect(() => {
     loadConversations().then((items) => {
+      if (!openConversationId && openConversationRowId) {
+        const byRow = items.find((c) => c.id === openConversationRowId)
+        if (byRow) setSelected(byRow)
+        return
+      }
       if (!openConversationId) return
       const found = items.find((c) => String(c.contact.id) === String(openConversationId))
       if (found) {
@@ -278,7 +300,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
       setSelected(placeholder)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openConversationId])
+  }, [openConversationId, openConversationRowId])
 
   // NR1 — keep the list (and its unread badges) fresh while the page is open.
   useEffect(() => {
@@ -486,6 +508,20 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
+  // Q9 — "Reply" in the envelope menu lands here with `?reply=1`: focus the
+  // reply box once the thread has loaded, so the customer can type at once.
+  // Re-armed when the menu is used again while this page is already open.
+  useEffect(() => {
+    if (focusReply) replyFocusPendingRef.current = true
+  }, [focusReply, openConversationId, openConversationRowId])
+
+  useEffect(() => {
+    if (!replyFocusPendingRef.current || !selected || isLoadingMsgs) return
+    if (!Number.isFinite(Number(selected.contact.id))) return
+    replyFocusPendingRef.current = false
+    replyBoxRef.current?.focus()
+  }, [selected, isLoadingMsgs])
+
   if (!user) return null
 
   const filtered = conversations.filter((c) => {
@@ -507,6 +543,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
    * user has typed it out. Block the composer up front and say why.
    */
   const canReplyToSelected = !selected || Number.isFinite(Number(selected.contact.id))
+
 
   const retryThread = () => {
     setThreadError(false)
@@ -1138,6 +1175,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                           2,000 characters, with a count as the limit nears. */}
                       <div className="relative flex-1">
                         <Textarea
+                          ref={replyBoxRef}
                           rows={1}
                           maxLength={MESSAGE_MAX_LENGTH}
                           placeholder={canReplyToSelected ? "Message" : "You can't reply to this conversation"}

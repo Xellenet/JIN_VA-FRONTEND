@@ -28,13 +28,13 @@ const PAGE_TITLES: Record<string, string> = {
   artisan:           "Overview",
   admin:             "Overview",
   search:            "Find Artisans",
-  bookings:          "My Jobs",
+  bookings:          "My Bookings",
   favourites:        "Favourites",
   messages:          "Messages",
   notifications:     "Notifications",
   settings:          "Settings",
   support:           "Support",
-  report:            "Report",
+  report:            "Spending",
   "post-job":        "Post a Job",
   jobs:              "My Jobs",
   profile:           "Profile",
@@ -136,7 +136,7 @@ export function DashboardHeader({ onMenuToggle }: Readonly<DashboardHeaderProps>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" aria-label="User menu">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarImage src={user.avatar || undefined} alt={user.name} />
                 <AvatarFallback className="text-xs bg-primary text-primary-foreground font-medium">
                   {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                 </AvatarFallback>

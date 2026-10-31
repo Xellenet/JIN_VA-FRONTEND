@@ -1,10 +1,21 @@
-import { redirect } from "next/navigation"
+"use client"
+
+import { Suspense } from "react"
+import { DashboardLayout } from "@/components/dashboard/layout"
+import { SpendingPage } from "@/components/spending/spending-page"
+import { SpendingSkeleton } from "@/components/spending/spending-skeleton"
 
 /**
- * This page used to show sample figures from `lib/data/mock-data` as if they
- * were real (the same problem as QA ADM-19). The real figures live on
- * My Bookings (spending is under Settings → Payments), so old links and bookmarks go there.
+ * Spending (Customer Experience v2, item 4; FR-4.1). This route used to
+ * redirect to My Bookings because the old page showed sample figures; it now
+ * shows the customer's real spending and payment history.
  */
 export default function ReportPage() {
-  redirect("/dashboard/user/bookings")
+  return (
+    <DashboardLayout>
+      <Suspense fallback={<SpendingSkeleton />}>
+        <SpendingPage />
+      </Suspense>
+    </DashboardLayout>
+  )
 }

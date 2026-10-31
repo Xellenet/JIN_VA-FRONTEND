@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaderRules } from "./src/lib/csp";
 
 const nextConfig: NextConfig = {
   // Self-contained server bundle for the Docker image only. Vercel builds
@@ -18,6 +19,20 @@ const nextConfig: NextConfig = {
       { source: "/api/v1/:path*", destination: `${target}/api/v1/:path*` },
       { source: "/uploads/:path*", destination: `${target}/uploads/:path*` },
     ];
+  },
+
+  // SEC-32 security headers (04-implementation-plan §4.1). The CSP ships as
+  // Content-Security-Policy-Report-Only until CSP_ENFORCE=1; the other
+  // headers (X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy)
+  // are always enforced. The policy itself is built in src/lib/csp.ts.
+  async headers() {
+    return securityHeaderRules({
+      apiUrl: process.env.NEXT_PUBLIC_API_URL,
+      mediaOrigins: process.env.NEXT_PUBLIC_MEDIA_ORIGINS,
+      dev: process.env.NODE_ENV === "development",
+      enforce: process.env.CSP_ENFORCE === "1",
+      reportUri: process.env.CSP_REPORT_URI,
+    });
   },
 };
 

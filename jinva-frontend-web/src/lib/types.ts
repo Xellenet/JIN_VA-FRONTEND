@@ -185,6 +185,12 @@ export interface Notification {
   isRead: boolean
   time: string
   link?: string
+  /** The raw backend type (e.g. `DISPUTE_RESOLVED`); `type` above is the UI bucket. */
+  rawType?: string
+  /** Server payload, kept untouched. Read only through `notificationAction()` (SEC-18). */
+  payload?: unknown
+  /** Original ISO timestamp, for the full date in the expanded row (FR-6.2). */
+  createdAt?: string
 }
 
 export interface ChatConversation {

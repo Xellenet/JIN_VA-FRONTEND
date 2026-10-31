@@ -1,255 +1,401 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState, useMemo } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { AlertCircle, ListFilter, Plus, Search } from "lucide-react"
+import { toast } from "sonner"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { Card, CardContent } from "@/components/ui/card"
+import { JobTrack, type JobStageCount } from "@/components/dashboard/job-track"
+import { OverviewFilterBar } from "@/components/dashboard/overview/overview-filter-bar"
+import { OverviewJobList, type ListState } from "@/components/dashboard/overview/overview-job-list"
+import { AccountRail, type RailStates } from "@/components/dashboard/overview/account-rail"
+import { RailNeedsAction, actionRows } from "@/components/dashboard/overview/rail-needs-action"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Calendar, Clock, CheckCircle, Search, Loader2, UserRound, XCircle, TrendingUp, Plus } from "lucide-react"
-import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/contexts/auth-context"
-import { cn, resolveAvatarUrl } from "@/lib/utils"
+import {
+  getCustomerOverview,
+  getJobSummary,
+  getMyJobs,
+  isAbortError,
+  isRateLimited,
+  retryAfter,
+  type CustomerOverview,
+  type JobSummary,
+  type OverviewSection,
+} from "@/lib/customer-api"
+import {
+  FILTERED_PAGE_SIZE,
+  RECENT_COUNT,
+  STAGES,
+  liveClear,
+  liveSelect,
+  liveShowMore,
+  parseStage,
+  showMoreState,
+  stageInfo,
+  summarise,
+  totalLabel,
+  type Stage,
+} from "@/lib/overview"
 
-interface BackendJob {
-  id: string
-  title: string
-  service?: { id: string; name: string }
-  status: string
-  createdAt: string
-  acceptedArtisan?: { id: string; firstname: string; lastname: string; profilePicture?: string }
-}
+/** The rail refetches on focus at most this often (FR-2.9). */
+const RAIL_REFRESH_MS = 30_000
+/** Stops stay disabled with skeleton counts for at most this long (FR-1.12). */
+const COUNTS_GRACE_MS = 1_000
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  IN_PROGRESS: { label: "In Progress", className: "bg-primary/10 text-primary border-primary/20" },
-  COMPLETED:   { label: "Completed",   className: "bg-primary/20 text-primary border-primary/30" },
-  CANCELLED:   { label: "Cancelled",   className: "bg-destructive/10 text-destructive border-destructive/20" },
-  PENDING:     { label: "Pending",     className: "bg-muted text-muted-foreground border-border" },
-  OPEN:        { label: "Open",        className: "bg-primary/5 text-primary border-primary/15" },
-  EXPIRED:     { label: "Expired",     className: "bg-muted text-muted-foreground border-border" },
-}
+type SummaryState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; data: JobSummary }
+type OverviewState =
+  | { kind: "loading" }
+  | { kind: "error"; rateLimited: boolean }
+  | { kind: "ready"; data: CustomerOverview }
 
-type FilterKey = "Open" | "In Progress" | "Completed" | "Cancelled"
-
-export default function UserDashboard() {
+function OverviewContent() {
   const { user } = useAuth()
-  const [jobs, setJobs] = useState<BackendJob[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [activeFilter, setActiveFilter] = useState<FilterKey | null>(null)
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const urlStage = parseStage(searchParams.get("stage"))
 
+  // ── Stage filter (kept in the URL, FR-1.8) ─────────────────────────────────
+  const [selected, setSelected] = useState<Stage | null>(urlStage)
+  // Counts person-made filter changes so the list only animates after one (FR-1.19).
+  const [filterChanges, setFilterChanges] = useState(0)
+  const [live, setLive] = useState("")
+  const announce = useRef<"select" | "clear" | null>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  // Back/forward or a shared link changes the URL: follow it.
   useEffect(() => {
-    apiFetch<BackendJob[] | { items?: BackendJob[] }>("/jobs/mine")
-      .then((data) => {
-        const items = Array.isArray(data) ? data : (data.items ?? [])
-        setJobs(items.map((j: BackendJob) => ({ ...j, id: String(j.id) })))
+    setSelected(urlStage)
+  }, [urlStage])
+
+  const writeStage = useCallback(
+    (stage: Stage | null) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (stage) params.set("stage", stage)
+      else params.delete("stage")
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams],
+  )
+
+  const choose = useCallback(
+    (stage: Stage | null, opts: { focusHeading?: boolean } = {}) => {
+      setSelected(stage)
+      setFilterChanges((n) => n + 1)
+      announce.current = stage ? "select" : "clear"
+      writeStage(stage)
+      if (opts.focusHeading) requestAnimationFrame(() => headingRef.current?.focus())
+    },
+    [writeStage],
+  )
+
+  const handleStop = (stage: Stage) => choose(selected === stage ? null : stage)
+  const handleClear = () => choose(null, { focusHeading: true })
+
+  // ── Account-wide counts (B7a) ──────────────────────────────────────────────
+  const [summary, setSummary] = useState<SummaryState>({ kind: "loading" })
+  const [countsGraceOver, setCountsGraceOver] = useState(false)
+  const summaryAbort = useRef<AbortController | null>(null)
+
+  const loadSummary = useCallback(() => {
+    summaryAbort.current?.abort()
+    const ctrl = new AbortController()
+    summaryAbort.current = ctrl
+    setSummary({ kind: "loading" })
+    setCountsGraceOver(false)
+    const grace = window.setTimeout(() => setCountsGraceOver(true), COUNTS_GRACE_MS)
+    getJobSummary(ctrl.signal)
+      .then((data) => setSummary({ kind: "ready", data }))
+      .catch((err) => {
+        if (!isAbortError(err)) setSummary({ kind: "error" })
       })
-      .catch(() => setJobs([]))
-      .finally(() => setIsLoading(false))
+      .finally(() => window.clearTimeout(grace))
   }, [])
 
-  // useMemo must be before any early return to keep hook order stable across renders
-  const displayedJobs = useMemo(() => {
-    if (activeFilter === "Open")        return jobs.filter((j) => j.status === "OPEN")
-    if (activeFilter === "In Progress") return jobs.filter((j) => j.status === "IN_PROGRESS" || j.status === "PENDING")
-    if (activeFilter === "Completed")   return jobs.filter((j) => j.status === "COMPLETED")
-    if (activeFilter === "Cancelled")   return jobs.filter((j) => j.status === "CANCELLED")
-    return jobs.slice(0, 4)
-  }, [jobs, activeFilter])
+  useEffect(() => {
+    loadSummary()
+    return () => summaryAbort.current?.abort()
+  }, [loadSummary])
+
+  // ── Job list (B7b) ─────────────────────────────────────────────────────────
+  const [list, setList] = useState<ListState>({ kind: "loading" })
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [appendedFrom, setAppendedFrom] = useState<number | null>(null)
+  const focusNewRow = useRef<number | null>(null)
+  const listAbort = useRef<AbortController | null>(null)
+
+  const loadList = useCallback((stage: Stage | null) => {
+    listAbort.current?.abort()
+    const ctrl = new AbortController()
+    listAbort.current = ctrl
+    setList({ kind: "loading" })
+    setLoadingMore(false)
+    setAppendedFrom(null)
+    const statuses = stage ? stageInfo(stage).statuses : undefined
+    const limit = stage ? FILTERED_PAGE_SIZE : RECENT_COUNT
+    getMyJobs({ statuses, page: 1, limit }, ctrl.signal)
+      .then(({ items, pagination }) => {
+        // Unfiltered shows only the newest five, whatever the server sends.
+        const rows = stage ? items : items.slice(0, RECENT_COUNT)
+        setList({ kind: "ready", items: rows, total: pagination.total })
+        if (announce.current === "select" && stage) setLive(liveSelect(stage, pagination.total))
+        if (announce.current === "clear") setLive(liveClear(rows.length))
+        announce.current = null
+      })
+      .catch((err) => {
+        if (!isAbortError(err)) setList({ kind: "error" })
+      })
+  }, [])
+
+  useEffect(() => {
+    loadList(selected)
+  }, [selected, loadList])
+
+  useEffect(() => () => listAbort.current?.abort(), [])
+
+  const loadMore = () => {
+    if (!selected || list.kind !== "ready" || loadingMore) return
+    const footer = showMoreState(list.items.length, list.total, selected)
+    if (footer.kind !== "more") return
+    const ctrl = new AbortController()
+    listAbort.current?.abort()
+    listAbort.current = ctrl
+    setLoadingMore(true)
+    const stage = selected
+    getMyJobs({ statuses: stageInfo(stage).statuses, page: footer.nextPage, limit: FILTERED_PAGE_SIZE }, ctrl.signal)
+      .then(({ items, pagination }) => {
+        const seen = new Set(list.items.map((j) => j.id))
+        const merged = [...list.items, ...items.filter((j) => !seen.has(j.id))]
+        const from = list.items.length
+        if (showMoreState(merged.length, pagination.total, stage).kind !== "more") focusNewRow.current = from
+        setAppendedFrom(from)
+        setList({ kind: "ready", items: merged, total: pagination.total })
+        setLive(liveShowMore(stage, merged.length, pagination.total))
+      })
+      .catch((err) => {
+        if (!isAbortError(err)) toast.error("Couldn't load more jobs. Please try again.")
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoadingMore(false)
+      })
+  }
+
+  // When the footer goes away after the last "Show more", focus the first new row (spec §4.3).
+  useEffect(() => {
+    if (focusNewRow.current === null || list.kind !== "ready") return
+    const index = focusNewRow.current
+    focusNewRow.current = null
+    document.querySelectorAll<HTMLElement>("[data-job-row]")[index]?.focus()
+  }, [list])
+
+  // ── Rail (B6) ──────────────────────────────────────────────────────────────
+  const [overview, setOverview] = useState<OverviewState>({ kind: "loading" })
+  const [now, setNow] = useState(() => new Date())
+  const overviewAbort = useRef<AbortController | null>(null)
+  const lastRailFetch = useRef(0)
+  const rateTimer = useRef<number | undefined>(undefined)
+
+  const loadOverview = useCallback((showSkeleton: boolean) => {
+    overviewAbort.current?.abort()
+    const ctrl = new AbortController()
+    overviewAbort.current = ctrl
+    lastRailFetch.current = Date.now()
+    if (showSkeleton) setOverview({ kind: "loading" })
+    getCustomerOverview(ctrl.signal)
+      .then((data) => {
+        setOverview({ kind: "ready", data })
+        setNow(new Date())
+      })
+      .catch((err) => {
+        if (isAbortError(err)) return
+        if (isRateLimited(err)) {
+          setOverview({ kind: "error", rateLimited: true })
+          window.clearTimeout(rateTimer.current)
+          rateTimer.current = window.setTimeout(
+            () => setOverview((prev) => (prev.kind === "error" ? { kind: "error", rateLimited: false } : prev)),
+            retryAfter(err) * 1000,
+          )
+          return
+        }
+        // A quiet background refresh keeps what is on screen.
+        setOverview((prev) => (prev.kind === "ready" && !showSkeleton ? prev : { kind: "error", rateLimited: false }))
+      })
+  }, [])
+
+  useEffect(() => {
+    loadOverview(true)
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - lastRailFetch.current < RAIL_REFRESH_MS) return
+      loadOverview(false)
+    }
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+      overviewAbort.current?.abort()
+      window.clearTimeout(rateTimer.current)
+    }
+  }, [loadOverview])
+
+  const retryRail = useCallback(() => loadOverview(true), [loadOverview])
+
+  const rail = useMemo<RailStates>(() => {
+    if (overview.kind !== "ready") {
+      const s = overview.kind === "loading" ? ({ kind: "loading" } as const) : overview
+      return { actionItems: s, nextBooking: s, spend: s }
+    }
+    const { data } = overview
+    const failed = (k: OverviewSection) => (data.failedSections ?? []).includes(k)
+    const err = { kind: "error", rateLimited: false } as const
+    return {
+      actionItems: data.actionItems && !failed("actionItems") ? { kind: "ready", data: data.actionItems } : err,
+      nextBooking: failed("nextBooking") ? err : { kind: "ready", data: data.nextBooking ?? null },
+      spend: data.spend && !failed("spend") ? { kind: "ready", data: data.spend } : err,
+    }
+  }, [overview])
+
+  // Below 1280px "Needs your action" sits above the track only when there is something to do (FR-2.2).
+  const showActionCard =
+    rail.actionItems.kind === "error" ||
+    (rail.actionItems.kind === "ready" && actionRows(rail.actionItems.data).length > 0)
 
   if (!user) return null
 
-  const open       = jobs.filter((j) => j.status === "OPEN").length
-  const inProgress = jobs.filter((j) => j.status === "IN_PROGRESS" || j.status === "PENDING").length
-  const completed  = jobs.filter((j) => j.status === "COMPLETED").length
-  const cancelled  = jobs.filter((j) => j.status === "CANCELLED").length
-
-  const stats: { label: FilterKey; value: number; icon: React.ElementType; iconBg: string; iconColor: string }[] = [
-    { label: "Open",        value: open,       icon: Clock,        iconBg: "bg-primary/10",     iconColor: "text-primary"     },
-    { label: "In Progress", value: inProgress, icon: TrendingUp,   iconBg: "bg-muted",          iconColor: "text-foreground"  },
-    { label: "Completed",   value: completed,  icon: CheckCircle,  iconBg: "bg-primary/20",     iconColor: "text-primary"     },
-    { label: "Cancelled",   value: cancelled,  icon: XCircle,      iconBg: "bg-destructive/10", iconColor: "text-destructive" },
-  ]
-
-  const handleStatClick = (label: FilterKey) => {
-    setActiveFilter((prev) => (prev === label ? null : label))
-  }
+  // ── Derived view state ─────────────────────────────────────────────────────
+  const counts = summary.kind === "ready" ? summary.data.byStage : null
+  const stageCounts: JobStageCount[] = STAGES.map(({ stage, label }) => ({
+    stage,
+    label,
+    count: counts ? (counts[stage] ?? 0) : null,
+  }))
+  const countsLoading = summary.kind === "loading" && !countsGraceOver
+  const results =
+    selected === null ? null : list.kind === "ready" ? list.total : counts ? (counts[selected] ?? 0) : null
+  const footer = selected && list.kind === "ready" ? showMoreState(list.items.length, list.total, selected) : null
+  const swapKey = filterChanges > 0 ? `${selected ?? "recent"}-${filterChanges}` : null
 
   return (
-    <DashboardLayout>
-      <div className="space-y-5">
-        {/* Page header */}
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Account Dashboard
-            </p>
-            <h1 className="mt-0.5 text-2xl font-bold text-foreground">
-              Welcome back, {user.name.split(" ")[0]}!
-            </h1>
-            <p className="text-sm text-muted-foreground">Find trusted artisans and manage your job postings</p>
-          </div>
-          <div className="mt-2 flex items-center gap-2 sm:mt-0">
-            <Button variant="outline" className="hidden bg-transparent sm:flex" asChild>
-              <Link href="/dashboard/user/search">
-                <Search className="mr-2 h-4 w-4" />
-                Find Artisans
-              </Link>
-            </Button>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 transition-colors" asChild>
-              <Link href="/dashboard/user/post-job">
-                <Plus className="mr-2 h-4 w-4" />
-                Post a Job
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        {/* Quick Stats — clickable to filter */}
-        <div className="grid gap-3 md:grid-cols-4">
-          {stats.map(({ label, value, icon: Icon, iconBg, iconColor }) => {
-            const isActive = activeFilter === label
-            return (
-              <button
-                key={label}
-                type="button"
-                onClick={() => handleStatClick(label)}
-                className={cn(
-                  "rounded-xl border bg-card p-5 text-left shadow-sm",
-                  "transition-all duration-200 ease-in-out",
-                  "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
-                  isActive
-                    ? "border-primary ring-1 ring-primary/50 shadow-md"
-                    : "border-border hover:border-primary/40",
-                )}
-              >
-                {/* Top row: label + icon */}
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm text-muted-foreground">{label}</p>
-                  <div className={cn("shrink-0 rounded-full p-2", iconBg)}>
-                    <Icon className={cn("h-4 w-4", iconColor)} />
-                  </div>
-                </div>
-                {/* Number */}
-                <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">{value}</p>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* My Job Postings */}
-        <Card className="shadow-sm">
-          <div className="border-b p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">
-                  My Job Postings
-                  {activeFilter && (
-                    <span className="ml-2 text-sm font-normal text-primary">({activeFilter})</span>
-                  )}
-                </h2>
-                <p className="text-sm text-muted-foreground">Your recent service requests</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {activeFilter && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setActiveFilter(null)}
-                    className="h-8 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Clear
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/dashboard/user/bookings">View All</Link>
-                </Button>
-              </div>
+    <div className="w-full max-w-[1600px] min-[1600px]:p-2">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] min-[1600px]:grid-cols-[minmax(0,1fr)_360px] min-[1600px]:gap-8">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
+          <header data-enter className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">
+                Welcome back, {user.name.split(" ")[0]}
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+                {summary.kind === "loading"
+                  ? "Loading your jobs…"
+                  : summarise(summary.kind === "ready" ? summary.data.byStage : null)}
+              </p>
             </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+              <Button className="h-10 sm:h-9" asChild>
+                <Link href="/dashboard/user/post-job">
+                  <Plus aria-hidden className="h-4 w-4" />
+                  Post a job
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-10 bg-transparent sm:h-9" asChild>
+                <Link href="/dashboard/user/search">
+                  <Search aria-hidden className="h-4 w-4" />
+                  Find artisans
+                </Link>
+              </Button>
+            </div>
+          </header>
+
+          {showActionCard && (
+            <div className="xl:hidden">
+              <RailNeedsAction state={rail.actionItems} layout="cards" onRetry={retryRail} />
+            </div>
+          )}
+
+          <section aria-labelledby="track-label" data-enter style={{ "--reveal-delay": "80ms" } as React.CSSProperties}>
+            <div className="mb-2 flex min-h-6 flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <p id="track-label" className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <ListFilter aria-hidden className="h-4 w-4 text-muted-foreground" />
+                Filter by stage
+              </p>
+              {summary.kind === "loading" ? (
+                <span aria-hidden className="h-4 w-24 rounded bg-muted motion-safe:animate-pulse" />
+              ) : summary.kind === "error" ? (
+                <p className="flex items-center gap-2 text-sm text-destructive">
+                  <AlertCircle aria-hidden className="h-4 w-4 shrink-0" />
+                  <span>Couldn&apos;t load job counts.</span>
+                  <button
+                    type="button"
+                    onClick={loadSummary}
+                    className="inline-flex min-h-11 items-center rounded font-medium text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:min-h-0 dark:focus-visible:ring-ring"
+                  >
+                    Try again
+                  </button>
+                </p>
+              ) : (
+                <p className="text-sm tabular-nums text-muted-foreground">{totalLabel(summary.data.total)}</p>
+              )}
+            </div>
+            <div ref={trackRef}>
+              <JobTrack
+                stages={stageCounts}
+                selected={selected}
+                onSelect={handleStop}
+                loading={countsLoading}
+                labelledBy="track-label"
+              />
+            </div>
+          </section>
+
+          <div data-enter style={{ "--reveal-delay": "200ms" } as React.CSSProperties} className={selected ? "-mt-2.5" : undefined}>
+            {selected && (
+              <OverviewFilterBar
+                stage={selected}
+                results={results}
+                trackRef={trackRef}
+                onClear={handleClear}
+                animate={filterChanges > 0}
+              />
+            )}
+            <OverviewJobList
+              ref={headingRef}
+              stage={selected}
+              state={list}
+              footer={footer}
+              loadingMore={loadingMore}
+              swapKey={swapKey}
+              appendedFrom={appendedFrom}
+              onRetry={() => loadList(selected)}
+              onClear={handleClear}
+              onShowMore={loadMore}
+              joined={selected !== null}
+            />
           </div>
 
-          <CardContent className="p-5">
-            {isLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : displayedJobs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="mb-3 rounded-full bg-muted p-4">
-                  <Search className="h-7 w-7 text-muted-foreground" />
-                </div>
-                <p className="font-medium text-foreground">
-                  {activeFilter ? `No ${activeFilter.toLowerCase()} jobs` : "No job postings yet"}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {activeFilter ? "Try a different filter or clear to see all" : "Post a job or browse artisans to get started"}
-                </p>
-                {!activeFilter && (
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                      <Link href="/dashboard/user/post-job">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Post a Job
-                      </Link>
-                    </Button>
-                    <Button variant="outline" className="bg-transparent" asChild>
-                      <Link href="/dashboard/user/search">
-                        <Search className="mr-2 h-4 w-4" />
-                        Find Artisans
-                      </Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div key={activeFilter ?? "all"} className="space-y-2.5">
-                {displayedJobs.map((job) => {
-                  const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
-                  return (
-                    <div
-                      key={job.id}
-                      className={cn(
-                        "flex flex-col gap-3 rounded-lg border bg-card p-4",
-                        "transition-all duration-200 hover:shadow-sm hover:border-border/80",
-                        "md:flex-row md:items-center md:justify-between",
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 shrink-0">
-                          <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan?.profilePicture)} />
-                          <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <h3 className="truncate font-medium text-foreground">{job.title}</h3>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {job.service?.name && (
-                              <span className="truncate">{job.service.name}</span>
-                            )}
-                            {job.service?.name && <span className="shrink-0">·</span>}
-                            <span className="flex shrink-0 items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {new Date(job.createdAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 md:shrink-0">
-                        <Badge variant="outline" className={cn("text-xs", cfg.className)}>
-                          <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                          {cfg.label}
-                        </Badge>
-                        <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
-                          <Link href={`/dashboard/user/bookings/${job.id}`}>View</Link>
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          <AccountRail layout="cards" states={rail} now={now} onRetry={retryRail} className="xl:hidden" />
+        </div>
+
+        <AccountRail layout="rail" states={rail} now={now} onRetry={retryRail} className="hidden xl:block" />
       </div>
+
+      <p className="sr-only" aria-live="polite">
+        {live}
+      </p>
+    </div>
+  )
+}
+
+export default function UserDashboard() {
+  return (
+    <DashboardLayout>
+      <Suspense fallback={null}>
+        <OverviewContent />
+      </Suspense>
     </DashboardLayout>
   )
 }

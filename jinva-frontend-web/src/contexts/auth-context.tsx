@@ -148,10 +148,10 @@ export function AuthProvider({
       // NOTE: an absent in-memory access token (the normal state on every
       // full page reload / new tab, since S1 holds it in memory only) is
       // NOT treated as "logged out" here — we deliberately fall through to
-      // the apiFetch call below instead of short-circuiting, so a 401 there
-      // drives lib/api.ts's existing tryRefresh() path and silently
-      // exchanges the still-valid httpOnly refresh cookie for a new access
-      // token (requirements.md S1 AC #3). Only a failed fetch/refresh (the
+      // the apiFetch call below instead of short-circuiting. On /dashboard/*
+      // lib/api.ts refreshes from the httpOnly cookie *before* sending (X4),
+      // so no request 401s first; elsewhere a 401 drives the same refresh as
+      // a retry (requirements.md S1 AC #3). Only a failed fetch/refresh (the
       // catch block below) means there's genuinely no valid session.
       if (!forceFresh) {
         const cached = readCache()

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>notifications-1440</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: { extend: {
+    fontFamily: { sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'], mono: ['Geist Mono', 'ui-monospace', 'monospace'] },
+    colors: {"background":"rgb(var(--background) / <alpha-value>)","foreground":"rgb(var(--foreground) / <alpha-value>)","card":"rgb(var(--card) / <alpha-value>)","popover":"rgb(var(--popover) / <alpha-value>)","muted":"rgb(var(--muted) / <alpha-value>)","muted-foreground":"rgb(var(--muted-foreground) / <alpha-value>)","accent":"rgb(var(--accent) / <alpha-value>)","border":"rgb(var(--border) / <alpha-value>)","input":"rgb(var(--input) / <alpha-value>)","ring":"rgb(var(--ring) / <alpha-value>)","primary":"rgb(var(--primary) / <alpha-value>)","primary-foreground":"rgb(var(--primary-foreground) / <alpha-value>)","destructive":"rgb(var(--destructive) / <alpha-value>)","success":"rgb(var(--success) / <alpha-value>)","warning":"rgb(var(--warning) / <alpha-value>)","attention":"rgb(var(--attention) / <alpha-value>)","info":"rgb(var(--info) / <alpha-value>)","brand":"rgb(var(--brand) / <alpha-value>)","brand-accent":"rgb(var(--brand-accent) / <alpha-value>)","brand-foreground":"rgb(var(--brand-foreground) / <alpha-value>)","sidebar":"rgb(var(--sidebar) / <alpha-value>)","sidebar-accent":"rgb(var(--sidebar-accent) / <alpha-value>)","sidebar-border":"rgb(var(--sidebar-border) / <alpha-value>)","sidebar-foreground":"rgb(var(--sidebar-foreground) / <alpha-value>)"},
+    borderColor: { DEFAULT: 'rgb(var(--border) / 1)' },
+    borderRadius: { sm: '6px', md: '8px', lg: '10px', xl: '14px', '2xl': '18px' },
+  } },
+}
+</script>
+<style>
+  :root { --background:255 255 255;--foreground:10 10 10;--card:255 255 255;--popover:255 255 255;--muted:245 245 245;--muted-foreground:115 115 115;--accent:245 245 245;--border:229 229 229;--input:229 229 229;--ring:161 161 161;--primary:25 59 42;--primary-foreground:250 250 250;--destructive:231 0 11;--success:1 102 48;--warning:137 75 0;--attention:159 45 0;--info:25 60 184;--brand:25 59 42;--brand-accent:59 87 72;--brand-foreground:250 250 250;--sidebar:25 59 42;--sidebar-accent:22 47 34;--sidebar-border:41 75 57;--sidebar-foreground:238 238 238; color-scheme: light; }
+  :root.dark { --background:7 7 7;--foreground:245 245 245;--card:14 19 17;--popover:14 19 17;--muted:25 30 28;--muted-foreground:143 143 143;--accent:29 38 34;--border:34 38 36;--input:43 47 45;--ring:2 158 114;--primary:2 158 114;--primary-foreground:245 245 245;--destructive:249 63 78;--success:5 223 114;--warning:255 185 0;--attention:255 137 4;--info:80 162 255;--brand:5 32 21;--brand-accent:41 63 52;--brand-foreground:245 245 245;--sidebar:2 14 9;--sidebar-accent:10 26 19;--sidebar-border:21 41 32;--sidebar-foreground:239 239 239; color-scheme: dark; }
+  html, body { background: rgb(var(--background)); color: rgb(var(--foreground)); }
+  body { font-family: Geist, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-feature-settings: "ss01"; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
+  .user-text { unicode-bidi: isolate; overflow-wrap: anywhere; white-space: pre-wrap; }
+  /* The one orchestrated moment: the disclosure opening in place. */
+  .disclosure-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 200ms cubic-bezier(.2,.8,.2,1); }
+  .spine { transform-origin: top; animation: spine 240ms cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes spine { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  @media (prefers-reduced-motion: reduce) { .disclosure-body, .spine { transition: none; animation: none; } }
+  .scroll-fade { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
+</style>
+</head>
+<body class="h-screen overflow-hidden">
+<script></script>
+<div class="flex h-screen">
+  <aside class="relative w-56 shrink-0 border-r border-sidebar-border bg-sidebar">
+  <div class="sticky top-0 flex h-screen flex-col">
+    <div class="flex h-14 items-center border-b border-sidebar-border px-4"><div class="flex items-center gap-2">
+  <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true" class="shrink-0 text-brand-foreground"><rect width="32" height="32" rx="6" fill="currentColor"/><g class="text-brand"><path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z" fill="currentColor"/><circle cx="19" cy="9" r="2" fill="currentColor"/></g></svg>
+  <span class="text-2xl font-bold text-brand-foreground">JinVa</span></div></div>
+    <div class="flex-1 px-3 py-3">
+      <p class="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">Main</p>
+      <nav class="space-y-0.5"><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm bg-sidebar-accent font-medium text-sidebar-foreground"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>Overview</a><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>Post a Job</a><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Find Artisans</a><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>My Bookings</a><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>Spending</a><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"/></svg>My Jobs</a><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>Favourites</a><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages</a></nav>
+      <div class="my-3 border-t border-sidebar-border"></div>
+      <p class="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">Workspace</p>
+      <nav class="space-y-0.5"><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Settings</a><a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>Support</a></nav>
+    </div>
+    <div class="border-t border-sidebar-border p-3"><div class="flex items-center gap-2.5 px-2 py-2">
+      <span class="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-foreground/15 text-xs font-semibold text-sidebar-foreground">AO</span>
+      <div class="min-w-0"><p class="truncate text-sm font-medium leading-tight text-sidebar-foreground">Ama Owusu</p><p class="text-xs leading-tight text-sidebar-foreground/55">Client</p></div>
+    </div></div>
+  </div>
+</aside>
+  <div class="flex min-w-0 flex-1 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur md:px-6">
+  <div class="flex items-center gap-2">
+    
+    <h1 class="text-base font-semibold">Overview</h1>
+  </div>
+  <div class="flex items-center gap-0.5">
+    <button aria-label="Toggle theme" class="relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+    <button aria-label="Messages" class="relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg><span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground ring-1 ring-background tnum">2</span></button>
+    <button aria-label="Notifications" class="relative flex h-9 w-9 items-center justify-center rounded-md bg-muted text-foreground"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground ring-1 ring-background tnum">3</span></button>
+    <span class="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">AO</span>
+  </div>
+</header>
+    <main class="flex-1 p-6 overflow-hidden"><div class="max-w-[960px]">
+  <h2 class="text-2xl font-bold tracking-tight">Good afternoon, Ama</h2>
+  <p class="mt-1 text-sm text-muted-foreground">2 jobs in progress and 1 waiting for you to choose an artisan.</p>
+  <div class="mt-5 flex items-stretch gap-2 rounded-xl border bg-card p-2 sm:gap-4 sm:p-3">
+    <div class="relative grid flex-1 grid-cols-3 gap-1 sm:gap-2"><span class="absolute left-[17px] right-[calc(33.333%-22px)] top-[16.5px] h-px bg-primary/30"></span><div class="flex min-w-0 flex-col items-start rounded-lg px-2 py-2.5 sm:px-3 sm:py-3"><span class="relative z-10 block h-2.5 w-2.5 rounded-full ring-4 ring-card bg-primary"></span><span class="mt-3 text-2xl font-semibold leading-none tracking-tight tnum sm:text-3xl ">1</span><span class="mt-1.5 text-xs text-muted-foreground sm:text-sm">Open</span></div><div class="flex min-w-0 flex-col items-start rounded-lg px-2 py-2.5 sm:px-3 sm:py-3"><span class="relative z-10 block h-2.5 w-2.5 rounded-full ring-4 ring-card bg-primary"></span><span class="mt-3 text-2xl font-semibold leading-none tracking-tight tnum sm:text-3xl ">2</span><span class="mt-1.5 text-xs text-muted-foreground sm:text-sm">In progress</span></div><div class="flex min-w-0 flex-col items-start rounded-lg px-2 py-2.5 sm:px-3 sm:py-3"><span class="relative z-10 block h-2.5 w-2.5 rounded-full ring-4 ring-card bg-primary"></span><span class="mt-3 text-2xl font-semibold leading-none tracking-tight tnum sm:text-3xl ">6</span><span class="mt-1.5 text-xs text-muted-foreground sm:text-sm">Completed</span></div></div>
+    <div class="flex border-l border-dashed pl-2 sm:pl-4"><div class="flex min-w-0 flex-col items-start rounded-lg px-2 py-2.5 sm:px-3 sm:py-3"><span class="relative z-10 block h-2.5 w-2.5 rounded-full ring-4 ring-card border border-muted-foreground/40 bg-card"></span><span class="mt-3 text-2xl font-semibold leading-none tracking-tight tnum sm:text-3xl text-muted-foreground">1</span><span class="mt-1.5 text-xs text-muted-foreground sm:text-sm">Closed</span></div></div>
+  </div>
+  <div class="mt-6 rounded-xl border bg-card">
+    <div class="flex items-center justify-between border-b px-4 py-3"><h3 class="text-sm font-semibold">Recent jobs</h3><a class="text-sm font-medium text-primary">See all jobs</a></div>
+    <ul class="divide-y"><li class="flex items-center justify-between gap-4 px-4 py-3.5"><div class="min-w-0"><p class="truncate text-sm font-medium">Fix leaking kitchen tap</p><p class="mt-0.5 text-xs text-muted-foreground">Plumbing, Kofi Asante</p></div><span class="shrink-0 rounded-full border px-2 py-0.5 text-xs bg-muted">In progress</span></li><li class="flex items-center justify-between gap-4 px-4 py-3.5"><div class="min-w-0"><p class="truncate text-sm font-medium">Deep clean, 3-bedroom flat</p><p class="mt-0.5 text-xs text-muted-foreground">Cleaning, Abena Boateng</p></div><span class="shrink-0 rounded-full border px-2 py-0.5 text-xs bg-muted">In progress</span></li><li class="flex items-center justify-between gap-4 px-4 py-3.5"><div class="min-w-0"><p class="truncate text-sm font-medium">Install ceiling fan in living room</p><p class="mt-0.5 text-xs text-muted-foreground">Electrical, 3 applications</p></div><span class="shrink-0 rounded-full border px-2 py-0.5 text-xs border-primary/20 bg-primary/10 text-primary">Open</span></li><li class="flex items-center justify-between gap-4 px-4 py-3.5"><div class="min-w-0"><p class="truncate text-sm font-medium">Rewire bedroom sockets</p><p class="mt-0.5 text-xs text-muted-foreground">Electrical, Selorm Agbeko</p></div><span class="shrink-0 rounded-full border px-2 py-0.5 text-xs border-success/20 bg-success/10 text-success">Completed</span></li><li class="flex items-center justify-between gap-4 px-4 py-3.5"><div class="min-w-0"><p class="truncate text-sm font-medium">Repaint front gate</p><p class="mt-0.5 text-xs text-muted-foreground">Painting, Yaw Darko</p></div><span class="shrink-0 rounded-full border px-2 py-0.5 text-xs border-success/20 bg-success/10 text-success">Completed</span></li></ul>
+  </div>
+</div></main>
+  </div>
+</div>
+<div role="dialog" aria-label="Notifications" class="fixed top-[52px] z-40 w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25),0_2px_6px_-2px_rgb(0_0_0/0.08)]" style="right:60px">
+  <div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Notifications</h2><span class="text-xs text-muted-foreground tnum">3 unread</span></div>
+  <div class="flex items-center gap-1"><button class="h-7 rounded-md px-2 text-xs font-medium text-primary">Mark all read</button></div>
+</div><ul role="list" class="divide-y max-h-[70vh] overflow-y-auto overscroll-contain"><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9021-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9021-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">Dispute resolved</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 2:14 pm">2 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Your dispute on ‘Fix leaking kitchen tap’ was resolved in your favour. A refund of GH₵ 150.00 has been sent to your original payment method and should arrive within 5 working days.</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9020-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9020-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">New message from Kofi Asante</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 1:52 pm">2 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Good afternoon Madam Ama, I checked the kitchen tap again this morning. The leak is from the cartri…</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9017-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9017-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">Payment held safely</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 11:40 am">5 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Your payment of GH₵ 450.00 for ‘Rewire bedroom sockets’ is held by JinVa. Selorm Agbeko is paid once you confirm the job is done.</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9004-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9004-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium">Booking confirmed</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Wed 29 Oct 2026, 6:05 pm">Yesterday</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">Abena Boateng accepted your booking for ‘Deep clean, 3-bedroom flat’ on Sat 1 Nov 2026, 9:00 am.</span>
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n8990-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect x="2" y="6" width="20" height="14" rx="2"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n8990-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium">3 artisans applied</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Tue 28 Oct 2026, 9:12 am">2 d ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">Three artisans applied to ‘Install ceiling fan in living room’. Compare their quotes and choose one.</span>
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li></ul><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all notifications</a></div>
+</div>
+</body></html>

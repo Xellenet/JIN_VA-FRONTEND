@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en-GB" class="">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spending, desktop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: { extend: {
+    fontFamily: { sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+    colors: {
+      background: 'rgb(var(--background-rgb) / <alpha-value>)', foreground: 'rgb(var(--foreground-rgb) / <alpha-value>)', card: 'rgb(var(--card-rgb) / <alpha-value>)',
+      muted: { DEFAULT: 'rgb(var(--muted-rgb) / <alpha-value>)', foreground: 'rgb(var(--muted-foreground-rgb) / <alpha-value>)' },
+      border: 'rgb(var(--border-rgb) / <alpha-value>)', ring: 'rgb(var(--ring-rgb) / <alpha-value>)',
+      primary: { DEFAULT: 'rgb(var(--primary-rgb) / <alpha-value>)', foreground: 'rgb(var(--primary-foreground-rgb) / <alpha-value>)' },
+      brand: { DEFAULT: 'rgb(var(--brand-rgb) / <alpha-value>)', foreground: 'rgb(var(--brand-foreground-rgb) / <alpha-value>)' },
+      success: 'rgb(var(--success-rgb) / <alpha-value>)', warning: 'rgb(var(--warning-rgb) / <alpha-value>)',
+      info: 'rgb(var(--info-rgb) / <alpha-value>)', destructive: 'rgb(var(--destructive-rgb) / <alpha-value>)',
+      sidebar: { DEFAULT: 'var(--sidebar)', accent: 'var(--sidebar-accent)', border: 'var(--sidebar-border)', foreground: 'rgb(var(--sidebar-foreground-rgb) / <alpha-value>)' },
+      c1: 'var(--chart-1)', c3: 'var(--chart-3)', c4: 'var(--chart-4)',
+    },
+  } },
+}
+</script>
+<style>
+  /* JinVa tokens (src/app/globals.css), hex equivalents. */
+  :root {
+    --background: #ffffff; --foreground: #0a0a0a; --card: #ffffff;
+    --muted: #f5f5f5; --muted-foreground: #737373; --border: #e5e5e5; --ring: #a1a1a1;
+    --primary: #193b2a; --primary-foreground: #fafafa;
+    --brand: #193b2a; --brand-foreground: #fafafa;
+    --success-rgb: 1 102 48; --warning-rgb: 137 75 0; --info-rgb: 25 60 184; --destructive-rgb: 231 0 11;
+    --sidebar: #193b2a; --sidebar-accent: #162f22; --sidebar-border: #294b39; --sidebar-foreground: #eeeeee;
+    --background-rgb: 255 255 255; --foreground-rgb: 10 10 10; --card-rgb: 255 255 255; --muted-rgb: 245 245 245;
+    --muted-foreground-rgb: 115 115 115; --border-rgb: 229 229 229; --ring-rgb: 161 161 161; --primary-rgb: 25 59 42;
+    --primary-foreground-rgb: 250 250 250; --brand-rgb: 25 59 42; --brand-foreground-rgb: 250 250 250; --sidebar-foreground-rgb: 238 238 238;
+    /* Spending-page scoped chart palette (Designer note D1): green / amber / blue. */
+    --chart-1: #17895b; --chart-3: #be8700; --chart-4: #3d78b2;
+  }
+  .dark {
+    --background: #070707; --foreground: #f5f5f5; --card: #0e1311;
+    --muted: #191e1c; --muted-foreground: #8f8f8f; --border: rgb(255 255 255 / 0.08); --ring: #029e72;
+    --primary: #029e72; --primary-foreground: #f5f5f5;
+    --brand: #052015; --brand-foreground: #f5f5f5;
+    --success-rgb: 5 223 114; --warning-rgb: 255 185 0; --info-rgb: 80 162 255; --destructive-rgb: 249 63 78;
+    --sidebar: #020e09; --sidebar-accent: #0a1a13; --sidebar-border: #152920; --sidebar-foreground: #ededed;
+    --background-rgb: 7 7 7; --foreground-rgb: 245 245 245; --card-rgb: 14 19 17; --muted-rgb: 25 30 28;
+    --muted-foreground-rgb: 143 143 143; --border-rgb: 34 39 37; --ring-rgb: 2 158 114; --primary-rgb: 2 158 114;
+    --primary-foreground-rgb: 245 245 245; --brand-rgb: 5 32 21; --brand-foreground-rgb: 245 245 245; --sidebar-foreground-rgb: 237 237 237;
+    --chart-1: #029e72; --chart-3: #e58a00; --chart-4: #ad4aff;
+  }
+  html, body { background: var(--background); color: var(--foreground); }
+  body { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-feature-settings: "tnum" 0; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .focus-ring { outline: 2px solid var(--ring); outline-offset: 2px; }
+  /* The one orchestrated moment: the year fills in. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-rise] { transform-origin: bottom; animation: rise 640ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 0ms); }
+    [data-grow] { transform-origin: left; animation: grow 720ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 0ms); }
+    @keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  }
+  .shimmer { background: var(--muted); }
+  @media (prefers-reduced-motion: no-preference) { .shimmer { animation: pulse 1.6s ease-in-out infinite; } @keyframes pulse { 50% { opacity: .55; } } }
+</style>
+
+</head>
+<body class="min-h-screen">
+<div class="flex"><aside class="flex min-h-screen w-56 shrink-0 flex-col self-stretch border-r border-sidebar-border bg-sidebar">
+  <div class="flex h-14 items-center border-b border-sidebar-border px-4">
+    <span class="flex items-center gap-2"><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#fafafa"/><g fill="var(--sidebar)"><path d="M12 8C12 7.44772 12.4477 7 13 7C13.5523 7 14 7.44772 14 8V18C14 20.7614 16.2386 23 19 23C19.5523 23 20 23.4477 20 24C20 24.5523 19.5523 25 19 25C15.134 25 12 21.866 12 18V8Z"/><circle cx="19" cy="9" r="2"/></g></svg><span class="text-2xl font-bold text-sidebar-foreground">JinVa</span></span>
+  </div>
+  <div class="flex-1 overflow-hidden px-3 py-3">
+    <p class="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">Main</p>
+    <nav class="space-y-0.5"><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>Overview</a><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Post a Job</a><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Find Artisans</a><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>My Bookings</a><a href="#" aria-current="page" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm bg-sidebar-accent font-medium text-sidebar-foreground"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>Spending</a><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></svg>My Jobs</a><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>Favourites</a><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages</a></nav>
+    <div class="my-3 border-t border-sidebar-border"></div>
+    <p class="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">Workspace</p>
+    <nav class="space-y-0.5"><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a><a href="#"  class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>Support</a></nav>
+  </div>
+  <div class="border-t border-sidebar-border p-3"><div class="flex items-center gap-2.5 px-2 py-2">
+    <span class="grid h-8 w-8 place-items-center rounded-full bg-[#2f6b4f] text-xs font-semibold text-white">KM</span>
+    <div><p class="text-sm font-medium leading-tight text-sidebar-foreground">Kwame Mensah</p><p class="text-xs leading-tight text-sidebar-foreground/55">Client</p></div>
+  </div></div>
+</aside><div class="min-w-0 flex-1"><header class="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background px-6">
+  <div class="flex items-center gap-1"><h1 class="text-base font-semibold">Spending</h1></div>
+  <div class="flex items-center gap-0.5"><button class="relative grid h-8 w-8 place-items-center rounded-md text-muted-foreground" aria-label="moon"><svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button><button class="relative grid h-8 w-8 place-items-center rounded-md text-muted-foreground" aria-label="mail"><svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg><span class="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-1 ring-background">2</span></button><button class="relative grid h-8 w-8 place-items-center rounded-md text-muted-foreground" aria-label="bell"><svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-1 ring-background">3</span></button>
+    <span class="ml-1 grid h-8 w-8 place-items-center rounded-full bg-primary text-xs font-medium text-primary-foreground">KM</span></div>
+</header><main class="mx-auto max-w-[1200px] px-6 pb-20 pt-6"><div class="space-y-6"><div class="flex items-end justify-between gap-6">
+  <div>
+    <h2 class="text-[1.75rem] font-semibold tracking-tight">Your spending</h2>
+    <p class="mt-1 text-sm sm:text-base text-muted-foreground">What you have paid through JinVa, what it was for and who you paid.</p>
+  </div>
+  <div role="group" aria-label="Period" class="inline-flex rounded-lg border border-border bg-muted p-1">
+  <button aria-pressed="false" title="Last 30 days" class="h-9 px-3.5 text-sm rounded-md whitespace-nowrap text-muted-foreground">30 days</button><button aria-pressed="false" title="Last 90 days" class="h-9 px-3.5 text-sm rounded-md whitespace-nowrap text-muted-foreground">90 days</button><button aria-pressed="true" title="Last 12 months" class="h-9 px-3.5 text-sm rounded-md whitespace-nowrap bg-card font-semibold text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_rgb(var(--border-rgb))]">12 months</button><button aria-pressed="false" title="All time" class="h-9 px-3.5 text-sm rounded-md whitespace-nowrap text-muted-foreground">All time</button>
+</div>
+</div><section aria-label="Spending summary" class="relative overflow-hidden rounded-2xl bg-brand text-brand-foreground">
+    <div class="relative grid grid-cols-[1.75fr_1fr_1fr_1fr] divide-x" style="--tw-divide-opacity:1">
+      <div class="" style="border-color:rgb(255 255 255/.12)"><div class="px-8 py-7">
+      <p class="flex items-center gap-2 text-sm text-brand-foreground/80">Net spent in the last 12 months
+        <button class="grid h-6 w-6 place-items-center rounded-full text-brand-foreground/70 hover:bg-white/10" aria-label="How net spent is worked out"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></button></p>
+      <div class="mt-4"><p class="tnum text-[60px] font-semibold leading-none tracking-[-0.035em]" aria-label="GH₵ 14,820.00"><span class="mr-1 align-[0.52em] text-[0.38em] font-medium tracking-normal text-brand-foreground/70">GH₵</span>14,820<span class="text-brand-foreground/55">.00</span></p></div>
+      <p class="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-brand-foreground/85"><span class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 font-medium"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>59% more</span>than the previous 12 months (GH₵ 9,300.00)</p>
+    </div></div><div class="border-l" style="border-color:rgb(255 255 255/.12)"><div class="px-7 py-7">
+      <div class=""><p class="flex items-center gap-1.5 text-sm text-brand-foreground/75"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>In escrow</p>
+      </div>
+      <div class=""><p class="tnum whitespace-nowrap mt-3 text-[26px] font-semibold tracking-tight">GH₵ 650.00</p>
+      <p class="mt-1.5 text-[13px] leading-snug text-brand-foreground/65">Held safely until you confirm the job is done</p></div>
+    </div></div><div class="border-l" style="border-color:rgb(255 255 255/.12)"><div class="px-7 py-7">
+      <div class=""><p class="flex items-center gap-1.5 text-sm text-brand-foreground/75">Refunded</p>
+      </div>
+      <div class=""><p class="tnum whitespace-nowrap mt-3 text-[26px] font-semibold tracking-tight">GH₵ 600.00</p>
+      <p class="mt-1.5 text-[13px] leading-snug text-brand-foreground/65">Returned to you, already taken off net spent</p></div>
+    </div></div><div class="border-l" style="border-color:rgb(255 255 255/.12)"><div class="px-7 py-7">
+      <div class=""><p class="flex items-center gap-1.5 text-sm text-brand-foreground/75">Payments</p>
+      </div>
+      <div class=""><p class="tnum whitespace-nowrap mt-3 text-[26px] font-semibold tracking-tight">19</p>
+      <p class="mt-1.5 text-[13px] leading-snug text-brand-foreground/65">Average GH₵ 780.00</p></div>
+    </div></div>
+    </div><div class="relative"><div class="border-t border-white/12 px-8 py-4 text-sm text-brand-foreground/80" style="border-color:rgb(255 255 255/.12)">
+      Your largest payment: <span class="tnum font-semibold text-brand-foreground">GH₵ 2,400.00</span> for <a href="#" class="font-medium text-brand-foreground underline decoration-white/40 underline-offset-4">Rewire 3-bedroom flat</a> on 12 Aug 2026.
+    </div></div></section>
+    <div class="grid grid-cols-3 gap-6"><section aria-labelledby="ot-t" class="col-span-2 flex flex-col rounded-xl border border-border bg-card ">
+  <div class="flex items-start justify-between gap-4 px-6 pt-5">
+    <div class="min-w-0"><h3 id="ot-t" class="text-[15px] font-semibold">Spending over time</h3>
+    <p class="mt-1 text-sm text-muted-foreground">Highest in August 2026 at GH₵ 3,150.00. Nothing spent in November 2025 or February 2026.</p></div>
+    <div role="group" aria-label="Show as" class="inline-flex shrink-0 rounded-lg bg-muted p-0.5"><button aria-pressed="true" aria-controls="ot"  class="inline-flex h-8 gap-1.5 px-2.5 items-center rounded-md text-[13px] bg-card font-medium text-foreground shadow-[0_0_0_1px_rgb(var(--border-rgb))]"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Chart</button><button aria-pressed="false" aria-controls="ot"  class="inline-flex h-8 gap-1.5 px-2.5 items-center rounded-md text-[13px] text-muted-foreground"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M12 3v18"/></svg>Table</button></div>
+  </div>
+  <div id="ot" class="flex-1 px-6 pb-6 pt-5"><div class="relative" style="height:248px">
+      <div class="absolute inset-x-0 flex items-center" style="bottom:0%"><span class="tnum w-14 shrink-0 whitespace-nowrap pr-2 text-right text-[11px] leading-none text-muted-foreground">0</span><span class="h-px flex-1 bg-border"></span></div><div class="absolute inset-x-0 flex items-center" style="bottom:25%"><span class="tnum w-14 shrink-0 whitespace-nowrap pr-2 text-right text-[11px] leading-none text-muted-foreground">GH₵ 1k</span><span class="h-px flex-1 bg-border/70"></span></div><div class="absolute inset-x-0 flex items-center" style="bottom:50%"><span class="tnum w-14 shrink-0 whitespace-nowrap pr-2 text-right text-[11px] leading-none text-muted-foreground">GH₵ 2k</span><span class="h-px flex-1 bg-border/70"></span></div><div class="absolute inset-x-0 flex items-center" style="bottom:75%"><span class="tnum w-14 shrink-0 whitespace-nowrap pr-2 text-right text-[11px] leading-none text-muted-foreground">GH₵ 3k</span><span class="h-px flex-1 bg-border/70"></span></div><div class="absolute inset-x-0 flex items-center" style="bottom:100%"><span class="tnum w-14 shrink-0 whitespace-nowrap pr-2 text-right text-[11px] leading-none text-muted-foreground">GH₵ 4k</span><span class="h-px flex-1 bg-border/70"></span></div>
+      <div class="absolute bottom-0 left-14 right-0 top-0 flex gap-0.5"><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="November 2025: GH₵ 0.00, 0 payments">
+      
+      <span class="block h-[3px] w-[54%] max-w-[38px] rounded-full bg-muted-foreground/40"></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="December 2025: GH₵ 1,200.00, 2 payments">
+      
+      <span data-rise style="--d:160ms;height:30%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="January 2026: GH₵ 650.00, 1 payment">
+      
+      <span data-rise style="--d:200ms;height:16.25%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="February 2026: GH₵ 0.00, 0 payments">
+      
+      <span class="block h-[3px] w-[54%] max-w-[38px] rounded-full bg-muted-foreground/40"></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="March 2026: GH₵ 980.00, 1 payment">
+      
+      <span data-rise style="--d:280ms;height:24.5%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="April 2026: GH₵ 1,450.00, 2 payments">
+      
+      <span data-rise style="--d:320ms;height:36.25%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="May 2026: GH₵ 720.00, 1 payment">
+      
+      <span data-rise style="--d:360ms;height:18%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center z-10" aria-label="June 2026: GH₵ 1,890.00, 2 payments">
+      
+      <span data-rise style="--d:400ms;height:47.25%;" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 ring-2 ring-offset-2 ring-[var(--chart-1)] ring-offset-[var(--card)]"></span>
+      <div role="tooltip" class="absolute left-1/2 w-max -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-2 text-left shadow-[0_8px_24px_-8px_rgb(0_0_0/0.25)]" style="bottom:calc(47.25% + 12px)">
+    <p class="tnum text-sm font-semibold">GH₵ 1,890.00</p>
+    <p class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"><span class="h-0.5 w-3 rounded bg-c1"></span>June 2026, 2 payments</p>
+  </div>
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="July 2026: GH₵ 1,100.00, 2 payments">
+      
+      <span data-rise style="--d:440ms;height:27.500000000000004%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="August 2026: GH₵ 3,150.00, 3 payments">
+      <span class="tnum absolute whitespace-nowrap text-[11px] font-medium text-foreground" style="bottom:calc(78.75% + 6px)">GH₵ 3,150</span>
+      <span data-rise style="--d:480ms;height:78.75%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="September 2026: GH₵ 1,630.00, 2 payments">
+      
+      <span data-rise style="--d:520ms;height:40.75%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button><button class="group relative flex h-full flex-1 flex-col justify-end items-center " aria-label="October 2026: GH₵ 2,050.00, 3 payments">
+      
+      <span data-rise style="--d:560ms;height:51.24999999999999%;opacity:.4" class="block w-[54%] max-w-[38px] rounded-t-[4px] bg-c1 "></span>
+      
+    </button></div>
+    </div>
+    <div class="ml-14 mt-2 flex gap-0.5"><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Nov<br><span class="text-foreground/70">2025</span></div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Dec<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Jan<br><span class="text-foreground/70">2026</span></div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Feb<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Mar<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Apr<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">May<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Jun<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Jul<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Aug<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Sep<br>&nbsp;</div><div class="flex-1 text-center text-[11px] leading-tight text-muted-foreground">Oct<br>&nbsp;</div></div></div>
+</section><section aria-labelledby="bs-t" class="flex flex-col rounded-xl border border-border bg-card ">
+  <div class="flex items-start justify-between gap-4 px-6 pt-5">
+    <div class="min-w-0"><h3 id="bs-t" class="text-[15px] font-semibold">What you spent on</h3>
+    <p class="mt-1 text-sm text-muted-foreground">Plumbing is 35% of your spending.</p></div>
+    <div role="group" aria-label="Show as" class="inline-flex shrink-0 rounded-lg bg-muted p-0.5"><button aria-pressed="true" aria-controls="bs"  class="inline-flex h-8 gap-1.5 px-2.5 items-center rounded-md text-[13px] bg-card font-medium text-foreground shadow-[0_0_0_1px_rgb(var(--border-rgb))]"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Chart</button><button aria-pressed="false" aria-controls="bs"  class="inline-flex h-8 gap-1.5 px-2.5 items-center rounded-md text-[13px] text-muted-foreground"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M12 3v18"/></svg>Table</button></div>
+  </div>
+  <div id="bs" class="flex-1 px-6 pb-6 pt-5"><ol class="space-y-4"><li>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <span class="min-w-0 truncate"><span class="font-medium">Plumbing</span> <span class="text-muted-foreground">7 payments</span></span>
+        <span class="tnum shrink-0"><span class="font-medium">GH₵ 5,200.00</span><span class="ml-2 inline-block w-9 text-right text-muted-foreground">35%</span></span>
+      </div>
+      <div class="mt-1.5 h-2 rounded-full bg-muted"><div data-grow style="--d:200ms;width:100%" class="h-2 rounded-full bg-c1"></div></div>
+    </li><li>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <span class="min-w-0 truncate"><span class="font-medium">Electrical</span> <span class="text-muted-foreground">4 payments</span></span>
+        <span class="tnum shrink-0"><span class="font-medium">GH₵ 4,180.00</span><span class="ml-2 inline-block w-9 text-right text-muted-foreground">28%</span></span>
+      </div>
+      <div class="mt-1.5 h-2 rounded-full bg-muted"><div data-grow style="--d:250ms;width:80.38461538461539%" class="h-2 rounded-full bg-c1"></div></div>
+    </li><li>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <span class="min-w-0 truncate"><span class="font-medium">Cleaning</span> <span class="text-muted-foreground">3 payments</span></span>
+        <span class="tnum shrink-0"><span class="font-medium">GH₵ 1,950.00</span><span class="ml-2 inline-block w-9 text-right text-muted-foreground">13%</span></span>
+      </div>
+      <div class="mt-1.5 h-2 rounded-full bg-muted"><div data-grow style="--d:300ms;width:37.5%" class="h-2 rounded-full bg-c1"></div></div>
+    </li><li>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <span class="min-w-0 truncate"><span class="font-medium">Carpentry</span> <span class="text-muted-foreground">2 payments</span></span>
+        <span class="tnum shrink-0"><span class="font-medium">GH₵ 1,420.00</span><span class="ml-2 inline-block w-9 text-right text-muted-foreground">10%</span></span>
+      </div>
+      <div class="mt-1.5 h-2 rounded-full bg-muted"><div data-grow style="--d:350ms;width:27.307692307692307%" class="h-2 rounded-full bg-c1"></div></div>
+    </li><li>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <span class="min-w-0 truncate"><span class="font-medium">Painting</span> <span class="text-muted-foreground">1 payment</span></span>
+        <span class="tnum shrink-0"><span class="font-medium">GH₵ 860.00</span><span class="ml-2 inline-block w-9 text-right text-muted-foreground">6%</span></span>
+      </div>
+      <div class="mt-1.5 h-2 rounded-full bg-muted"><div data-grow style="--d:400ms;width:16.538461538461537%" class="h-2 rounded-full bg-c1"></div></div>
+    </li><li>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <span class="min-w-0 truncate"><span class="font-medium">Tiling</span> <span class="text-muted-foreground">1 payment</span></span>
+        <span class="tnum shrink-0"><span class="font-medium">GH₵ 410.00</span><span class="ml-2 inline-block w-9 text-right text-muted-foreground">3%</span></span>
+      </div>
+      <div class="mt-1.5 h-2 rounded-full bg-muted"><div data-grow style="--d:450ms;width:7.884615384615384%" class="h-2 rounded-full bg-c1"></div></div>
+    </li><li>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <span class="min-w-0 truncate"><span class="font-medium">Other</span> <span class="text-muted-foreground">1 payment</span></span>
+        <span class="tnum shrink-0"><span class="font-medium">GH₵ 800.00</span><span class="ml-2 inline-block w-9 text-right text-muted-foreground">5%</span></span>
+      </div>
+      <div class="mt-1.5 h-2 rounded-full bg-muted"><div data-grow style="--d:500ms;width:15.384615384615385%" class="h-2 rounded-full bg-muted-foreground/45"></div></div>
+    </li></ol></div>
+</section></div>
+    <div class="grid grid-cols-3 gap-6"><section aria-labelledby="ba-t" class="col-span-2 flex flex-col rounded-xl border border-border bg-card ">
+  <div class="flex items-start justify-between gap-4 px-6 pt-5">
+    <div class="min-w-0"><h3 id="ba-t" class="text-[15px] font-semibold">Who you paid</h3>
+    <p class="mt-1 text-sm text-muted-foreground">Kofi Asante received the most: GH₵ 3,780.00 over 4 jobs.</p></div>
+    
+  </div>
+  <div id="ba" class="flex-1 px-6 pb-6 pt-5"><table class="w-full text-sm"><caption class="sr-only">Top 5 artisans by net spent</caption><thead><tr class="border-b border-border text-left text-[13px] text-muted-foreground"><th class="pb-2 font-medium">Artisan</th><th class="pb-2 text-right font-medium">Jobs</th><th class="pb-2 pl-6 font-medium">Last paid</th><th class="pb-2 pl-6 text-right font-medium">Net spent</th></tr></thead><tbody><tr class="border-b border-border/70 last:border-0">
+        <td class="py-3"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold text-foreground/80">KA</span>
+          <div><a href="#" class="font-medium hover:underline">Kofi Asante</a><p class="text-[13px] text-muted-foreground">Electrical</p></div></div></td>
+        <td class="tnum py-3 text-right text-muted-foreground">4</td>
+        <td class="py-3 pl-6 text-muted-foreground">18 Oct 2026</td>
+        <td class="py-3 pl-6 w-[34%]"><div class="flex items-center gap-3"><div class="h-1.5 flex-1 rounded-full bg-muted"><div data-grow style="--d:300ms;width:100%" class="h-1.5 rounded-full bg-c1"></div></div><span class="tnum w-[104px] whitespace-nowrap text-right font-medium">GH₵ 3,780.00</span></div></td>
+      </tr><tr class="border-b border-border/70 last:border-0">
+        <td class="py-3"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold text-foreground/80">YB</span>
+          <div><a href="#" class="font-medium hover:underline">Yaw Boateng</a><p class="text-[13px] text-muted-foreground">Plumbing</p></div></div></td>
+        <td class="tnum py-3 text-right text-muted-foreground">4</td>
+        <td class="py-3 pl-6 text-muted-foreground">28 Oct 2026</td>
+        <td class="py-3 pl-6 w-[34%]"><div class="flex items-center gap-3"><div class="h-1.5 flex-1 rounded-full bg-muted"><div data-grow style="--d:350ms;width:88.62433862433863%" class="h-1.5 rounded-full bg-c1"></div></div><span class="tnum w-[104px] whitespace-nowrap text-right font-medium">GH₵ 3,350.00</span></div></td>
+      </tr><tr class="border-b border-border/70 last:border-0">
+        <td class="py-3"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold text-foreground/80">EM</span>
+          <div><a href="#" class="font-medium hover:underline">Efua Mensah</a><p class="text-[13px] text-muted-foreground">Cleaning</p></div></div></td>
+        <td class="tnum py-3 text-right text-muted-foreground">3</td>
+        <td class="py-3 pl-6 text-muted-foreground">9 Oct 2026</td>
+        <td class="py-3 pl-6 w-[34%]"><div class="flex items-center gap-3"><div class="h-1.5 flex-1 rounded-full bg-muted"><div data-grow style="--d:400ms;width:51.587301587301596%" class="h-1.5 rounded-full bg-c1"></div></div><span class="tnum w-[104px] whitespace-nowrap text-right font-medium">GH₵ 1,950.00</span></div></td>
+      </tr><tr class="border-b border-border/70 last:border-0">
+        <td class="py-3"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold text-foreground/80">KO</span>
+          <div><a href="#" class="font-medium hover:underline">Kwabena Owusu</a><p class="text-[13px] text-muted-foreground">Plumbing</p></div></div></td>
+        <td class="tnum py-3 text-right text-muted-foreground">3</td>
+        <td class="py-3 pl-6 text-muted-foreground">26 Aug 2026</td>
+        <td class="py-3 pl-6 w-[34%]"><div class="flex items-center gap-3"><div class="h-1.5 flex-1 rounded-full bg-muted"><div data-grow style="--d:450ms;width:48.94179894179894%" class="h-1.5 rounded-full bg-c1"></div></div><span class="tnum w-[104px] whitespace-nowrap text-right font-medium">GH₵ 1,850.00</span></div></td>
+      </tr><tr class="border-b border-border/70 last:border-0">
+        <td class="py-3"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold text-foreground/80">AD</span>
+          <div><a href="#" class="font-medium hover:underline">Akosua Darko</a><p class="text-[13px] text-muted-foreground">Carpentry</p></div></div></td>
+        <td class="tnum py-3 text-right text-muted-foreground">1</td>
+        <td class="py-3 pl-6 text-muted-foreground">30 Jun 2026</td>
+        <td class="py-3 pl-6 w-[34%]"><div class="flex items-center gap-3"><div class="h-1.5 flex-1 rounded-full bg-muted"><div data-grow style="--d:500ms;width:16.93121693121693%" class="h-1.5 rounded-full bg-c1"></div></div><span class="tnum w-[104px] whitespace-nowrap text-right font-medium">GH₵ 640.00</span></div></td>
+      </tr></tbody></table></div><div class="border-t border-border px-6 py-3"><button class="inline-flex h-9 items-center gap-1 rounded-md text-sm font-medium text-primary">Show all 9 artisans <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+</section><section aria-labelledby="bm-t" class="flex flex-col rounded-xl border border-border bg-card ">
+  <div class="flex items-start justify-between gap-4 px-6 pt-5">
+    <div class="min-w-0"><h3 id="bm-t" class="text-[15px] font-semibold">How you paid</h3>
+    <p class="mt-1 text-sm text-muted-foreground">Most of your payments were by mobile money.</p></div>
+    <div role="group" aria-label="Show as" class="inline-flex shrink-0 rounded-lg bg-muted p-0.5"><button aria-pressed="true" aria-controls="bm"  class="inline-flex h-8 gap-1.5 px-2.5 items-center rounded-md text-[13px] bg-card font-medium text-foreground shadow-[0_0_0_1px_rgb(var(--border-rgb))]"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Chart</button><button aria-pressed="false" aria-controls="bm"  class="inline-flex h-8 gap-1.5 px-2.5 items-center rounded-md text-[13px] text-muted-foreground"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M12 3v18"/></svg>Table</button></div>
+  </div>
+  <div id="bm" class="flex-1 px-6 pb-6 pt-5"><div class="flex h-3 overflow-hidden" role="img" aria-label="Mobile money 57%, card 39%, bank 4%"><span data-grow style="--d:300ms;width:57%;background:var(--chart-1)" class="h-3 first:rounded-l-full last:rounded-r-full"></span><span class="w-0.5 shrink-0"></span><span data-grow style="--d:360ms;width:39%;background:var(--chart-3)" class="h-3 first:rounded-l-full last:rounded-r-full"></span><span class="w-0.5 shrink-0"></span><span data-grow style="--d:420ms;width:4%;background:var(--chart-4)" class="h-3 first:rounded-l-full last:rounded-r-full"></span></div>
+    <ul class="mt-5 space-y-3"><li class="flex items-start gap-3 text-sm">
+      <span class="mt-1 h-3 w-3 shrink-0 rounded-[3px]" style="background:var(--chart-1)"></span>
+      <span class="flex min-w-0 flex-1 items-start gap-2"><span class="mt-0.5 text-muted-foreground"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></span><span class="min-w-0"><span class="block whitespace-nowrap font-medium">Mobile money</span><span class="block text-xs text-muted-foreground">12 payments</span></span></span>
+      <span class="tnum whitespace-nowrap font-medium">GH₵ 8,420.00</span><span class="tnum w-9 text-right text-muted-foreground">57%</span></li><li class="flex items-start gap-3 text-sm">
+      <span class="mt-1 h-3 w-3 shrink-0 rounded-[3px]" style="background:var(--chart-3)"></span>
+      <span class="flex min-w-0 flex-1 items-start gap-2"><span class="mt-0.5 text-muted-foreground"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span><span class="min-w-0"><span class="block whitespace-nowrap font-medium">Card</span><span class="block text-xs text-muted-foreground">6 payments</span></span></span>
+      <span class="tnum whitespace-nowrap font-medium">GH₵ 5,800.00</span><span class="tnum w-9 text-right text-muted-foreground">39%</span></li><li class="flex items-start gap-3 text-sm">
+      <span class="mt-1 h-3 w-3 shrink-0 rounded-[3px]" style="background:var(--chart-4)"></span>
+      <span class="flex min-w-0 flex-1 items-start gap-2"><span class="mt-0.5 text-muted-foreground"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2l8 5H4z"/></svg></span><span class="min-w-0"><span class="block whitespace-nowrap font-medium">Bank</span><span class="block text-xs text-muted-foreground">1 payment</span></span></span>
+      <span class="tnum whitespace-nowrap font-medium">GH₵ 600.00</span><span class="tnum w-9 text-right text-muted-foreground">4%</span></li></ul></div>
+</section></div>
+    <section aria-labelledby="ph-t" class="rounded-xl border border-border bg-card">
+    <div class="flex items-start justify-between gap-4 px-6 pt-5">
+    <div><h3 id="ph-t" class="text-[15px] font-semibold">Payment history</h3>
+    <p class="mt-1 text-sm text-muted-foreground">21 payments in the last 12 months, newest first.</p></div>
+    <button class="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-medium"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>Download CSV</button>
+  </div>
+    <div class="px-6 pt-4"><div><div class="flex flex-wrap items-center gap-2"><label class="relative flex w-[300px] items-center"><span class="sr-only">Search payments</span><span class="pointer-events-none absolute left-3 text-muted-foreground"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span><input class="h-10 w-full rounded-lg border border-border bg-card pl-9 pr-3 text-sm placeholder:text-muted-foreground" placeholder="Search job title or reference" maxlength="100"></label>
+    <button class="inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm border-border bg-card text-foreground"><span class="text-muted-foreground">Status</span><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><button class="inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm border-border bg-card text-foreground"><span class="text-muted-foreground">Service</span><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><button class="inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm border-border bg-card text-foreground"><span class="text-muted-foreground">Artisan</span><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div></div></div>
+    <div class="mt-4 overflow-x-auto"><table class="w-full text-sm">
+      <caption class="sr-only">Payment history</caption>
+      <thead><tr class="border-y border-border bg-muted/40 text-left text-[13px] text-muted-foreground">
+        <th class="py-2.5 pl-6 font-medium">Date paid</th><th class="py-2.5 pl-4 font-medium">Job</th><th class="py-2.5 pl-4 font-medium">Artisan</th><th class="py-2.5 pl-4 font-medium">Method</th><th class="py-2.5 pl-4 text-right font-medium">Amount</th><th class="py-2.5 pl-6 font-medium">Status</th><th class="py-2.5 pl-4 font-medium">Reference</th><th class="w-12 py-2.5 pr-4"><span class="sr-only">Details</span></th></tr></thead>
+      <tbody><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">29 Oct 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Service two split AC units</a><p class="text-[13px] text-muted-foreground">AC repair</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Nii Lartey</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="text-muted-foreground">Not paid yet</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 480.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-warning/10 text-warning border-warning/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Awaiting payment</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-R8M2XC</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Service two split AC units" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">28 Oct 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Fix leaking kitchen tap</a><p class="text-[13px] text-muted-foreground">Plumbing</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Yaw Boateng</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 350.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-info/10 text-info border-info/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Withheld</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-9QK4TZ</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Fix leaking kitchen tap" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">18 Oct 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Install outdoor security lights</a><p class="text-[13px] text-muted-foreground">Electrical</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kofi Asante</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Card</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 1,400.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-K2D7WA</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Install outdoor security lights" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">9 Oct 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Weekly office clean, two visits</a><p class="text-[13px] text-muted-foreground">Cleaning</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Efua Mensah</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 600.00</span><p class="tnum text-[13px] text-muted-foreground">GH₵ 300.00 refunded</p></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground border-border"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 7 10 10M17 7v10H7"/></svg>Refunded</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-T5H1NB</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Weekly office clean, two visits" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70 text-muted-foreground ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top ">30 Sep 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium  hover:underline">Replace ceiling fan</a><p class="text-[13px] text-muted-foreground">Electrical</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kofi Asante</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Card</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium ">GH₵ 250.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-destructive/10 text-destructive border-destructive/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>Failed</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-P0V6LS</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Replace ceiling fan" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">21 Sep 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Move-out deep clean, Flat 4B</a><p class="text-[13px] text-muted-foreground">Cleaning</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Efua Mensah</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 850.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-H7C3QE</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Move-out deep clean, Flat 4B" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">3 Sep 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Repair wardrobe doors</a><p class="text-[13px] text-muted-foreground">Carpentry</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kojo Ampofo</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Card</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 780.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-info/10 text-info border-info/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Withheld</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-M4X9RB</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Repair wardrobe doors" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">26 Aug 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Unblock main drain</a><p class="text-[13px] text-muted-foreground">Plumbing</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kwabena Owusu</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 450.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-D1W8KN</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Unblock main drain" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">14 Aug 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Replace outside tap washers</a><p class="text-[13px] text-muted-foreground">Plumbing</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kwabena Owusu</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 300.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-Z6F2TA</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Replace outside tap washers" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">12 Aug 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Rewire 3-bedroom flat</a><p class="text-[13px] text-muted-foreground">Electrical</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kofi Asante</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Card</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 2,400.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-7F3K2Q</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Rewire 3-bedroom flat" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">19 Jul 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Paint living room and hallway</a><p class="text-[13px] text-muted-foreground">Painting</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Abena Sarpong</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 860.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-B3N5YU</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Paint living room and hallway" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">5 Jul 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Fix dripping bathroom tap</a><p class="text-[13px] text-muted-foreground">Plumbing</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Yaw Boateng</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 240.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-Q9L1GC</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Fix dripping bathroom tap" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">30 Jun 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Build kitchen shelves</a><p class="text-[13px] text-muted-foreground">Carpentry</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Akosua Darko</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Card</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 640.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-V2J7PS</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Build kitchen shelves" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">11 Jun 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Replace kitchen sink and pipes</a><p class="text-[13px] text-muted-foreground">Plumbing</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Yaw Boateng</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2l8 5H4z"/></svg>Bank</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 1,250.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-E8R4HM</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Replace kitchen sink and pipes" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">22 May 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Regrout shower tiles</a><p class="text-[13px] text-muted-foreground">Tiling</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Ekow Annan</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Card</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 410.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-U5G6WD</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Regrout shower tiles" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70 text-muted-foreground ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top ">8 May 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium  hover:underline">Cancelled: fix gate lock</a><p class="text-[13px] text-muted-foreground">Carpentry</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kojo Ampofo</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium ">GH₵ 180.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-destructive/10 text-destructive border-destructive/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>Cancelled</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-N0K3ZF</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Cancelled: fix gate lock" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">17 Apr 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Pressure-wash compound walls</a><p class="text-[13px] text-muted-foreground">Other</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="text-muted-foreground">Former artisan</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 800.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-C7T2LX</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Pressure-wash compound walls" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">2 Apr 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Clean overhead water tanks</a><p class="text-[13px] text-muted-foreground">Cleaning</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Efua Mensah</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 650.00</span><p class="tnum text-[13px] text-muted-foreground">GH₵ 300.00 refunded</p></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground border-border"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 7 10 10M17 7v10H7"/></svg>Refunded</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-Y4P8VB</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Clean overhead water tanks" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">14 Mar 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Fix overflowing toilet cistern</a><p class="text-[13px] text-muted-foreground">Plumbing</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kwabena Owusu</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Mobile money</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 980.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-W1H6NQ</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Fix overflowing toilet cistern" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr><tr class="border-b border-border/70  ">
+          <td class="whitespace-nowrap py-3 pl-6 align-top text-muted-foreground">20 Jan 2026</td>
+          <td class="max-w-[260px] py-3 pl-4 align-top"><a href="#" class="font-medium text-foreground hover:underline">Install prepaid meter socket</a><p class="text-[13px] text-muted-foreground">Electrical</p></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><a href="#" class="hover:underline">Kofi Asante</a></td>
+          <td class="whitespace-nowrap py-3 pl-4 align-top"><span class="inline-flex items-center gap-1.5"><svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Card</span></td>
+          <td class="whitespace-nowrap py-3 pl-4 text-right align-top"><span class="tnum font-medium text-foreground">GH₵ 650.00</span></td>
+          <td class="py-3 pl-6 align-top"><span class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium bg-success/10 text-success border-success/20"><svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>Paid out</span></td>
+          <td class="tnum whitespace-nowrap py-3 pl-4 align-top text-[13px] text-muted-foreground">JINVA-G3M9RA</td>
+          <td class="py-2 pr-4 align-top"><button aria-expanded="false" aria-label="Details for Install prepaid meter socket" class="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+        </tr></tbody></table></div><div class="flex items-center justify-between gap-3 px-6 py-4 text-sm">
+    <p class="text-muted-foreground">Showing 1–20 of 21</p>
+    <div class="flex items-center gap-1"><button class="inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-muted-foreground opacity-50" disabled><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Previous</button>
+      <button aria-current="page" class="h-9 w-9 rounded-md border border-border font-medium">1</button><button class="h-9 w-9 rounded-md">2</button>
+      <button class="inline-flex h-9 items-center gap-1 rounded-md px-2.5 font-medium">Next<svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></div>
+  </div>
+  </section></div></main></div></div>
+</body>
+</html>

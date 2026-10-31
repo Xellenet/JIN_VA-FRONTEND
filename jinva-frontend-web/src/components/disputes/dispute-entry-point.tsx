@@ -151,7 +151,7 @@ export function DisputeEntryPoint({
     <div className={cn("space-y-1.5", className)}>
       <Button
         variant="outline"
-        className="w-full bg-transparent"
+        className="h-11 w-full bg-transparent sm:h-9"
         disabled={!canFile}
         title={canFile ? undefined : reason}
         onClick={() => setDialogOpen(true)}

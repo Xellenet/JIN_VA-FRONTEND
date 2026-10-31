@@ -374,7 +374,7 @@ export default function ArtisanJobDetailPage() {
 
         {/* Phones read Details, Payment, Client, then Timeline; wide screens keep the rail beside both. */}
         <div className="grid items-start gap-6 lg:grid-cols-3">
-          <div className="min-w-0 space-y-6 lg:col-span-2">
+          <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
             <Card className="gap-0 py-0">
               <div className="border-b px-5 py-4">
                 <h2 className="font-semibold text-foreground">Details</h2>

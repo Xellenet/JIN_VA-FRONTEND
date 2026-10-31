@@ -782,8 +782,8 @@ export function MessagesPage({
       <div className="flex h-[calc(100vh-8rem)] flex-col gap-0 overflow-hidden md:h-[calc(100vh-7rem)]">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Messages</p>
-            <h1 className="mt-0.5 text-2xl font-bold text-foreground">Inbox</h1>
+            {/* X2/X3: no eyebrow, and the heading uses the nav name. */}
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Messages</h1>
             <p className="text-sm text-muted-foreground">
               {conversations.length > 0
                 ? `${conversations.length} conversation${conversations.length !== 1 ? "s" : ""}`
@@ -911,13 +911,15 @@ export function MessagesPage({
                   const name = contactName(selected.contact)
                   return (
                     <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+                      {/* M3: 44px on phones and a name for screen readers. */}
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 md:hidden"
+                        className="-ml-2 h-11 w-11 shrink-0 md:hidden"
                         onClick={() => setSelected(null)}
+                        aria-label="Back to conversations"
                       >
-                        <ArrowLeft className="h-5 w-5 text-primary" />
+                        <ArrowLeft className="h-5 w-5 text-primary" aria-hidden="true" />
                       </Button>
                       <Avatar className="h-10 w-10 flex-shrink-0">
                         <AvatarImage src={resolveAvatarUrl(selected.contact.profilePicture)} alt={name} />

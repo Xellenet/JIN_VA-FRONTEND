@@ -27,8 +27,55 @@ export interface UnreadCountResponse {
   count: number
 }
 
+/**
+ * H5: the UI bucket for every type the backend sends (NotificationType in
+ * `common/types/enums.ts`), named explicitly. Name matching used to file
+ * `JOB_EXPIRED` and `JOB_APPLICATION_REJECTED` under "Assignment" just because
+ * they contain "JOB"; the "assignment" bucket is now labelled "Job" and an
+ * explicit list decides what goes in it. Types the frontend doesn't know yet
+ * still fall back to the old substring rules.
+ */
+const TYPE_BUCKETS: Record<string, Notification["type"]> = {
+  JOB_APPLICATION_RECEIVED: "assignment",
+  JOB_APPLICATION_ACCEPTED: "assignment",
+  JOB_APPLICATION_REJECTED: "assignment",
+  JOB_STARTED: "assignment",
+  JOB_COMPLETION_REQUESTED: "assignment",
+  JOB_COMPLETED: "assignment",
+  JOB_CANCELLED: "assignment",
+  JOB_EXPIRED: "assignment",
+  MESSAGE_RECEIVED: "message",
+  REVIEW_RECEIVED: "review",
+  REVIEW_FLAGGED: "review",
+  ARTISAN_PROFILE_VERIFIED: "system",
+  ARTISAN_VERIFICATION_REJECTED: "system",
+  ARTISAN_VERIFICATION_SUBMITTED: "system",
+  ARTISAN_REGISTERED: "system",
+  BOOKING_RECEIVED: "booking",
+  BOOKING_CONFIRMED: "booking",
+  BOOKING_DECLINED: "booking",
+  BOOKING_CANCELLED: "booking",
+  BOOKING_COMPLETED: "booking",
+  BOOKING_EXPIRED: "booking",
+  BOOKING_NO_SHOW: "booking",
+  BOOKING_REMINDER: "booking",
+  PORTFOLIO_APPROVED: "system",
+  PORTFOLIO_REJECTED: "system",
+  SECURITY_ALERT: "system",
+  PAYMENT_RECEIPT: "payment",
+  PAYMENT_SECURED: "payment",
+  PAYOUT_RELEASED: "payment",
+  PAYMENT_REFUNDED: "payment",
+  PAYMENT_TRANSFER_FAILED: "payment",
+  DISPUTE_FILED: "dispute",
+  DISPUTE_RESOLVED: "dispute",
+  DISPUTE_CLOSED: "dispute",
+}
+
 export function mapNotificationType(type: string): Notification["type"] {
-  const t = type.toUpperCase()
+  const t = typeof type === "string" ? type.toUpperCase() : ""
+  const known = Object.prototype.hasOwnProperty.call(TYPE_BUCKETS, t) ? TYPE_BUCKETS[t] : undefined
+  if (known) return known
   // Checked before PAYMENT so a dispute type is never mistaken for one, and
   // before the rest so `DISPUTE_*` stops falling through to "system"
   // (design-spec.md §6.5; the live type list is api-contract.md §5).
@@ -48,7 +95,7 @@ export function formatNotificationTime(iso: string): string {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
   if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Accra" })
 }
 
 export function mapNotification(n: BackendNotification): Notification {
@@ -71,9 +118,21 @@ export function mapNotification(n: BackendNotification): Notification {
 
 /** The one action button an expanded notification can show. */
 export interface NotificationAction {
-  label: "View job" | "View booking" | "Open conversation" | "View payment"
+  label:
+    | "View job"
+    | "View booking"
+    | "Open conversation"
+    | "View payment"
+    | "View earnings"
+    | "View dispute"
+    | "View reviews"
+    | "View portfolio"
+    | "View verification"
   href: string
 }
+
+/** Which dashboard a notification's action button points into. */
+export type NotificationRole = "user" | "artisan"
 
 /**
  * Reads a positive safe integer id from a payload key, and nothing else.
@@ -92,18 +151,71 @@ export function typedId(payload: unknown, key: string): number | null {
 }
 
 const CUSTOMER_BASE = "/dashboard/user"
+const ARTISAN_BASE = "/dashboard/artisan"
+
+function isPaymentType(t: string): boolean {
+  return !t.includes("DISPUTE") && (t.includes("PAYMENT") || t.includes("REFUND") || t.includes("PAYOUT"))
+}
+
+/**
+ * H5: the artisan's destinations. Same SEC-18 rules as the customer map: only
+ * typed ids are read, every href is a fixed path under `/dashboard/artisan/`.
+ *
+ * - message → the conversation (`?conversation=`)
+ * - dispute → the artisan's dispute page; without a `disputeId`, the booking
+ *   or job it is about
+ * - payment / payout / refund → Earnings (the payout lives there, not on the job)
+ * - review → Reviews
+ * - booking → Calendar, with `?booking=` so the calendar can pick it out
+ * - job → the job page
+ * - portfolio / verification outcomes → those pages
+ */
+function artisanAction(t: string, payload: unknown): NotificationAction | null {
+  const jobId = typedId(payload, "jobId")
+  const bookingId = typedId(payload, "bookingId")
+  const conversationId = typedId(payload, "conversationId")
+  const disputeId = typedId(payload, "disputeId")
+  const bookingHref = (id: number) => `${ARTISAN_BASE}/calendar?booking=${id}`
+
+  if (conversationId !== null) {
+    return { label: "Open conversation", href: `${ARTISAN_BASE}/messages?conversation=${conversationId}` }
+  }
+  if (t.includes("DISPUTE")) {
+    if (disputeId !== null) return { label: "View dispute", href: `${ARTISAN_BASE}/disputes/${disputeId}` }
+    if (bookingId !== null) return { label: "View booking", href: bookingHref(bookingId) }
+    if (jobId !== null) return { label: "View job", href: `${ARTISAN_BASE}/jobs/${jobId}` }
+    return null
+  }
+  if (isPaymentType(t)) return { label: "View earnings", href: `${ARTISAN_BASE}/earnings` }
+  if (t.includes("REVIEW")) return { label: "View reviews", href: `${ARTISAN_BASE}/reviews` }
+  if (t.startsWith("PORTFOLIO_")) return { label: "View portfolio", href: `${ARTISAN_BASE}/portfolio` }
+  if (t === "ARTISAN_PROFILE_VERIFIED" || t === "ARTISAN_VERIFICATION_REJECTED") {
+    return { label: "View verification", href: `${ARTISAN_BASE}/verification` }
+  }
+  if (bookingId !== null) return { label: "View booking", href: bookingHref(bookingId) }
+  if (jobId !== null) return { label: "View job", href: `${ARTISAN_BASE}/jobs/${jobId}` }
+  return null
+}
 
 /**
  * SEC-18 / FR-6.9: the only place a notification's action button is built.
  *
  * - Only typed ids are read (`jobId`, `bookingId`, `conversationId`,
- *   `paymentId`), through `typedId`. Any `url`, `href`, `link` or other string
- *   key in the payload is ignored, so the data can never pick the destination.
- * - Every href is a fixed path under `/dashboard/user/`, or there is no
- *   button (`null`).
+ *   `paymentId`, `disputeId`), through `typedId`. Any `url`, `href`, `link` or
+ *   other string key in the payload is ignored, so the data can never pick the
+ *   destination.
+ * - Every href is a fixed path under the role's own dashboard
+ *   (`/dashboard/user/` by default, `/dashboard/artisan/` for artisans), or
+ *   there is no button (`null`).
  */
-export function notificationAction(type: string, payload: unknown): NotificationAction | null {
+export function notificationAction(
+  type: string,
+  payload: unknown,
+  role: NotificationRole = "user",
+): NotificationAction | null {
   const t = typeof type === "string" ? type.toUpperCase() : ""
+  if (role === "artisan") return artisanAction(t, payload)
+
   const jobId = typedId(payload, "jobId")
   const bookingId = typedId(payload, "bookingId")
   const conversationId = typedId(payload, "conversationId")
@@ -112,8 +224,7 @@ export function notificationAction(type: string, payload: unknown): Notification
   if (conversationId !== null) {
     return { label: "Open conversation", href: `${CUSTOMER_BASE}/messages?conversation=${conversationId}` }
   }
-  const isPayment = !t.includes("DISPUTE") && (t.includes("PAYMENT") || t.includes("REFUND") || t.includes("PAYOUT"))
-  if (isPayment) {
+  if (isPaymentType(t)) {
     // The job page carries the payment panel; without a job the Spending page
     // (item 4) is the payment's home. Both are fixed internal routes.
     if (jobId !== null) return { label: "View payment", href: `${CUSTOMER_BASE}/jobs/${jobId}` }
@@ -125,9 +236,16 @@ export function notificationAction(type: string, payload: unknown): Notification
   return null
 }
 
+/** The role whose routes a dashboard base maps to, or null for one with no actions (admin). */
+export function notificationRoleFor(roleBase: string): NotificationRole | null {
+  if (roleBase === CUSTOMER_BASE) return "user"
+  if (roleBase === ARTISAN_BASE) return "artisan"
+  return null
+}
+
 /** `notificationAction(...)?.href ?? null`, the name 01 §11.5 uses. */
-export function notificationHref(type: string, payload: unknown): string | null {
-  return notificationAction(type, payload)?.href ?? null
+export function notificationHref(type: string, payload: unknown, role: NotificationRole = "user"): string | null {
+  return notificationAction(type, payload, role)?.href ?? null
 }
 
 /**

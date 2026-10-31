@@ -224,7 +224,8 @@ export const notificationTypeConfig: Record<Notification["type"], NotificationTy
   // affected user (design-spec.md §2/§6.5).
   dispute:    { icon: Scale,         color: "text-primary",          bg: "bg-primary/10", label: "Dispute" },
   review:     { icon: Star,          color: "text-foreground",       bg: "bg-muted",      label: "Review" },
-  assignment: { icon: Briefcase,     color: "text-foreground",       bg: "bg-muted",      label: "Assignment" },
+  // The "assignment" bucket holds every JOB_* type (H5), so it reads "Job".
+  assignment: { icon: Briefcase,     color: "text-foreground",       bg: "bg-muted",      label: "Job" },
   message:    { icon: MessageSquare, color: "text-foreground",       bg: "bg-muted",      label: "Message" },
   system:     { icon: Settings,      color: "text-muted-foreground", bg: "bg-muted",      label: "System" },
 }

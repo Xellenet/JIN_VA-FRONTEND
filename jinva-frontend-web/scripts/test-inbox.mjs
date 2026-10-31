@@ -79,7 +79,7 @@ check(
 )
 
 // ── T-4 / SEC-18: every hostile id gives null ──────────────────────────────
-const HOSTILE = [
+const HOSTILE_IDS = [
   "javascript:alert(1)",
   "//evil.example.com",
   "/\\evil.example.com",
@@ -104,7 +104,7 @@ const HOSTILE = [
   "99999999999999999999",
 ]
 for (const key of ["jobId", "bookingId", "conversationId", "paymentId"]) {
-  for (const value of HOSTILE) {
+  for (const value of HOSTILE_IDS) {
     for (const type of ["JOB_STARTED", "BOOKING_CONFIRMED", "MESSAGE_RECEIVED", "PAYMENT_REFUNDED", "DISPUTE_RESOLVED"]) {
       check(`T-4 ${type} ${key}=${String(value)}`, N.notificationHref(type, { [key]: value }), null)
     }
@@ -132,6 +132,101 @@ check("T-4 non-string type is harmless", N.notificationHref(undefined, { jobId: 
     check(`T-4 ${type} href origin`, resolved.origin, "https://app.jinva.example")
   }
 }
+
+// ── H5: customer destinations are unchanged with the explicit role ─────────
+{
+  const CUSTOMER_CASES = [
+    ["JOB_STARTED", { jobId: 812 }, { label: "View job", href: "/dashboard/user/jobs/812" }],
+    ["JOB_EXPIRED", { jobId: 9 }, { label: "View job", href: "/dashboard/user/jobs/9" }],
+    ["BOOKING_CONFIRMED", { bookingId: 301 }, { label: "View booking", href: "/dashboard/user/bookings/301" }],
+    ["MESSAGE_RECEIVED", { conversationId: 44 }, { label: "Open conversation", href: "/dashboard/user/messages?conversation=44" }],
+    ["PAYMENT_RECEIPT", { jobId: 812 }, { label: "View payment", href: "/dashboard/user/jobs/812" }],
+    ["PAYMENT_REFUNDED", { paymentId: 4471 }, { label: "View payment", href: "/dashboard/user/report" }],
+    ["DISPUTE_RESOLVED", { disputeId: 5, bookingId: 77 }, { label: "View booking", href: "/dashboard/user/bookings/77" }],
+    ["REVIEW_RECEIVED", { jobId: 3, rating: 5 }, { label: "View job", href: "/dashboard/user/jobs/3" }],
+    ["SECURITY_ALERT", {}, null],
+  ]
+  for (const [type, payload, expected] of CUSTOMER_CASES) {
+    check(`H5 customer default ${type}`, N.notificationAction(type, payload), expected)
+    check(`H5 customer explicit ${type}`, N.notificationAction(type, payload, "user"), expected)
+  }
+}
+
+// ── H5: artisan destinations ───────────────────────────────────────────────
+{
+  const A = (type, payload) => N.notificationAction(type, payload, "artisan")
+  check("H5 artisan booking request → calendar", A("BOOKING_RECEIVED", { bookingId: 301 }), {
+    label: "View booking",
+    href: "/dashboard/artisan/calendar?booking=301",
+  })
+  check("H5 artisan booking reminder → calendar", A("BOOKING_REMINDER", { bookingId: 7, milestone: "24h" })?.href, "/dashboard/artisan/calendar?booking=7")
+  check("H5 artisan job → job page", A("JOB_APPLICATION_ACCEPTED", { jobId: 812 }), {
+    label: "View job",
+    href: "/dashboard/artisan/jobs/812",
+  })
+  check("H5 artisan expired job → job page", A("JOB_EXPIRED", { jobId: 9 })?.href, "/dashboard/artisan/jobs/9")
+  check("H5 artisan payment secured → earnings", A("PAYMENT_SECURED", { jobId: 812 }), {
+    label: "View earnings",
+    href: "/dashboard/artisan/earnings",
+  })
+  check("H5 artisan payout released → earnings", A("PAYOUT_RELEASED", { jobId: 812 })?.href, "/dashboard/artisan/earnings")
+  check("H5 artisan refund → earnings", A("PAYMENT_REFUNDED", { jobId: 812 })?.href, "/dashboard/artisan/earnings")
+  check("H5 artisan review → reviews", A("REVIEW_RECEIVED", { jobId: 812, rating: 4 }), {
+    label: "View reviews",
+    href: "/dashboard/artisan/reviews",
+  })
+  check("H5 artisan dispute filed → dispute page", A("DISPUTE_FILED", { disputeId: 15, bookingId: 77 }), {
+    label: "View dispute",
+    href: "/dashboard/artisan/disputes/15",
+  })
+  check("H5 artisan dispute resolved → dispute page", A("DISPUTE_RESOLVED", { disputeId: 15, bookingId: 77 })?.href, "/dashboard/artisan/disputes/15")
+  check("H5 artisan dispute without disputeId → booking", A("DISPUTE_CLOSED", { bookingId: 77 })?.href, "/dashboard/artisan/calendar?booking=77")
+  check("H5 artisan message → conversation", A("MESSAGE_RECEIVED", { conversationId: 44 }), {
+    label: "Open conversation",
+    href: "/dashboard/artisan/messages?conversation=44",
+  })
+  check("H5 artisan portfolio → portfolio", A("PORTFOLIO_REJECTED", { portfolioItemId: 3 })?.href, "/dashboard/artisan/portfolio")
+  check("H5 artisan verified → verification", A("ARTISAN_PROFILE_VERIFIED", undefined)?.href, "/dashboard/artisan/verification")
+  check("H5 artisan security alert → none", A("SECURITY_ALERT", {}), null)
+  check("H5 artisan job without id → none", A("JOB_STARTED", {}), null)
+  check("H5 artisan url ignored", A("JOB_STARTED", { jobId: 5, url: "https://evil.example.com" })?.href, "/dashboard/artisan/jobs/5")
+  for (const value of HOSTILE_IDS) {
+    for (const key of ["jobId", "bookingId", "conversationId", "disputeId"]) {
+      for (const type of ["JOB_STARTED", "BOOKING_RECEIVED", "MESSAGE_RECEIVED", "DISPUTE_FILED"]) {
+        check(`H5 artisan hostile ${type} ${key}=${String(value)}`, N.notificationHref(type, { [key]: value }, "artisan"), null)
+      }
+    }
+  }
+  // Payment, review, portfolio and verification go to fixed pages whatever the payload says.
+  for (const [type, payload] of [
+    ["JOB_STARTED", { jobId: 1 }],
+    ["BOOKING_RECEIVED", { bookingId: 2 }],
+    ["MESSAGE_RECEIVED", { conversationId: 3 }],
+    ["DISPUTE_FILED", { disputeId: 4 }],
+    ["PAYOUT_RELEASED", { jobId: "javascript:alert(1)" }],
+    ["REVIEW_RECEIVED", { url: "//evil.example.com" }],
+  ]) {
+    const href = N.notificationHref(type, payload, "artisan")
+    check(`H5 artisan ${type} href prefix`, href.startsWith("/dashboard/artisan/"), true)
+    check(`H5 artisan ${type} href origin`, new URL(href, "https://app.jinva.example").origin, "https://app.jinva.example")
+  }
+  check("H5 role for customer base", N.notificationRoleFor("/dashboard/user"), "user")
+  check("H5 role for artisan base", N.notificationRoleFor("/dashboard/artisan"), "artisan")
+  check("H5 no actions for admin", N.notificationRoleFor("/dashboard/admin"), null)
+}
+
+// ── H5: notification buckets come from the type, not a substring ───────────
+check("H5 JOB_EXPIRED bucket", N.mapNotificationType("JOB_EXPIRED"), "assignment")
+check("H5 JOB_APPLICATION_REJECTED bucket", N.mapNotificationType("JOB_APPLICATION_REJECTED"), "assignment")
+check("H5 BOOKING_EXPIRED bucket", N.mapNotificationType("BOOKING_EXPIRED"), "booking")
+check("H5 PAYOUT_RELEASED bucket", N.mapNotificationType("PAYOUT_RELEASED"), "payment")
+check("H5 PAYMENT_TRANSFER_FAILED bucket", N.mapNotificationType("PAYMENT_TRANSFER_FAILED"), "payment")
+check("H5 DISPUTE_FILED bucket", N.mapNotificationType("DISPUTE_FILED"), "dispute")
+check("H5 PORTFOLIO_APPROVED bucket", N.mapNotificationType("PORTFOLIO_APPROVED"), "system")
+check("H5 SECURITY_ALERT bucket", N.mapNotificationType("SECURITY_ALERT"), "system")
+check("H5 unknown future type falls back", N.mapNotificationType("BOOKING_RESCHEDULED"), "booking")
+check("H5 lower-case type", N.mapNotificationType("job_expired"), "assignment")
+check("H5 prototype key is not a type", N.mapNotificationType("__PROTO__"), "system")
 
 // ── FU-6.3: full date and time in Africa/Accra ─────────────────────────────
 // [QA note] 03-test-plan FU-6.3 and the mockups say "Thu 30 Oct 2026", but

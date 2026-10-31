@@ -14,6 +14,7 @@ import {
   isMessageExcerpt,
   mapNotification,
   notificationAction,
+  notificationRoleFor,
   readNotificationList,
   type BackendNotification,
   type UnreadCountResponse,
@@ -47,9 +48,9 @@ export function NotificationsPopover({ roleBase }: Readonly<{ roleBase: string }
   const [announcement, setAnnouncement] = useState("")
   const attemptedRef = useRef(new Set<string>())
   const headerRefs = useRef(new Map<string, HTMLButtonElement>())
-  // Actions point at customer routes (SEC-18: `/dashboard/user/` only), so
-  // other roles read in place without an action button.
-  const showActions = roleBase === "/dashboard/user"
+  // H5: actions point at the reader's own dashboard (SEC-18: fixed paths
+  // under `/dashboard/user/` or `/dashboard/artisan/`). Admins read in place.
+  const actionRole = notificationRoleFor(roleBase)
 
   // ── Badge count: fetched on mount and polled.
   const loadUnreadCount = useCallback(async () => {
@@ -239,7 +240,7 @@ export function NotificationsPopover({ roleBase }: Readonly<{ roleBase: string }
               const Icon = config.icon
               const isOpen = openId === n.id
               const fullDate = formatFullDateTime(n.createdAt)
-              const action = showActions ? notificationAction(n.rawType ?? "", n.payload) : null
+              const action = actionRole ? notificationAction(n.rawType ?? "", n.payload, actionRole) : null
               const excerpt = isMessageExcerpt(n.rawType, n.message)
               return (
                 <DisclosureItem

@@ -54,6 +54,7 @@ export const FOOTER_COLUMNS: readonly { heading: string; links: readonly PublicN
   {
     heading: "Legal",
     links: [
+      { label: "Legal information", href: "/legal" },
       { label: "Terms of Service", href: "/terms" },
       { label: "Privacy Policy", href: "/privacy" },
     ],

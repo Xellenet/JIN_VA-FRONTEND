@@ -50,10 +50,16 @@ export function PublicProse({
           ) : null}
           <Separator className="my-8" />
         </Reveal>
-        <Reveal delay={80}>
+        {/*
+          Not a scroll Reveal: that waits until 12% of the element is on screen,
+          and a long document (the Terms or Privacy Policy) is many screens tall,
+          so it never got there and the body stayed invisible. The body starts
+          just below the title anyway, so it uses the load entrance instead.
+        */}
+        <div data-enter style={{ "--reveal-delay": "80ms" } as React.CSSProperties}>
           <article className={PROSE}>{children}</article>
           {footer}
-        </Reveal>
+        </div>
       </div>
     </main>
   )

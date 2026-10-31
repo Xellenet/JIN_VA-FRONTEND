@@ -35,6 +35,7 @@ import { RatingStars } from "@/components/ui/rating-stars"
 import { toast } from "sonner"
 import { availabilityLabel } from "@/lib/availability"
 import { formatDayWithWeekday } from "@/lib/artisan-jobs"
+import { threeLetterMonth } from "@/lib/spending"
 
 interface BackendService {
   id: string
@@ -563,7 +564,7 @@ export default function BookArtisanPage() {
                       {selectedDate && (
                         <div className="space-y-2">
                           <Label id="time-slot-label">
-                            Available times on {selectedDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}
+                            Available times on {threeLetterMonth(selectedDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }))}
                           </Label>
                           {isLoadingSlotsForDate ? (
                             <div className="flex justify-center py-6">
@@ -667,7 +668,7 @@ export default function BookArtisanPage() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Date</span>
                         <span className="font-medium text-foreground">
-                          {selectedDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                          {threeLetterMonth(selectedDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))}
                         </span>
                       </div>
                     )}

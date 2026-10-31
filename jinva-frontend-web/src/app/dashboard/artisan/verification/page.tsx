@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FormField } from "@/components/forms/form-field"
 import { ApiError, apiFetch } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { threeLetterMonth } from "@/lib/spending"
 
 type DocumentType = "GHANA_CARD" | "PASSPORT" | "VOTERS_ID" | "DRIVERS_LICENSE" | "NATIONAL_ID"
 type VerificationStatus = "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED"
@@ -33,7 +34,7 @@ interface Verification {
 
 /** "25 Oct 2026". */
 const formatDay = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 
 /** What was picked, kept for the preview; `preview` is an object URL for images. */
 interface PickedFile {

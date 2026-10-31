@@ -4,6 +4,7 @@ import Link from "next/link"
 import { AlertCircle, Briefcase, CheckCircle2, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { OpenJob } from "@/lib/artisan-overview-api"
+import { formatDay } from "@/lib/artisan-jobs"
 import { artisanJobHref, formatGhs } from "@/lib/artisan-overview"
 import { cn } from "@/lib/utils"
 
@@ -104,7 +105,7 @@ export function OpenJobsList({
 function OpenJobRow({ job, applied, onApply }: { job: OpenJob; applied: boolean; onApply: (job: OpenJob) => void }) {
   const href = artisanJobHref(job.id)
   const budget = budgetText(job.budgetMin, job.budgetMax)
-  const posted = formatDate(job.createdAt)
+  const posted = formatDay(job.createdAt)
 
   return (
     <li className="group relative flex items-center gap-3 px-4 py-3.5 transition-colors duration-150 hover:bg-muted/50 motion-reduce:transition-none sm:px-5">
@@ -167,8 +168,3 @@ function budgetText(min: OpenJob["budgetMin"], max: OpenJob["budgetMax"]): strin
   return null
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ""
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Accra" })
-}

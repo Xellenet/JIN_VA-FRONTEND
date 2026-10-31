@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Calendar, UserRound } from "lucide-react"
 import { resolveAvatarUrl } from "@/lib/utils"
 import { getJobStatusConfig } from "@/lib/status-badges"
+import { threeLetterMonth } from "@/lib/spending"
 
 export interface OngoingJob {
   id: number
@@ -75,7 +76,7 @@ export function OngoingJobs({ jobs }: { jobs: OngoingJob[] }) {
                         {job.deadline ? (
                           <span className="flex items-center gap-1.5">
                             <Calendar className="h-3.5 w-3.5" />
-                            {new Date(job.deadline).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                            {threeLetterMonth(new Date(job.deadline).toLocaleDateString("en-GB", { day: "numeric", month: "short" }))}
                           </span>
                         ) : (
                           "—"

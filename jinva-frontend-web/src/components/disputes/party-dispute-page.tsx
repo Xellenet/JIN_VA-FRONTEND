@@ -56,6 +56,7 @@ import {
 } from "@/lib/status-badges"
 import { DisputeProgressStrip } from "@/components/disputes/dispute-progress-strip"
 import { PartyDisputeSkeleton } from "@/components/disputes/party-dispute-skeleton"
+import { threeLetterMonth } from "@/lib/spending"
 
 /**
  * DC3 — the party-facing dispute page (design-spec.md §2,
@@ -150,11 +151,11 @@ function firstNameOrNull(person?: DisputePerson | null): string | undefined {
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return "—"
-  return new Date(iso).toLocaleDateString("en-GB", {
+  return threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
-  })
+  }))
 }
 
 export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {

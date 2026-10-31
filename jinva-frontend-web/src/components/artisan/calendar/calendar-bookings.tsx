@@ -29,6 +29,7 @@ import {
 import { formatAppointment } from "@/lib/overview"
 import { getBookingStatusConfig } from "@/lib/status-badges"
 import { cn } from "@/lib/utils"
+import { threeLetterMonth } from "@/lib/spending"
 
 const RESPOND_WINDOW_MS = 24 * 3_600_000
 
@@ -150,7 +151,7 @@ export function CalendarBookings({
             <p className="text-sm text-foreground">
               Showing requests and bookings on{" "}
               <span className="font-medium">
-                {date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                {threeLetterMonth(date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }))}
               </span>
             </p>
             <Button variant="ghost" className="h-11 sm:h-9" onClick={() => setDate(undefined)}>

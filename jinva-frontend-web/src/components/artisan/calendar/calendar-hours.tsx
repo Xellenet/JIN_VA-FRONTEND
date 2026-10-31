@@ -24,6 +24,7 @@ import { RADIO_TILE_CLASS, RadioMark } from "@/components/settings/settings-row"
 import { apiFetch, apiFetchWithMessage } from "@/lib/api"
 import { formatTime12 } from "@/lib/overview"
 import { cn } from "@/lib/utils"
+import { threeLetterMonth } from "@/lib/spending"
 
 // 0 = Sunday … 6 = Saturday (the API's dayOfWeek). Shown Monday first.
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -56,12 +57,12 @@ const slotText = (s: Pick<ApiSlot, "startTime" | "endTime">) =>
 function formatDay(value: string, withYear: boolean): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
   if (!m) return value
-  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString("en-GB", {
+  return threeLetterMonth(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     ...(withYear ? { year: "numeric" } : {}),
     timeZone: "UTC",
-  })
+  }))
 }
 
 /** Availability status, saved as soon as it changes (H4). The saved value is what shows as current. */

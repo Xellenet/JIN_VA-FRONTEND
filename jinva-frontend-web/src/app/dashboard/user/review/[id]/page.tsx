@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ArrowLeft, Star, CheckCircle2, Loader2, UserRound, Clock, AlertTriangle } from "lucide-react"
 import { apiFetch } from "@/lib/api"
+import { formatDay } from "@/lib/artisan-jobs"
 import { resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { ReviewPhotoPicker } from "@/components/reviews/review-photo-picker"
@@ -359,7 +360,7 @@ function ReviewPageContent() {
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Date</span>
                       <span className="font-medium text-foreground">
-                        {new Date(job.createdAt).toLocaleDateString()}
+                        {formatDay(job.createdAt)}
                       </span>
                     </div>
                   </div>

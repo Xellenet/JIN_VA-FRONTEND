@@ -88,6 +88,9 @@ export function mapNotificationType(type: string): Notification["type"] {
   return "system"
 }
 
+/** Newer ICU writes en-GB September as "Sept"; the product uses three letters (same as `threeLetterMonth` in spending.ts; this module has no runtime imports). */
+const threeLetterMonth = (s: string) => s.replace(/\bSept\b/g, "Sep")
+
 export function formatNotificationTime(iso: string): string {
   const d = new Date(iso)
   const diff = Date.now() - d.getTime()
@@ -95,7 +98,7 @@ export function formatNotificationTime(iso: string): string {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
   if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Accra" })
+  return threeLetterMonth(d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Accra" }))
 }
 
 export function mapNotification(n: BackendNotification): Notification {
@@ -277,7 +280,7 @@ export function formatFullDateTime(iso: string | null | undefined): string {
   }).formatToParts(d)
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ""
   const period = get("dayPeriod").toLowerCase().replace(/\./g, "")
-  return `${get("weekday")} ${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")} ${period}`
+  return `${get("weekday")} ${get("day")} ${threeLetterMonth(get("month"))} ${get("year")}, ${get("hour")}:${get("minute")} ${period}`
 }
 
 /**

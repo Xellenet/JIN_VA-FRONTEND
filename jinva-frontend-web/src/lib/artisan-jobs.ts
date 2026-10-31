@@ -202,13 +202,16 @@ export function jobStatusName(status?: string | null): string {
 
 const TZ = "Africa/Accra"
 
+/** Newer ICU writes en-GB September as "Sept"; the product uses three letters (same as `threeLetterMonth` in spending.ts; this module has no runtime imports). */
+const threeLetterMonth = (s: string) => s.replace(/\bSept\b/g, "Sep")
+
 /** "25 Oct 2026" */
 export function formatDay(iso?: string | null): string {
   if (!iso) return ""
   // A bare calendar date is a day in Accra (UTC+0), not an instant.
   const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : new Date(iso)
   if (Number.isNaN(d.getTime())) return ""
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: TZ })
+  return threeLetterMonth(d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: TZ }))
 }
 
 /** "Tue 4 Nov 2026" */
@@ -216,7 +219,9 @@ export function formatDayWithWeekday(iso?: string | null): string {
   if (!iso) return ""
   const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : new Date(iso)
   if (Number.isNaN(d.getTime())) return ""
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: TZ })
+  return threeLetterMonth(
+    d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: TZ }),
+  )
 }
 
 /** "25 Oct 2026, 14:05" — no seconds. */

@@ -139,14 +139,17 @@ export function conversationTimestamp(c: BackendConversation): string | null {
   return c.lastMessageAt ?? c.lastMessage?.createdAt ?? null
 }
 
+/** Newer ICU writes en-GB September as "Sept"; the product uses three letters (same as `threeLetterMonth` in spending.ts; this module has no runtime imports). */
+const threeLetterMonth = (s: string) => s.replace(/\bSept\b/g, "Sep")
+
 /** Relative-then-absolute timestamp, matching the conversation list's idiom. */
 export function formatMessageTime(iso: string): string {
   const d = new Date(iso)
   const diff = Date.now() - d.getTime()
   if (diff < 60_000) return "just now"
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86_400_000) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+  if (diff < 86_400_000) return d.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true })
+  return threeLetterMonth(d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }))
 }
 
 /** Day label for the admin dispute thread's date dividers (design-spec.md §4). */
@@ -158,7 +161,7 @@ export function formatMessageDay(iso: string): string {
   const yesterday = new Date(today)
   yesterday.setDate(today.getDate() - 1)
   if (isSameDay(d, yesterday)) return "Yesterday"
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  return threeLetterMonth(d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 }
 
 /**

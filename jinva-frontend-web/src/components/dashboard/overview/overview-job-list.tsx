@@ -6,6 +6,7 @@ import { AlertCircle, Briefcase, ChevronRight, Loader2, Plus, SearchX } from "lu
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { formatDay } from "@/lib/artisan-jobs"
 import type { MyJob } from "@/lib/customer-api"
 import { initials, listTitle, myJobsHref, stageInfo, type ShowMoreState, type Stage } from "@/lib/overview"
 import { getJobStatusConfig } from "@/lib/status-badges"
@@ -129,7 +130,7 @@ function JobRow({ job, swap }: { job: MyJob; swap: boolean }) {
   const status = getJobStatusConfig(job.status)
   const artisan = job.acceptedArtisan
   const artisanName = artisan ? `${artisan.firstname} ${artisan.lastname}`.trim() : ""
-  const posted = formatPosted(job.createdAt)
+  const posted = formatDay(job.createdAt)
   const service = job.service?.name ?? null
   const id = Number.isSafeInteger(job.id) && job.id > 0 ? job.id : null
 
@@ -201,12 +202,6 @@ function JobRow({ job, swap }: { job: MyJob; swap: boolean }) {
       )}
     </li>
   )
-}
-
-function formatPosted(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ""
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Accra" })
 }
 
 function SkeletonRows() {

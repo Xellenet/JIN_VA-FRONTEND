@@ -36,6 +36,7 @@ import {
 } from "lucide-react"
 import { resolveAvatarUrl } from "@/lib/utils"
 import { apiFetchWithMeta } from "@/lib/api"
+import { threeLetterMonth } from "@/lib/spending"
 
 /**
  * AT8 / design-spec.md §10.5 — the admin Jobs screen.
@@ -132,7 +133,7 @@ function mapJob(j: BackendJob): MappedJob {
         : "Unassigned",
     serviceName: j.service?.name ?? j.title ?? "—",
     createdAt: j.createdAt,
-    orderDate: new Date(j.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+    orderDate: threeLetterMonth(new Date(j.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })),
     status: j.status,
     isDeleted: Boolean(j.deletedAt),
   }

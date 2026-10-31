@@ -681,22 +681,8 @@ function UserSettingsContent() {
               </CardContent>
             </Card>
 
-            <Card className="gap-0 py-0">
-              <div className="border-b p-4 sm:p-6">
-                <h3 className="font-semibold">Two-Factor Authentication</h3>
-                <p className="text-sm text-muted-foreground">Add an extra layer of security to your account</p>
-              </div>
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Enable 2FA</p>
-                    <p className="text-sm text-muted-foreground">Use an authenticator app for additional security</p>
-                  </div>
-                  <Switch />
-                </div>
-              </CardContent>
-            </Card>
-
+            {/* C6: no two-factor switch until two-factor sign-in exists — the old
+                one saved nothing. */}
             <Card className="gap-0 border-destructive/30 py-0">
               <div className="border-b border-destructive/30 p-4 sm:p-6">
                 <div className="flex items-center gap-3">

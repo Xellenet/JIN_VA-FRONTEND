@@ -33,11 +33,28 @@ function initialsOf(user: Pick<User, "name" | "firstname" | "lastname">): string
   return ((first[0] ?? "") + (last[0] ?? "")).toUpperCase() || "?"
 }
 
+/**
+ * Who sees the photo, in each role's own words: a client's photo is shown to
+ * artisans on jobs and messages; an artisan's is shown to clients on their
+ * profile, in search and in messages.
+ */
+const AUDIENCE_COPY: Record<"user" | "artisan", { seenBy: string; afterRemove: string }> = {
+  user: {
+    seenBy: "Artisans see this on your jobs and messages.",
+    afterRemove: "Artisans will see your initials instead.",
+  },
+  artisan: {
+    seenBy: "Clients see this on your profile, in search and in messages.",
+    afterRemove: "Clients will see your initials instead.",
+  },
+}
+
 const FOCUS_RING =
   "outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-ring"
 
 /**
- * Settings → Profile → Profile photo (item 3).
+ * Settings → Profile → Profile photo (item 3). Used by both roles; the copy
+ * follows `user.role`.
  *
  * Below 640px the card stacks and centres (avatar, name, email, full-width
  * 44px buttons); from 640px it keeps the avatar-left layout with a shrinkable
@@ -54,6 +71,7 @@ export function ProfilePhotoCard({ user, refreshUser }: Readonly<{ user: User; r
   const hasPhoto = !!user.avatar
   const initials = initialsOf(user)
   const busy = isUploading || isRemoving
+  const copy = AUDIENCE_COPY[user.role === "artisan" ? "artisan" : "user"]
 
   const pickFile = () => {
     if (!busy) inputRef.current?.click()
@@ -108,7 +126,7 @@ export function ProfilePhotoCard({ user, refreshUser }: Readonly<{ user: User; r
     <Card className="gap-0 py-0">
       <div className="border-b p-4 sm:p-6">
         <h3 className="font-semibold">Profile photo</h3>
-        <p className="text-sm text-muted-foreground">Artisans see this on your jobs and messages.</p>
+        <p className="text-sm text-muted-foreground">{copy.seenBy}</p>
       </div>
       <div className="p-4 sm:p-6">
         <input
@@ -223,7 +241,7 @@ export function ProfilePhotoCard({ user, refreshUser }: Readonly<{ user: User; r
           </div>
           <AlertDialogHeader className="text-left">
             <AlertDialogTitle>Remove your profile photo?</AlertDialogTitle>
-            <AlertDialogDescription>Artisans will see your initials instead.</AlertDialogDescription>
+            <AlertDialogDescription>{copy.afterRemove}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="max-sm:h-11">Cancel</AlertDialogCancel>

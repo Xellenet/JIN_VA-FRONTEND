@@ -90,6 +90,18 @@ export function getAccessToken(): string | null {
   return inMemoryAccessToken
 }
 
+/**
+ * P1: an artisan may open the client-facing view of an artisan profile
+ * (`/dashboard/user/artisan/:id`) — it is how "Preview as a client" on their
+ * own Profile works. That page is read-only for a non-client (no save,
+ * message, book or report actions), and the API still decides what any
+ * profile reveals, so this grants nothing beyond what clients already see.
+ * Checked by both middleware and RoleGuard so they can't disagree.
+ */
+export function isArtisanPreviewPath(role: string | null | undefined, pathname: string): boolean {
+  return role === "artisan" && /^\/dashboard\/user\/artisan\/[^/]+\/?$/.test(pathname)
+}
+
 /** Maps backend role enum to frontend role string */
 export function mapBackendRole(role: string): "admin" | "artisan" | "user" {
   if (role === "ADMIN") return "admin"

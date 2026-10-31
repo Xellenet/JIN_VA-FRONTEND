@@ -111,7 +111,12 @@ export default function ArtisanPublicProfile() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [flagTarget, setFlagTarget] = useState<ApiReview | null>(null)
-  const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
+  // P1: an artisan reaches this page only through "Preview as a client" on
+  // their own Profile (middleware lets that one route through). They see what
+  // clients see, without the client actions — saving, messaging, booking and
+  // reporting are a client's to take.
+  const isPreview = user?.role === "artisan"
+  const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds({ enabled: user?.role === "user" })
 
   // P3/PF9: this artisan's public (APPROVED-only) portfolio items
   const [portfolioItems, setPortfolioItems] = useState<ApiPortfolioItem[]>([])
@@ -215,6 +220,9 @@ export default function ArtisanPublicProfile() {
   }
 
   const name = `${artisan.user.firstname} ${artisan.user.lastname}`.trim()
+  const backLink = isPreview
+    ? { href: "/dashboard/artisan/profile", label: "Back to your profile" }
+    : { href: "/dashboard/user/search", label: "Back to Search" }
   const isAvailable = artisan.availabilityStatus === "AVAILABLE"
   const specialization = artisan.businessName || artisan.services?.[0]?.name || "General Service"
 
@@ -222,11 +230,17 @@ export default function ArtisanPublicProfile() {
     <DashboardLayout>
       <div className="space-y-6 pb-24">
         <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
-          <Link href="/dashboard/user/search">
+          <Link href={backLink.href}>
             <ArrowLeft className="h-4 w-4" />
-            Back to Search
+            {backLink.label}
           </Link>
         </Button>
+
+        {isPreview && (
+          <p className="rounded-lg border border-primary/20 bg-primary/[0.04] px-4 py-3 text-sm text-foreground">
+            This is how clients see your profile. They also get Save, Message and Book buttons here.
+          </p>
+        )}
 
         {/* Profile Hero */}
         <Card className="overflow-hidden">
@@ -276,6 +290,7 @@ export default function ArtisanPublicProfile() {
                   </div>
                 </div>
 
+                {!isPreview && (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
@@ -303,6 +318,7 @@ export default function ArtisanPublicProfile() {
                     <Link href={`/dashboard/user/book/${artisan.id}`}>Book Now</Link>
                   </Button>
                 </div>
+                )}
               </div>
             </div>
 
@@ -512,7 +528,7 @@ export default function ArtisanPublicProfile() {
                             This review is under moderation review and is temporarily hidden from other users.
                           </p>
                         )}
-                        {(canEdit || !isOwnReview) && (
+                        {!isPreview && (canEdit || !isOwnReview) && (
                           <div className="mt-2 flex items-center gap-3">
                             {canEdit && (
                               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary" asChild>
@@ -594,7 +610,9 @@ export default function ArtisanPublicProfile() {
 
       {/* P4: "Book Now" stays anchored at every scroll position, on mobile
           and desktop, offset past the sidebar on large screens so it never
-          covers navigation. `pb-24` above keeps page content clear of it. */}
+          covers navigation. `pb-24` above keeps page content clear of it.
+          Not shown in the artisan's own preview (P1). */}
+      {!isPreview && (
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 p-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur supports-backdrop-blur:bg-background/80 lg:left-56">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <div className="hidden min-w-0 sm:block">
@@ -606,6 +624,7 @@ export default function ArtisanPublicProfile() {
           </Button>
         </div>
       </div>
+      )}
     </DashboardLayout>
   )
 }

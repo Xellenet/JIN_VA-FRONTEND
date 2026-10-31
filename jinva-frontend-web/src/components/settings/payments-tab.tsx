@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group"
 import { AlertTriangle, Banknote, CreditCard, Loader2, Lock, ReceiptText, Smartphone } from "lucide-react"
@@ -20,6 +20,14 @@ import {
 import { cn } from "@/lib/utils"
 import { HistoryMovedBanner } from "./history-moved-banner"
 import { ProtectionPath } from "./protection-path"
+import {
+  MOMO_NETWORKS,
+  NetworkMark,
+  RADIO_TILE_CLASS,
+  RadioMark,
+  SETTINGS_FOCUS_RING as FOCUS_RING,
+  SettingsRow as Row,
+} from "./settings-row"
 
 // ── Choices and copy (Settings & inbox spec §3.4) ───────────────────────────
 
@@ -37,16 +45,10 @@ const METHOD_HELPER: Record<MethodChoice, string> = {
   none: "Checkout opens as it does today. You choose a method each time you pay.",
 }
 
-/**
- * Q-P2: monogram tiles in the networks' colours until the owner has the real
- * logos and permission to use them. These are brand marks, so the colours are
- * fixed in both themes (written as oklch, not palette classes).
- */
-const NETWORKS: { value: MomoNetwork; label: string; mark: string; tile: string }[] = [
-  { value: "MTN", label: "MTN MoMo", mark: "MTN", tile: "bg-[oklch(0.86_0.176_92)] text-[oklch(0.2_0_0)]" },
-  { value: "TELECEL", label: "Telecel Cash", mark: "T", tile: "bg-[oklch(0.57_0.233_28)] text-white" },
-  { value: "AT", label: "AirtelTigo Money", mark: "AT", tile: "bg-[oklch(0.37_0.15_262)] text-white" },
-]
+/** Q-P2: the shared network tiles (see settings-row.tsx). */
+const NETWORKS: { value: MomoNetwork; label: string; network: (typeof MOMO_NETWORKS)[number] }[] = MOMO_NETWORKS.map(
+  (n) => ({ value: n.value, label: n.label, network: n }),
+)
 
 const RATE_LIMITED_MESSAGE = "Too many changes in a short time. Wait a minute, then save again."
 const SAVE_FAILED_MESSAGE = "Couldn’t save your payment preferences. Try again."
@@ -84,50 +86,6 @@ function formatSavedAt(iso: string | null): string {
   }).formatToParts(d)
   const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? ""
   return `${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")} ${get("dayPeriod").toLowerCase()}`
-}
-
-const FOCUS_RING =
-  "outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-ring"
-
-// ── Layout pieces ────────────────────────────────────────────────────────────
-
-/** One "label column | controls" row; stacks when the card is narrow. */
-function Row({
-  title,
-  description,
-  children,
-  first = false,
-  titleId,
-}: Readonly<{ title: string; description: string; children: ReactNode; first?: boolean; titleId?: string }>) {
-  return (
-    <section
-      aria-labelledby={titleId}
-      className={cn(
-        "grid gap-4 p-4 sm:p-6 @[56rem]:grid-cols-[minmax(0,260px)_minmax(0,1fr)] @[56rem]:gap-10 @[56rem]:px-8 @[56rem]:py-7",
-        !first && "border-t",
-      )}
-    >
-      <div>
-        <h3 id={titleId} className="text-[15px] font-semibold text-foreground">
-          {title}
-        </h3>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</p>
-      </div>
-      <div className="@container/controls min-w-0">{children}</div>
-    </section>
-  )
-}
-
-function RadioMark() {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "block h-[18px] w-[18px] shrink-0 rounded-full border border-foreground/30 bg-background transition-[border-width,border-color] motion-reduce:transition-none",
-        "group-data-[state=checked]:border-[5px] group-data-[state=checked]:border-primary",
-      )}
-    />
-  )
 }
 
 // ── The tab ──────────────────────────────────────────────────────────────────
@@ -429,24 +387,10 @@ export function PaymentsTab({
                 <RadioGroupPrimitive.Item
                   key={n.value}
                   value={n.value}
-                  className={cn(
-                    "group flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border bg-card px-3.5 py-3 text-left",
-                    "transition-colors motion-reduce:transition-none hover:border-foreground/25",
-                    "data-[state=checked]:border-primary data-[state=checked]:bg-primary/[0.04] data-[state=checked]:ring-1 data-[state=checked]:ring-primary",
-                    "disabled:cursor-not-allowed",
-                    FOCUS_RING,
-                  )}
+                  className={RADIO_TILE_CLASS}
                 >
                   <RadioMark />
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tracking-tight",
-                      n.tile,
-                    )}
-                  >
-                    {n.mark}
-                  </span>
+                  <NetworkMark network={n.network} />
                   <span className="min-w-0 text-sm font-medium text-foreground">{n.label}</span>
                 </RadioGroupPrimitive.Item>
               ))}

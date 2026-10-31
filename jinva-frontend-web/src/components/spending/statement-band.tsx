@@ -20,21 +20,24 @@ import {
 import { cn } from "@/lib/utils"
 import { FOCUS_RING, UserText } from "./shared"
 
-const BAND_FOCUS =
+export const BAND_FOCUS =
   "outline-none focus-visible:ring-2 focus-visible:ring-brand-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-brand"
 
 const NET_SPENT_HELP =
   "What you paid, minus refunds. Payments you didn't finish and failed payments aren't counted."
 
-/** ⓘ next to Net spent: opens on hover, focus or tap (hover is not available on phones). */
-function NetSpentHelp() {
+/** ⓘ next to the band's headline figure: opens on hover, focus or tap (hover is not available on phones). */
+export function BandHelp({
+  label = "How net spent is worked out",
+  text = NET_SPENT_HELP,
+}: Readonly<{ label?: string; text?: React.ReactNode }>) {
   const [open, setOpen] = useState(false)
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="How net spent is worked out"
+          aria-label={label}
           onMouseEnter={() => setOpen(true)}
           onMouseLeave={() => setOpen(false)}
           className={cn(
@@ -46,7 +49,7 @@ function NetSpentHelp() {
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" className="w-72 text-sm leading-snug">
-        {NET_SPENT_HELP}
+        {text}
       </PopoverContent>
     </Popover>
   )
@@ -57,7 +60,7 @@ function NetSpentHelp() {
  * wider than its box. A measurement, not a character count. The exact value
  * stays in the aria-label and in a popover on focus or tap.
  */
-function NetSpentFigure({ amount }: Readonly<{ amount: string }>) {
+export function BandFigure({ amount }: Readonly<{ amount: string }>) {
   const boxRef = useRef<HTMLDivElement>(null)
   const fullRef = useRef<HTMLParagraphElement>(null)
   const [compact, setCompact] = useState(false)
@@ -111,7 +114,7 @@ function NetSpentFigure({ amount }: Readonly<{ amount: string }>) {
 }
 
 /** A ledger value that falls back to the short form when it would not fit (FR-4.19). */
-function FitMoney({ amount, className }: Readonly<{ amount: string; className?: string }>) {
+export function FitMoney({ amount, className }: Readonly<{ amount: string; className?: string }>) {
   const exact = formatMoney(amount)
   const short = Number(amount) >= 1_000_000 ? formatMoneyCompact(amount) : exact
   return (
@@ -162,9 +165,9 @@ export function StatementBand({ data, range }: Readonly<{ data: SpendingAnalytic
         <div className="min-w-0 px-5 py-6 md:col-span-3 md:px-8 md:py-7 xl:col-span-1">
           <p className="flex items-center gap-2 text-sm text-brand-foreground/80">
             {netSpentLabel(range)}
-            <NetSpentHelp />
+            <BandHelp />
           </p>
-          <NetSpentFigure amount={totals.netSpent} />
+          <BandFigure amount={totals.netSpent} />
           {change ? (
             <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-brand-foreground/85">
               {change.chip ? (

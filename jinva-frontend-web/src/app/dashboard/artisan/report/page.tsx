@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation"
 
 /**
- * This page used to show sample figures from `lib/data/mock-data` as if they
- * were real (the same problem as QA ADM-19). The real figures live on
- * your Analytics page, so old links and bookmarks go there.
+ * C2: this route used to show sample figures. An artisan's real statement
+ * (what clients paid, the fee, the payout and where it is) is on Earnings, so
+ * old links and bookmarks go there.
  */
 export default function ReportPage() {
-  redirect("/dashboard/artisan/analytics")
+  redirect("/dashboard/artisan/earnings")
 }

@@ -205,13 +205,14 @@ export function conversationHref(
 /**
  * Link to a conversation by its **conversation** id. Used where there is no
  * usable contact id: a message notification (its payload carries only
- * `conversationId`) and a deleted contact (FR-6.18). Only the customer
- * messages page reads `?conversation=`, so other roles get the plain inbox.
- * Returns null for anything but a positive safe integer (SEC-18).
+ * `conversationId`) and a deleted contact (FR-6.18). The customer and
+ * artisan messages pages both read `?conversation=`; admin has no such page,
+ * so it gets the plain inbox. Returns null for anything but a positive safe
+ * integer (SEC-18).
  */
 export function conversationIdHref(role: string, roleBase: string, conversationId: number): string | null {
   if (!Number.isSafeInteger(conversationId) || conversationId <= 0) return null
-  if (role !== "user") return `${roleBase}/messages`
+  if (role !== "user" && role !== "artisan") return `${roleBase}/messages`
   return `${roleBase}/messages?${new URLSearchParams({ conversation: String(conversationId) }).toString()}`
 }
 

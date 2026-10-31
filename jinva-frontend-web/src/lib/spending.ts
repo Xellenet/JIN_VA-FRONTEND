@@ -543,8 +543,8 @@ export function channelAltText(rows: readonly { channel: string; share: number }
 }
 
 /** Accessible name of a column: "June 2026: GH₵ 1,890.00, 2 payments". */
-export function columnLabel(point: SeriesPoint, bucket: SpendingBucket): string {
-  return `${bucketName(point.bucketStart, bucket, true)}: ${formatMoney(point.netSpent)}, ${plural(point.count, "payment")}`
+export function columnLabel(point: SeriesPoint, bucket: SpendingBucket, noun = "payment"): string {
+  return `${bucketName(point.bucketStart, bucket, true)}: ${formatMoney(point.netSpent)}, ${plural(point.count, noun)}`
 }
 
 /** Seconds left on a 429 as the Try again label (spec §4). */

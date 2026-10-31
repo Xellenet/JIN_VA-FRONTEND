@@ -18,18 +18,35 @@ import { FOCUS_RING } from "./shared"
 
 const RANGE_MESSAGE = "Narrow the date range to 24 months or less, then download again."
 
-export function DownloadCsvButton({ filters }: Readonly<{ filters: PaymentHistoryFilters }>) {
+/**
+ * `filters` downloads the customer's payment history (the default). Another
+ * page passes its own `fetchCsv`, `fileName` and messages instead (the
+ * artisan's Earnings statement).
+ */
+export function DownloadCsvButton({
+  filters,
+  fetchCsv,
+  fileName,
+  tooLargeMessage = RANGE_MESSAGE,
+  failedMessage = "Couldn't download your payments. Check your connection, then try again.",
+}: Readonly<{
+  filters?: PaymentHistoryFilters
+  fetchCsv?: () => Promise<Blob>
+  fileName?: () => string
+  tooLargeMessage?: string
+  failedMessage?: string
+}>) {
   const [busy, setBusy] = useState(false)
 
   const download = async () => {
     if (busy) return
     setBusy(true)
     try {
-      const blob = await downloadPaymentHistoryCsv(filters)
+      const blob = fetchCsv ? await fetchCsv() : await downloadPaymentHistoryCsv(filters ?? {})
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = csvFileName()
+      a.download = fileName ? fileName() : csvFileName()
       a.rel = "noopener"
       document.body.appendChild(a)
       a.click()
@@ -38,8 +55,8 @@ export function DownloadCsvButton({ filters }: Readonly<{ filters: PaymentHistor
       toast.success("Your download has started")
     } catch (err) {
       if (isRateLimited(err)) toast.error("Too many requests, please wait a moment.")
-      else if (err instanceof ApiError && err.status === 400) toast.error(RANGE_MESSAGE)
-      else toast.error("Couldn't download your payments. Check your connection, then try again.")
+      else if (err instanceof ApiError && err.status === 400) toast.error(tooLargeMessage)
+      else toast.error(failedMessage)
     } finally {
       setBusy(false)
     }

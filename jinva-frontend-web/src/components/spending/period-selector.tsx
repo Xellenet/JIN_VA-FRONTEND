@@ -9,17 +9,26 @@ import { FOCUS_RING } from "./shared"
  * is raised (card surface, ring, semibold), not only recoloured, and carries
  * `aria-pressed`. On phones it is a 4-up segmented control with 44px targets.
  */
-export function PeriodSelector({
+export function PeriodSelector<T extends string = SpendingRange>({
   value,
   onChange,
-}: Readonly<{ value: SpendingRange; onChange: (range: SpendingRange) => void }>) {
+  options = RANGES as unknown as readonly { value: T; short: string; full: string }[],
+}: Readonly<{
+  value: T
+  onChange: (range: T) => void
+  /** The choices; the Spending page's four periods by default. */
+  options?: readonly { value: T; short: string; full: string }[]
+}>) {
   return (
     <div
       role="group"
       aria-label="Period"
-      className="grid w-full grid-cols-4 rounded-lg border border-border bg-muted p-1 sm:inline-flex sm:w-auto"
+      className={cn(
+        "grid w-full rounded-lg border border-border bg-muted p-1 sm:inline-flex sm:w-auto",
+        options.length === 5 ? "grid-cols-5" : "grid-cols-4",
+      )}
     >
-      {RANGES.map((r) => {
+      {options.map((r) => {
         const on = r.value === value
         return (
           <button

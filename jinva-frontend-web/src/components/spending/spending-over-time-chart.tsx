@@ -47,10 +47,19 @@ export default function SpendingOverTimeChart({
   series,
   bucket,
   reducedMotion,
+  groupLabel = "Spending over time",
+  countNoun = "payment",
+  axisWidth = AXIS_W,
 }: Readonly<{
   series: SpendingAnalytics["series"]
   bucket: SpendingAnalytics["bucket"]
   reducedMotion: boolean
+  /** The columns' group name for screen readers. */
+  groupLabel?: string
+  /** What `count` counts, in the tooltip and column labels. */
+  countNoun?: string
+  /** Y-axis column width; wider when the ticks read "GH₵ 1.5k". */
+  axisWidth?: number
 }>) {
   const data = useMemo(() => series.map((p) => ({ ...p, value: Number(p.netSpent) || 0 })), [series])
   const max = data.reduce((m, p) => Math.max(m, p.value), 0)
@@ -96,7 +105,7 @@ export default function SpendingOverTimeChart({
           >
             <CartesianGrid vertical={false} strokeDasharray="0" />
             <YAxis
-              width={AXIS_W}
+              width={axisWidth}
               domain={[0, top]}
               ticks={ticks}
               axisLine={false}
@@ -123,9 +132,9 @@ export default function SpendingOverTimeChart({
 
         <div
           role="group"
-          aria-label={`Spending over time, one column per ${bucket}`}
+          aria-label={`${groupLabel}, one column per ${bucket}`}
           className="absolute bottom-0 right-0 top-0 flex"
-          style={{ left: AXIS_W, top: INSET, bottom: INSET }}
+          style={{ left: axisWidth, top: INSET, bottom: INSET }}
         >
           {data.map((p, i) => {
             const h = pct(p.value)
@@ -139,7 +148,7 @@ export default function SpendingOverTimeChart({
                 }}
                 type="button"
                 tabIndex={i === focusIndex ? 0 : -1}
-                aria-label={columnLabel(p, bucket)}
+                aria-label={columnLabel(p, bucket, countNoun)}
                 onMouseEnter={() => setActive(i)}
                 onMouseLeave={() => setActive((a) => (a === i ? null : a))}
                 onFocus={() => {
@@ -187,7 +196,7 @@ export default function SpendingOverTimeChart({
                     <span className="tnum block text-sm font-semibold tabular-nums text-foreground">{formatMoney(p.netSpent)}</span>
                     <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                       <span className="h-0.5 w-3 rounded bg-[var(--chart-1)]" />
-                      {bucketName(p.bucketStart, bucket, true)}, {plural(p.count, "payment")}
+                      {bucketName(p.bucketStart, bucket, true)}, {plural(p.count, countNoun)}
                     </span>
                   </span>
                 ) : null}
@@ -197,7 +206,7 @@ export default function SpendingOverTimeChart({
         </div>
       </div>
 
-      <div aria-hidden="true" className="mt-2 flex" style={{ marginLeft: AXIS_W }}>
+      <div aria-hidden="true" className="mt-2 flex" style={{ marginLeft: axisWidth }}>
         {data.map((p, i) => {
           const tick = bucketTick(p.bucketStart, bucket, i)
           return (

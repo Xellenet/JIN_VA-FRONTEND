@@ -11,7 +11,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { FieldError } from "@/components/ui/field"
 import { FormField, fieldErrorId } from "@/components/forms/form-field"
 import { apiFetch } from "@/lib/api"
+import { failureReasonText } from "@/lib/earnings"
+import { getBanks, getEarningsStatement, type Bank, type PayoutDestination } from "@/lib/earnings-api"
 import { cn, formatCurrency } from "@/lib/utils"
+import { BankPicker } from "./bank-picker"
 import {
   MOMO_NETWORKS,
   NetworkMark,
@@ -30,21 +33,20 @@ type PayoutType = "mobile_money" | "bank"
 interface SavedPayout {
   type: PayoutType
   accountName: string
-  /** Masked server-side to the last 4 characters — never the full number. */
-  maskedNumber: string
+  /** The network or bank name ("MTN MoMo", "GCB Bank Limited"). */
+  label: string
+  /** Last 4 digits only; the full number is never sent back by the API. */
+  last4: string
   bankCode: string
 }
 
 interface ProfilePayoutFields {
-  payoutType?: PayoutType
-  payoutAccountName?: string
-  payoutAccountNumber?: string
-  payoutBankCode?: string
-}
-
-interface EarningRow {
-  artisanAmount: number | string
-  status: string
+  payoutType?: PayoutType | null
+  payoutAccountName?: string | null
+  payoutAccountNumber?: string | null
+  payoutBankCode?: string | null
+  /** B2: the masked destination, null when no payout method is set. */
+  payoutDestination?: PayoutDestination | null
 }
 
 type FieldKey = "accountName" | "accountNumber" | "network" | "bankCode"
@@ -57,10 +59,37 @@ const TYPES: { value: PayoutType; title: string; body: string; icon: typeof Smar
 const networkByCode = (code: string): MomoNetworkOption | undefined =>
   MOMO_NETWORKS.find((n) => n.payoutCode === code.toUpperCase())
 
-/** "MTN MoMo ••••1234" / "Bank account ••••1234". */
+/** The network of a saved mobile money method, by code or by its label. */
+const networkFor = (saved: SavedPayout): MomoNetworkOption | undefined =>
+  networkByCode(saved.bankCode) ?? MOMO_NETWORKS.find((n) => n.label === saved.label)
+
+/** "MTN MoMo ••1234" / "GCB Bank Limited ••1234". */
 function destinationLabel(saved: SavedPayout): string {
-  const name = saved.type === "mobile_money" ? (networkByCode(saved.bankCode)?.label ?? "Mobile money") : "Bank account"
-  return saved.maskedNumber ? `${name} ${saved.maskedNumber}` : name
+  const name = saved.label || (saved.type === "mobile_money" ? "Mobile money" : "Bank account")
+  return saved.last4 ? `${name} ••${saved.last4}` : name
+}
+
+/** The saved method from the profile: `payoutDestination` first, the older fields as a fallback. */
+function savedFromProfile(p: ProfilePayoutFields): SavedPayout | null {
+  const d = p.payoutDestination
+  if (d) {
+    return {
+      type: d.type,
+      accountName: d.accountName ?? p.payoutAccountName ?? "",
+      label: d.label,
+      last4: (d.last4 ?? "").slice(-4),
+      bankCode: p.payoutBankCode ?? "",
+    }
+  }
+  if (!p.payoutType) return null
+  const code = p.payoutBankCode ?? ""
+  return {
+    type: p.payoutType,
+    accountName: p.payoutAccountName ?? "",
+    label: p.payoutType === "mobile_money" ? (networkByCode(code)?.label ?? "Mobile money") : "Bank account",
+    last4: (p.payoutAccountNumber ?? "").replace(/\D/g, "").slice(-4),
+    bankCode: code,
+  }
 }
 
 function validate(
@@ -76,7 +105,7 @@ function validate(
       errors.accountNumber = "Enter your 10-digit mobile money number, like 0241234567."
   } else {
     if (!/^\d{8,20}$/.test(digits)) errors.accountNumber = "Enter your account number, digits only."
-    if (values.bankCode.trim().length < 2) errors.bankCode = "Enter your bank’s code, like 030 for GCB Bank."
+    if (!values.bankCode.trim()) errors.bankCode = "Choose your bank."
   }
   return errors
 }
@@ -109,23 +138,34 @@ export function PayoutMethodCard() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Earnings that are waiting on this method: never sent because there was no
-  // method (PENDING_TRANSFER) or a transfer that failed (TRANSFER_FAILED).
-  const [waiting, setWaiting] = useState<{ amount: number; failed: boolean } | null>(null)
+  // Earnings that are waiting on this method (statement stage "needs_action"):
+  // never sent because there was no method, or a transfer that failed.
+  const [waiting, setWaiting] = useState<{ amount: string; count: number; reason: string | null; failed: boolean } | null>(
+    null,
+  )
+
+  // B6: the bank list, fetched the first time "Bank account" is shown.
+  const [banks, setBanks] = useState<Bank[]>([])
+  const [banksState, setBanksState] = useState<"idle" | "loading" | "error" | "ready">("idle")
+  const loadBanks = useCallback(() => {
+    setBanksState("loading")
+    getBanks()
+      .then((list) => {
+        setBanks(Array.isArray(list) ? list : [])
+        setBanksState("ready")
+      })
+      .catch(() => setBanksState("error"))
+  }, [])
 
   const cardRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoadState("loading")
     try {
-      const profile = await apiFetch<ProfilePayoutFields>("/users/me/artisan-profile")
-      if (profile.payoutType) {
-        setSaved({
-          type: profile.payoutType,
-          accountName: profile.payoutAccountName ?? "",
-          maskedNumber: profile.payoutAccountNumber ?? "",
-          bankCode: profile.payoutBankCode ?? "",
-        })
+      const profile = await apiFetch<ProfilePayoutFields>("/users/me/artisan-profile", { cache: "no-store" })
+      const fromProfile = savedFromProfile(profile)
+      if (fromProfile) {
+        setSaved(fromProfile)
         setEditing(false)
       } else {
         setSaved(null)
@@ -139,18 +179,24 @@ export function PayoutMethodCard() {
 
   useEffect(() => {
     void load()
-    apiFetch<EarningRow[] | { items?: EarningRow[] }>("/payments/my-earnings")
-      .then((data) => {
-        const rows = Array.isArray(data) ? data : (data?.items ?? [])
-        const stuck = rows.filter((r) => r.status === "PENDING_TRANSFER" || r.status === "TRANSFER_FAILED")
-        if (!stuck.length) return
+    getEarningsStatement({ period: "all", stage: "needs_action", page: 1, limit: 100 })
+      .then(({ data }) => {
+        const count = data.balances.needsActionCount
+        if (!count) return
+        const failed = data.items.some((i) => i.failureReason === "transfer_failed")
         setWaiting({
-          amount: stuck.reduce((sum, r) => sum + Number(r.artisanAmount || 0), 0),
-          failed: stuck.some((r) => r.status === "TRANSFER_FAILED"),
+          amount: data.balances.needsAction,
+          count,
+          failed,
+          reason: failureReasonText(failed ? "transfer_failed" : "no_payout_method"),
         })
       })
       .catch(() => {})
   }, [load])
+
+  useEffect(() => {
+    if (editing && type === "bank" && banksState === "idle") loadBanks()
+  }, [editing, type, banksState, loadBanks])
 
   // Land on the card when the URL carries the anchor (links from Earnings and
   // job pages). Runs once the card has content to scroll to.
@@ -166,7 +212,7 @@ export function PayoutMethodCard() {
     if (saved) {
       setType(saved.type)
       setAccountName(saved.accountName)
-      setNetwork(saved.type === "mobile_money" ? (networkByCode(saved.bankCode)?.value ?? "") : "")
+      setNetwork(saved.type === "mobile_money" ? (networkFor(saved)?.value ?? "") : "")
       setBankCode(saved.type === "bank" ? saved.bankCode : "")
     }
     // The full number is never sent back by the API, so it is always retyped.
@@ -216,7 +262,11 @@ export function PayoutMethodCard() {
       setSaved({
         type,
         accountName: accountName.trim(),
-        maskedNumber: `••••${accountNumber.trim().slice(-4)}`,
+        label:
+          type === "mobile_money"
+            ? (MOMO_NETWORKS.find((n) => n.value === network)?.label ?? "Mobile money")
+            : (banks.find((b) => b.code === code)?.name ?? "Bank account"),
+        last4: accountNumber.trim().replace(/\D/g, "").slice(-4),
         bankCode: code,
       })
       setEditing(false)
@@ -239,19 +289,34 @@ export function PayoutMethodCard() {
         className={cn("mt-0.5 h-4 w-4 shrink-0", waiting.failed ? "text-destructive" : "text-warning")}
         aria-hidden="true"
       />
-      <span>
-        {waiting.failed
-          ? `A transfer to this method failed. ${formatCurrency(waiting.amount)} is waiting to be sent.`
-          : `${formatCurrency(waiting.amount)} is waiting to be sent to you.`}{" "}
+      <span className="min-w-0">
+        <span className="block font-medium">
+          {formatCurrency(waiting.amount)} is waiting to be sent to you
+          {waiting.count > 1 ? ` from ${waiting.count} jobs` : ""}.
+        </span>
+        {saved ? <span className="block">{waiting.reason}</span> : null}
         {saved && !editing ? (
-          <Link
-            href="/dashboard/artisan/earnings"
-            className={cn("font-medium underline decoration-foreground/30 underline-offset-4", SETTINGS_FOCUS_RING)}
-          >
-            Retry from Earnings
-          </Link>
+          <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {waiting.failed ? (
+              <button
+                type="button"
+                onClick={startEditing}
+                className={cn("min-h-11 font-medium underline decoration-foreground/30 underline-offset-4 sm:min-h-0", SETTINGS_FOCUS_RING)}
+              >
+                Update payout details
+              </button>
+            ) : null}
+            <Link
+              href="/dashboard/artisan/earnings?stage=needs_action"
+              className={cn("inline-flex min-h-11 items-center font-medium underline decoration-foreground/30 underline-offset-4 sm:min-h-0", SETTINGS_FOCUS_RING)}
+            >
+              Retry from Earnings
+            </Link>
+          </span>
         ) : (
-          "Add a payout method below, then retry from Earnings."
+          <span className="block">
+            {saved ? "Save your updated details below, then retry from Earnings." : "Add a payout method below so we can send it."}
+          </span>
         )}
       </span>
     </p>
@@ -288,8 +353,8 @@ export function PayoutMethodCard() {
           <div className="space-y-4">
             <div className="flex flex-col gap-4 rounded-xl border p-4 @[34rem]/controls:flex-row @[34rem]/controls:items-center @[34rem]/controls:justify-between">
               <div className="flex min-w-0 items-center gap-3">
-                {saved.type === "mobile_money" && networkByCode(saved.bankCode) ? (
-                  <NetworkMark network={networkByCode(saved.bankCode)!} className="h-10 w-10" />
+                {saved.type === "mobile_money" && networkFor(saved) ? (
+                  <NetworkMark network={networkFor(saved)!} className="h-10 w-10" />
                 ) : (
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted" aria-hidden="true">
                     <Landmark className="h-[18px] w-[18px]" />
@@ -445,20 +510,19 @@ export function PayoutMethodCard() {
                 )}
               </FormField>
               {type === "bank" && (
-                <FormField
-                  id={FIELD_ID.bankCode}
-                  label="Bank code"
-                  error={errors.bankCode}
-                  hint="Your bank’s transfer code, like 030 for GCB Bank."
-                >
+                <FormField id={FIELD_ID.bankCode} label="Bank" error={errors.bankCode}>
                   {(control) => (
-                    <Input
-                      {...control}
-                      className="max-sm:h-11"
+                    <BankPicker
+                      id={control.id}
+                      invalid={control["aria-invalid"]}
+                      describedBy={control["aria-describedby"]}
+                      banks={banks}
+                      status={banksState === "idle" ? "loading" : banksState}
+                      onRetry={loadBanks}
                       value={bankCode}
                       disabled={isSaving}
-                      onChange={(e) => {
-                        setBankCode(e.target.value)
+                      onChange={(code) => {
+                        setBankCode(code)
                         clearError("bankCode")
                       }}
                     />

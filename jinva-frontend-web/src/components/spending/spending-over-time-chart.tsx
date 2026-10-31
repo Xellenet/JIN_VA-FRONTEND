@@ -9,8 +9,13 @@
  * of transparent buttons, one per bucket, that share the bars' band layout:
  * one tab stop enters the chart, arrows / Home / End move between columns
  * (roving tabindex), and focus shows the same tooltip as hover.
+ *
+ * On phones the columns are ~20px wide, under the 44px tap-target minimum, so
+ * there they leave the tab order and the accessibility tree: the card's
+ * Chart/Table toggle is the keyboard and screen-reader path to the numbers.
+ * A tap still shows the tooltip.
  */
-import { useMemo, useRef, useState, type KeyboardEvent } from "react"
+import { useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts"
 import { ChartContainer } from "@/components/ui/chart"
 import type { SpendingAnalytics } from "@/lib/customer-api"
@@ -33,6 +38,23 @@ const AXIS_W = 56
 const INSET = 8
 /** 23% gap on each side of a band leaves a 54% bar, as in the mockup. */
 const CATEGORY_GAP = "23%"
+
+const PHONE_QUERY = "(max-width: 639px)"
+
+function subscribePhone(onChange: () => void) {
+  const mql = window.matchMedia?.(PHONE_QUERY)
+  mql?.addEventListener("change", onChange)
+  return () => mql?.removeEventListener("change", onChange)
+}
+
+/** Below Tailwind's `sm`; false on the server so the first paint matches desktop markup. */
+function useIsPhone() {
+  return useSyncExternalStore(
+    subscribePhone,
+    () => window.matchMedia?.(PHONE_QUERY).matches ?? false,
+    () => false,
+  )
+}
 
 /** One-line axis label ("GH₵ 4k"); Recharts' default tick wraps narrow text. */
 function AxisTick({ x, y, payload }: Readonly<{ x?: number | string; y?: number | string; payload?: { value: number } }>) {
@@ -70,6 +92,7 @@ export default function SpendingOverTimeChart({
   const [active, setActive] = useState<number | null>(null)
   const [focusIndex, setFocusIndex] = useState(() => Math.max(0, data.length - 1))
   const buttons = useRef<(HTMLButtonElement | null)[]>([])
+  const isPhone = useIsPhone()
 
   const maxLabels = bucket === "month" ? 12 : bucket === "week" ? 7 : 6
   const shown = new Set(tickIndices(data.length, maxLabels))
@@ -131,8 +154,9 @@ export default function SpendingOverTimeChart({
         </ChartContainer>
 
         <div
-          role="group"
-          aria-label={`${groupLabel}, one column per ${bucket}`}
+          role={isPhone ? undefined : "group"}
+          aria-label={isPhone ? undefined : `${groupLabel}, one column per ${bucket}`}
+          aria-hidden={isPhone || undefined}
           className="absolute bottom-0 right-0 top-0 flex"
           style={{ left: axisWidth, top: INSET, bottom: INSET }}
         >
@@ -147,7 +171,7 @@ export default function SpendingOverTimeChart({
                   buttons.current[i] = el
                 }}
                 type="button"
-                tabIndex={i === focusIndex ? 0 : -1}
+                tabIndex={!isPhone && i === focusIndex ? 0 : -1}
                 aria-label={columnLabel(p, bucket, countNoun)}
                 onMouseEnter={() => setActive(i)}
                 onMouseLeave={() => setActive((a) => (a === i ? null : a))}
@@ -156,6 +180,7 @@ export default function SpendingOverTimeChart({
                   setFocusIndex(i)
                 }}
                 onBlur={() => setActive((a) => (a === i ? null : a))}
+                onClick={() => setActive(i)}
                 onKeyDown={(e) => move(e, i)}
                 className={cn("group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end outline-none", isActive && "z-10")}
               >

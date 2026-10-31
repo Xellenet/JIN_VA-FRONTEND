@@ -42,7 +42,8 @@ export function BandHelp({
           onMouseLeave={() => setOpen(false)}
           className={cn(
             BAND_FOCUS,
-            "grid h-6 w-6 shrink-0 place-items-center rounded-full text-brand-foreground/75 hover:bg-white/10",
+            // The 24px circle stays; an invisible ::after widens the tap target to 44px.
+            "relative grid h-6 w-6 shrink-0 place-items-center rounded-full text-brand-foreground/75 hover:bg-white/10 after:absolute after:-inset-2.5 after:content-['']",
           )}
         >
           <Info aria-hidden="true" className="h-4 w-4" />

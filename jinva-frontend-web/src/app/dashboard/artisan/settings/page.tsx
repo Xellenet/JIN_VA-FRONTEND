@@ -342,17 +342,23 @@ function ArtisanSettingsContent() {
                   </div>
                   <CardContent className="space-y-4 p-4 sm:p-6">
                     {NOTIFICATION_ROWS.map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                        <div className="min-w-0">
-                          <p id={`notif-${key}`} className="font-medium">{label}</p>
-                          <p className="text-sm text-muted-foreground">{desc}</p>
-                        </div>
+                      <Label
+                        key={key}
+                        htmlFor={`notif-switch-${key}`}
+                        className="flex min-h-11 cursor-pointer items-center justify-between gap-4 rounded-lg border p-4 text-base leading-normal font-normal transition-colors hover:bg-muted/50"
+                      >
+                        <span className="min-w-0">
+                          <span id={`notif-${key}`} className="block font-medium">{label}</span>
+                          <span id={`notif-${key}-desc`} className="block text-sm text-muted-foreground">{desc}</span>
+                        </span>
                         <Switch
+                          id={`notif-switch-${key}`}
                           aria-labelledby={`notif-${key}`}
+                          aria-describedby={`notif-${key}-desc`}
                           checked={notifPrefs[key] ?? true}
                           onCheckedChange={(v) => toggleNotif(key, v)}
                         />
-                      </div>
+                      </Label>
                     ))}
                   </CardContent>
                 </Card>
@@ -366,17 +372,23 @@ function ArtisanSettingsContent() {
                   </div>
                   <CardContent className="space-y-4 p-4 sm:p-6">
                     {CHANNEL_ROWS.map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                        <div className="min-w-0">
-                          <p id={`notif-${key}`} className="font-medium">{label}</p>
-                          <p className="text-sm text-muted-foreground">{desc}</p>
-                        </div>
+                      <Label
+                        key={key}
+                        htmlFor={`notif-switch-${key}`}
+                        className="flex min-h-11 cursor-pointer items-center justify-between gap-4 rounded-lg border p-4 text-base leading-normal font-normal transition-colors hover:bg-muted/50"
+                      >
+                        <span className="min-w-0">
+                          <span id={`notif-${key}`} className="block font-medium">{label}</span>
+                          <span id={`notif-${key}-desc`} className="block text-sm text-muted-foreground">{desc}</span>
+                        </span>
                         <Switch
+                          id={`notif-switch-${key}`}
                           aria-labelledby={`notif-${key}`}
+                          aria-describedby={`notif-${key}-desc`}
                           checked={notifPrefs[key] ?? true}
                           onCheckedChange={(v) => toggleNotif(key, v)}
                         />
-                      </div>
+                      </Label>
                     ))}
                   </CardContent>
                 </Card>

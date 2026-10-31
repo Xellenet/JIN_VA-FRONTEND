@@ -804,10 +804,12 @@ export function MessagesPage({
           >
             <div className="p-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
+                  type="search"
+                  aria-label="Search conversations"
                   placeholder="Search conversations..."
-                  className="rounded-full bg-muted/60 pl-9 text-sm border-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="rounded-full bg-muted/60 pl-9 text-sm border-none focus-visible:ring-1 focus-visible:ring-ring max-sm:h-11"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />

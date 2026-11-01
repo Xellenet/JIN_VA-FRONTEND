@@ -128,8 +128,12 @@ function OverviewContent() {
       .then((profile) => {
         setCompleteness(profile)
         if (profile.isVerified !== false) return
-        apiFetch<{ status?: string }>("/verification/me")
-          .then((v) => setVerificationNeed(v?.status === "REJECTED" ? "rejected" : null))
+        // `GET /verification/me` answers 404 when nothing was ever sent (the
+        // browser logs that as a failed request; the backend has no 200-null
+        // form yet). An empty 200 (`data: null`) is read the same way, so
+        // the page is ready for one.
+        apiFetch<{ status?: string } | null>("/verification/me")
+          .then((v) => setVerificationNeed(!v ? "none" : v.status === "REJECTED" ? "rejected" : null))
           .catch((err) => setVerificationNeed(err instanceof ApiError && err.status === 404 ? "none" : null))
       })
       .catch(() => {})

@@ -171,6 +171,12 @@ check("T-4 non-string type is harmless", N.notificationHref(undefined, { jobId: 
   })
   check("H5 artisan payout released → earnings", A("PAYOUT_RELEASED", { jobId: 812 })?.href, "/dashboard/artisan/earnings")
   check("H5 artisan refund → earnings", A("PAYMENT_REFUNDED", { jobId: 812 })?.href, "/dashboard/artisan/earnings")
+  check("Payout on hold → Settings → Payments", A("PAYOUT_ON_HOLD", { jobId: 812, paymentId: 7, reason: "payout_name_mismatch" }), {
+    label: "Fix payment details",
+    href: "/dashboard/artisan/settings?tab=payments",
+  })
+  check("Payout on hold ignores a payload link", A("PAYOUT_ON_HOLD", { href: "//evil.example.com" })?.href, "/dashboard/artisan/settings?tab=payments")
+  check("Payout on hold is a payment notification", N.mapNotificationType("PAYOUT_ON_HOLD"), "payment")
   check("H5 artisan review → reviews", A("REVIEW_RECEIVED", { jobId: 812, rating: 4 }), {
     label: "View reviews",
     href: "/dashboard/artisan/profile?tab=reviews",

@@ -67,6 +67,7 @@ const TYPE_BUCKETS: Record<string, Notification["type"]> = {
   PAYOUT_RELEASED: "payment",
   PAYMENT_REFUNDED: "payment",
   PAYMENT_TRANSFER_FAILED: "payment",
+  PAYOUT_ON_HOLD: "payment",
   DISPUTE_FILED: "dispute",
   DISPUTE_RESOLVED: "dispute",
   DISPUTE_CLOSED: "dispute",
@@ -131,6 +132,7 @@ export interface NotificationAction {
     | "View reviews"
     | "View portfolio"
     | "View verification"
+    | "Fix payment details"
   href: string
 }
 
@@ -168,6 +170,7 @@ function isPaymentType(t: string): boolean {
  * - dispute → the artisan's dispute page; without a `disputeId`, the booking
  *   or job it is about
  * - payment / payout / refund → Earnings (the payout lives there, not on the job)
+ * - payout on hold (name check) → Settings → Payments, where it is fixed
  * - review → Reviews
  * - booking → Calendar, with `?booking=` so the calendar can pick it out
  * - job → the job page
@@ -189,6 +192,8 @@ function artisanAction(t: string, payload: unknown): NotificationAction | null {
     if (jobId !== null) return { label: "View job", href: `${ARTISAN_BASE}/jobs/${jobId}` }
     return null
   }
+  // A payout held by the name check is fixed in Settings → Payments.
+  if (t === "PAYOUT_ON_HOLD") return { label: "Fix payment details", href: `${ARTISAN_BASE}/settings?tab=payments` }
   if (isPaymentType(t)) return { label: "View earnings", href: `${ARTISAN_BASE}/earnings` }
   if (t.includes("REVIEW")) return { label: "View reviews", href: `${ARTISAN_BASE}/profile?tab=reviews` }
   if (t.startsWith("PORTFOLIO_")) return { label: "View portfolio", href: `${ARTISAN_BASE}/profile?tab=portfolio` }

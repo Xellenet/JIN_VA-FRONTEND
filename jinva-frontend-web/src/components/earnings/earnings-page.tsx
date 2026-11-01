@@ -180,7 +180,11 @@ export function EarningsPage() {
       // Every row that needs action and can be retried, across pages.
       const { data: d } = await getEarningsStatement({ period: "all", stage: "needs_action", page: 1, limit: 100 })
       const jobIds = [
-        ...new Set(d.items.filter((i) => i.failureReason === "transfer_failed" && i.jobId).map((i) => i.jobId as number)),
+        ...new Set(
+          d.items
+            .filter((i) => (i.failureReason === "transfer_failed" || i.holdReason === "payout_check_pending") && i.jobId)
+            .map((i) => i.jobId as number),
+        ),
       ]
       let ok = 0
       for (const id of jobIds) {

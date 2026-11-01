@@ -178,6 +178,27 @@ for (const bad of [0, -1, 1.5, "1/../../x", "javascript:alert(1)", null, undefin
   }
 }
 
+// ── Earnings: payout holds from the name check (src/lib/earnings.ts) ─────────
+{
+  const e = await import(lib("earnings.ts"))
+  check("hold: name mismatch", e.payoutHoldText("payout_name_mismatch")?.title, "Payout account name doesn't match")
+  check("hold: not found", e.payoutHoldText("payout_account_not_found")?.title, "Payout account not found")
+  check("hold: check pending", e.payoutHoldText("payout_check_pending")?.title, "Checking your payout account")
+  check("hold: none", e.payoutHoldText(null), null)
+  check("hold: unknown code", e.payoutHoldText("no_payout_method"), null)
+  check("hold: fix for mismatch", e.payoutHoldNeedsFix("payout_name_mismatch"), true)
+  check("hold: fix for not found", e.payoutHoldNeedsFix("payout_account_not_found"), true)
+  check("hold: no fix while checking", e.payoutHoldNeedsFix("payout_check_pending"), false)
+  check("hold: no fix without a hold", e.payoutHoldNeedsFix(undefined), false)
+  for (const code of ["payout_name_mismatch", "payout_account_not_found", "payout_check_pending"]) {
+    const t = e.payoutHoldText(code)
+    const words = `${t.title} ${t.detail}`
+    check(`hold copy ${code}: sentence case`, /^[A-Z][^A-Z]*$/.test(t.title), true)
+    check(`hold copy ${code}: never escrow`, /escrow/i.test(words), false)
+    check(`hold copy ${code}: no timing promise`, /\b(minutes?|hours?|days?|today|tomorrow|within|soon)\b/i.test(words), false)
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} failed, ${passed} passed`)
   process.exit(1)

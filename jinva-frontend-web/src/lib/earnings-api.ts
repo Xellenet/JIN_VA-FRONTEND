@@ -43,6 +43,7 @@ export interface EarningsItem {
   stage: EarningsStage
   transferReference: string | null
   failureReason: "no_payout_method" | "transfer_failed" | null
+  holdReason?: "payout_name_mismatch" | "payout_account_not_found" | "payout_check_pending" | null
   paidAt: string | null
   releasedAt: string | null
   createdAt: string

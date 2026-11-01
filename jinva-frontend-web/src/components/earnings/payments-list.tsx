@@ -11,6 +11,8 @@ import {
   STAGE_FILTERS,
   failureReasonText,
   noPayoutText,
+  payoutHoldNeedsFix,
+  payoutHoldText,
   rangePhrase,
   type EarningsPeriod,
   type EarningsStage,
@@ -68,13 +70,29 @@ function NeedsAction({
   onRetry,
 }: Readonly<{ item: EarningsItem; hasPayoutMethod: boolean | null; retrying: boolean; onRetry: (jobId: number) => void }>) {
   if (item.stage !== "needs_action") return null
-  const reason = failureReasonText(item.failureReason)
+  // Payout name check: a hold says why in plain words. A name that doesn't
+  // match, or an account that can't be found, is fixed in Settings (saving
+  // new details retries it), so there is no retry button for those.
+  const hold = payoutHoldText(item.holdReason)
+  const needsFix = payoutHoldNeedsFix(item.holdReason)
+  const reason = hold ? null : failureReasonText(item.failureReason)
   const jobId = safeId(item.jobId)
-  const canRetry = hasPayoutMethod !== false && jobId !== null
+  const canRetry = hasPayoutMethod !== false && jobId !== null && !needsFix
   return (
     <div className="mt-2 rounded-lg bg-attention/[0.07] px-3 py-2.5">
+      {hold ? (
+        <>
+          <p className="text-[13px] font-medium leading-snug text-foreground">{hold.title}</p>
+          <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">{hold.detail}</p>
+        </>
+      ) : null}
       {reason ? <p className="text-[13px] leading-snug text-foreground">{reason}</p> : null}
       <div className="mt-2 flex flex-wrap gap-2">
+        {needsFix ? (
+          <Link href={PAYOUT_SETTINGS_HREF} className={cn(FOCUS_RING, ACTION)}>
+            Fix payment details
+          </Link>
+        ) : null}
         {canRetry ? (
           <button
             type="button"
@@ -87,9 +105,11 @@ function NeedsAction({
             Retry payout
           </button>
         ) : null}
-        <Link href={PAYOUT_SETTINGS_HREF} className={cn(FOCUS_RING, ACTION)}>
-          {hasPayoutMethod === false ? "Add payout details" : "Update payout details"}
-        </Link>
+        {needsFix ? null : (
+          <Link href={PAYOUT_SETTINGS_HREF} className={cn(FOCUS_RING, ACTION)}>
+            {hasPayoutMethod === false ? "Add payout details" : "Update payout details"}
+          </Link>
+        )}
       </div>
     </div>
   )

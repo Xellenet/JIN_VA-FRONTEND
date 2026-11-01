@@ -104,6 +104,38 @@ export function failureReasonText(code: string | null | undefined): string | nul
   return null
 }
 
+/**
+ * Payout name check: why a payout is on hold (`holdReason` on a statement
+ * row). The name on the payout account is checked again before every
+ * payout; these are the reasons one wasn't sent.
+ */
+export type PayoutHoldReason = "payout_name_mismatch" | "payout_account_not_found" | "payout_check_pending"
+
+/** `holdReason` → the reason in plain words, and what happens next. */
+export function payoutHoldText(code: string | null | undefined): { title: string; detail: string } | null {
+  if (code === "payout_name_mismatch")
+    return {
+      title: "Payout account name doesn't match",
+      detail: "The name on your payout account isn't the name you saved. Update your payment details to receive it.",
+    }
+  if (code === "payout_account_not_found")
+    return {
+      title: "Payout account not found",
+      detail: "We couldn't find your payout account. Update your payment details to receive it.",
+    }
+  if (code === "payout_check_pending")
+    return {
+      title: "Checking your payout account",
+      detail: "We couldn't check the name on your payout account yet. We'll try again automatically.",
+    }
+  return null
+}
+
+/** Holds only the artisan can clear, by fixing their payment details. */
+export function payoutHoldNeedsFix(code: string | null | undefined): boolean {
+  return code === "payout_name_mismatch" || code === "payout_account_not_found"
+}
+
 /** The one accurate payout-timing sentence (no arrival promise). */
 export const PAYOUT_TIMING =
   "We start your payout when the client confirms the job is done, or 48 hours after you mark it done if they don't respond."

@@ -9,7 +9,7 @@ import { useBookingResponse } from "@/components/artisan/booking-response"
 import { CalendarBookings, type BookingsState } from "@/components/artisan/calendar/calendar-bookings"
 import { StatusCard, TimeOffCard, WorkingHoursCard, type ApiBlock, type ApiSlot } from "@/components/artisan/calendar/calendar-hours"
 import { apiFetch } from "@/lib/api"
-import { availabilityLabel } from "@/lib/availability"
+import { describeAvailability, type AvailabilitySummary } from "@/lib/availability"
 import { calendarGroup, clientLabel, parseBookingParam } from "@/lib/artisan-overview"
 import {
   getArtisanBookings,
@@ -75,12 +75,52 @@ function CalendarContent() {
   const [blocks, setBlocks] = useState<ApiBlock[]>([])
   const [blocksLoading, setBlocksLoading] = useState(true)
 
+  // "What clients see": the same computed state search and the public profile
+  // show, refreshed after every change to status, hours or time off.
+  const [summary, setSummary] = useState<AvailabilitySummary | null>(null)
+  const [summaryVersion, setSummaryVersion] = useState(0)
+  const refreshSummary = useCallback(() => setSummaryVersion((v) => v + 1), [])
+  useEffect(() => {
+    if (summaryVersion === 0) return
+    let cancelled = false
+    apiFetch<{ summary?: AvailabilitySummary }>("/availability/my")
+      .then((data) => {
+        if (!cancelled) setSummary(data.summary ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [summaryVersion])
+  const changeSlots = useCallback(
+    (fn: (prev: ApiSlot[]) => ApiSlot[]) => {
+      setSlots(fn)
+      refreshSummary()
+    },
+    [refreshSummary],
+  )
+  const changeBlocks = useCallback(
+    (fn: (prev: ApiBlock[]) => ApiBlock[]) => {
+      setBlocks(fn)
+      refreshSummary()
+    },
+    [refreshSummary],
+  )
+  const changeStatus = useCallback(
+    (next: string) => {
+      setStatus(next)
+      refreshSummary()
+    },
+    [refreshSummary],
+  )
+
   useEffect(() => {
     loadBookings()
-    apiFetch<{ status?: string; slots?: ApiSlot[] }>("/availability/my")
+    apiFetch<{ status?: string; slots?: ApiSlot[]; summary?: AvailabilitySummary }>("/availability/my")
       .then((data) => {
         setStatus(data.status ?? "AVAILABLE")
         setSlots(data.slots ?? [])
+        setSummary(data.summary ?? null)
       })
       .catch(() => setHoursFailed(true))
     apiFetch<ApiBlock[] | { items?: ApiBlock[] }>("/availability/my/blocks")
@@ -166,8 +206,8 @@ function CalendarContent() {
           </p>
         </div>
         {status && (
-          <p className="text-sm text-muted-foreground">
-            Your status: <span className="font-medium text-foreground">{availabilityLabel(status)}</span>
+          <p aria-live="polite" className="text-sm text-muted-foreground">
+            Clients see: <span className="font-medium text-foreground">{describeAvailability(summary, status).text}</span>
           </p>
         )}
       </header>
@@ -211,11 +251,11 @@ function CalendarContent() {
             <div aria-hidden className="h-40 rounded-xl border bg-card motion-safe:animate-pulse" />
           ) : (
             <>
-              <StatusCard saved={status} onSaved={setStatus} />
-              <WorkingHoursCard slots={slots} setSlots={setSlots} />
+              <StatusCard saved={status} onSaved={changeStatus} />
+              <WorkingHoursCard slots={slots} setSlots={changeSlots} />
             </>
           )}
-          <TimeOffCard blocks={blocks} loading={blocksLoading} setBlocks={setBlocks} />
+          <TimeOffCard blocks={blocks} loading={blocksLoading} setBlocks={changeBlocks} />
         </TabsContent>
       </Tabs>
 

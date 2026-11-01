@@ -41,7 +41,8 @@ import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbna
 import { ReviewReasonDialog } from "@/components/reviews/review-reason-dialog"
 import type { ApiPortfolioItem, ApiReview } from "@/lib/types"
 import { toast } from "sonner"
-import { availabilityLabel } from "@/lib/availability"
+import { notBookableReason, type AvailabilitySummary, type PublicTimeOff, type PublicWeeklyHours } from "@/lib/availability"
+import { AvailabilityBadge, WorkingHoursSection } from "@/components/dashboard/availability-badge"
 
 // RE1 — matches `REVIEW_EDIT_WINDOW_HOURS` in api-contract.md §1.
 const REVIEW_EDIT_WINDOW_HOURS = 48
@@ -56,6 +57,10 @@ interface BackendArtisan {
   totalReviews: number
   completedJobsCount?: number
   availabilityStatus: string
+  /** Computed from the artisan's Calendar settings; absent on an older API. */
+  availability?: AvailabilitySummary
+  weeklyHours?: PublicWeeklyHours[]
+  upcomingTimeOff?: PublicTimeOff[]
   isVerified: boolean
   location?: string
   cancellationPolicy?: string
@@ -235,7 +240,9 @@ export default function ArtisanPublicProfile() {
   const backLink = isPreview
     ? { href: "/dashboard/artisan/profile", label: "Back to your profile" }
     : { href: "/dashboard/user/search", label: "Back to search" }
-  const isAvailable = artisan.availabilityStatus === "AVAILABLE"
+  // Why Book is off (no hours, time off for 2 weeks, busy or unavailable), or null.
+  const bookBlockedReason = notBookableReason(artisan.availability, artisan.availabilityStatus)
+  const firstName = artisan.user.firstname?.trim() || name
   const specialization = artisan.businessName || artisan.services?.[0]?.name || "Artisan"
   const rating = Number(artisan.averageRating ?? 0)
   const totalReviews = Number(artisan.totalReviews ?? 0)
@@ -280,15 +287,7 @@ export default function ArtisanPublicProfile() {
                         Verified
                       </Badge>
                     )}
-                    <Badge
-                      variant="outline"
-                      className={isAvailable
-                        ? "border-primary/30 bg-primary/5 text-primary"
-                        : "border-border bg-muted text-muted-foreground"}
-                    >
-                      <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
-                      {availabilityLabel(artisan.availabilityStatus)}
-                    </Badge>
+                    <AvailabilityBadge summary={artisan.availability} status={artisan.availabilityStatus} />
                   </div>
                   <p dir="auto" className="mt-1 text-muted-foreground [overflow-wrap:anywhere]">{specialization}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -305,6 +304,11 @@ export default function ArtisanPublicProfile() {
                       <span className="tabular-nums">{formatCurrency(hourlyRate)} an hour</span>
                     )}
                   </div>
+                  {bookBlockedReason && (
+                    <p id="book-blocked-reason" className="mt-2 text-sm text-muted-foreground">
+                      {bookBlockedReason}
+                    </p>
+                  )}
                 </div>
 
                 {!isPreview && (
@@ -332,9 +336,15 @@ export default function ArtisanPublicProfile() {
                       Message
                     </Link>
                   </Button>
-                  <Button className="col-span-2 h-11 sm:h-9" asChild>
-                    <Link href={`/dashboard/user/book/${artisan.id}`}>Book now</Link>
-                  </Button>
+                  {bookBlockedReason ? (
+                    <Button className="col-span-2 h-11 sm:h-9" disabled aria-describedby="book-blocked-reason">
+                      Book now
+                    </Button>
+                  ) : (
+                    <Button className="col-span-2 h-11 sm:h-9" asChild>
+                      <Link href={`/dashboard/user/book/${artisan.id}`}>Book now</Link>
+                    </Button>
+                  )}
                 </div>
                 )}
               </div>
@@ -383,7 +393,7 @@ export default function ArtisanPublicProfile() {
             <Card className="gap-0 py-0">
               <CardContent className="space-y-6 p-4 sm:p-6">
                 <div>
-                  <h2 className="mb-3 text-lg font-semibold text-foreground">About {artisan.user.firstname?.trim() || name}</h2>
+                  <h2 className="mb-3 text-lg font-semibold text-foreground">About {firstName}</h2>
                   {/* B4: never a bio the artisan didn't write. Bio is optional
                       (B1), so an empty one gets an honest line instead. */}
                   {artisan.bio?.trim() ? (
@@ -411,6 +421,14 @@ export default function ArtisanPublicProfile() {
                       ))}
                     </div>
                   </div>
+                )}
+                {artisan.weeklyHours && (
+                  <WorkingHoursSection
+                    hours={artisan.weeklyHours}
+                    timeOff={artisan.upcomingTimeOff ?? []}
+                    today={artisan.availability?.today}
+                    firstName={firstName}
+                  />
                 )}
                 <div>
                   <h3 className="mb-3 text-sm font-semibold text-foreground">Cancellation policy</h3>
@@ -635,9 +653,20 @@ export default function ArtisanPublicProfile() {
               {hourlyRate ? `, ${formatCurrency(hourlyRate)} an hour` : ""}
             </p>
           </div>
-          <Button className="h-11 w-full sm:h-9 sm:w-auto" asChild>
-            <Link href={`/dashboard/user/book/${artisan.id}`}>Book now</Link>
-          </Button>
+          {bookBlockedReason ? (
+            <div className="flex w-full flex-col gap-1 sm:w-auto sm:items-end">
+              <Button className="h-11 w-full sm:h-9 sm:w-auto" disabled aria-describedby="sticky-book-reason">
+                Book now
+              </Button>
+              <p id="sticky-book-reason" className="text-center text-xs text-muted-foreground sm:text-right">
+                {bookBlockedReason}
+              </p>
+            </div>
+          ) : (
+            <Button className="h-11 w-full sm:h-9 sm:w-auto" asChild>
+              <Link href={`/dashboard/user/book/${artisan.id}`}>Book now</Link>
+            </Button>
+          )}
         </div>
       </div>
       )}

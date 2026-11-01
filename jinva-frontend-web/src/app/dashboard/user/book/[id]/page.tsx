@@ -33,7 +33,8 @@ import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { ApiError, apiFetch } from "@/lib/api"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { toast } from "sonner"
-import { availabilityLabel } from "@/lib/availability"
+import { timeOffText, type AvailabilitySummary, type PublicTimeOff } from "@/lib/availability"
+import { AvailabilityBadge } from "@/components/dashboard/availability-badge"
 import { formatDayWithWeekday } from "@/lib/artisan-jobs"
 import { threeLetterMonth } from "@/lib/spending"
 
@@ -51,6 +52,9 @@ interface BackendArtisan {
   averageRating: number
   totalReviews: number
   availabilityStatus: string
+  /** Computed from the artisan's Calendar settings; absent on an older API. */
+  availability?: AvailabilitySummary
+  upcomingTimeOff?: PublicTimeOff[]
   services?: BackendService[]
   user: { id: string; firstname: string; lastname: string; profilePicture?: string }
 }
@@ -151,7 +155,8 @@ export default function BookArtisanPage() {
   const router = useRouter()
 
   const [artisan, setArtisan] = useState<{
-    name: string; specialization: string; avatar?: string; avgRating: number; reviews: number; availability: string; availabilityLabel: string
+    name: string; specialization: string; avatar?: string; avgRating: number; reviews: number; availability: string
+    availabilityStatus: string; availabilitySummary?: AvailabilitySummary; timeOff: PublicTimeOff[]
   } | null>(null)
   const [services, setServices] = useState<BackendService[]>([])
   const [selectedService, setSelectedService] = useState("")
@@ -196,7 +201,9 @@ export default function BookArtisanPage() {
           avgRating: Number(profile.averageRating ?? 0),
           reviews: Number(profile.totalReviews ?? 0),
           availability: profile.availabilityStatus === "AVAILABLE" ? "available" : "busy",
-          availabilityLabel: availabilityLabel(profile.availabilityStatus),
+          availabilityStatus: profile.availabilityStatus,
+          availabilitySummary: profile.availability,
+          timeOff: profile.upcomingTimeOff ?? [],
         })
       })
       .catch((err) => {
@@ -277,10 +284,22 @@ export default function BookArtisanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoadingAvailability, hasAnyActiveSlot, visibleMonth, weeklySlots])
 
+  // Time off the artisan set in their Calendar (dates only). Those days are
+  // already empty in the bookable-windows check; this names the reason.
+  const timeOff = useMemo(() => artisan?.timeOff ?? [], [artisan])
+  const isTimeOff = useCallback(
+    (date: Date) => {
+      const key = toDateKey(date)
+      return timeOff.some((t) => key >= t.startDate.slice(0, 10) && key <= t.endDate.slice(0, 10))
+    },
+    [timeOff],
+  )
+
   const isDateDisabled = useCallback(
     (date: Date) => {
       const key = toDateKey(date)
       if (key < todayKey) return true
+      if (isTimeOff(date)) return true
       const dow = date.getDay()
       const hasHours = weeklySlots.some((s) => s.isActive && s.dayOfWeek === dow)
       if (!hasHours) return true
@@ -288,15 +307,16 @@ export default function BookArtisanPage() {
       if (cached && cached.length === 0) return true
       return false
     },
-    [weeklySlots, bookabilityCache, todayKey],
+    [weeklySlots, bookabilityCache, todayKey, isTimeOff],
   )
 
   const dayLabel = useCallback(
     (date: Date, modifiers?: Record<string, boolean>) => {
       const base = date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
       if (modifiers?.pastDate) return `${base}, unavailable — date is in the past`
+      if (modifiers?.timeOff) return `${base}, unavailable — the artisan is on time off`
       if (modifiers?.noWorkingHours) return `${base}, unavailable — artisan has no working hours on this day`
-      if (modifiers?.unavailable) return `${base}, unavailable — fully booked or blocked`
+      if (modifiers?.unavailable) return `${base}, unavailable — fully booked`
       if (modifiers?.selected) return `${base}, selected`
       return base
     },
@@ -545,6 +565,7 @@ export default function BookArtisanPage() {
                           disabled={isDateDisabled}
                           modifiers={{
                             pastDate: (date: Date) => toDateKey(date) < todayKey,
+                            timeOff: (date: Date) => toDateKey(date) >= todayKey && isTimeOff(date),
                             noWorkingHours: (date: Date) =>
                               !weeklySlots.some((s) => s.isActive && s.dayOfWeek === date.getDay()),
                             unavailable: (date: Date) => {
@@ -559,6 +580,15 @@ export default function BookArtisanPage() {
                           labels={{ labelDayButton: dayLabel, labelGridcell: dayLabel }}
                           className="rounded-lg border"
                         />
+                      </div>
+                      <div className="space-y-1 text-sm text-muted-foreground">
+                        <p>Greyed-out days have no working hours, are time off or are fully booked.</p>
+                        {timeOff.length > 0 && (
+                          <p>
+                            <span className="font-medium text-foreground">Time off: </span>
+                            {timeOff.map((t) => timeOffText(t, todayKey)).join("; ")}.
+                          </p>
+                        )}
                       </div>
 
                       {selectedDate && (
@@ -628,13 +658,11 @@ export default function BookArtisanPage() {
                         </div>
                       </div>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={`mt-4 w-full justify-center ${artisan.availability === "available" ? "border-primary/20 bg-primary/5 text-primary" : "border-border bg-muted text-muted-foreground"}`}
-                    >
-                      <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
-                      {artisan.availabilityLabel}
-                    </Badge>
+                    <AvailabilityBadge
+                      summary={artisan.availabilitySummary}
+                      status={artisan.availabilityStatus}
+                      className="mt-4 w-full justify-center"
+                    />
                   </>
                 ) : (
                   <div className="flex items-center justify-center py-6">

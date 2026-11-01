@@ -44,7 +44,8 @@ import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { RatingStars } from "@/components/ui/rating-stars"
-import { availabilityLabel } from "@/lib/availability"
+import type { AvailabilitySummary } from "@/lib/availability"
+import { AvailabilityBadge } from "@/components/dashboard/availability-badge"
 
 interface BackendArtisan {
   id: string
@@ -56,6 +57,8 @@ interface BackendArtisan {
   totalReviews: number
   completedJobsCount?: number
   availabilityStatus: string
+  /** Computed from the artisan's Calendar settings; absent on an older API. */
+  availability?: AvailabilitySummary
   isVerified: boolean
   location?: string
   services?: { id: string; name: string; price?: number | null }[]
@@ -77,8 +80,8 @@ function mapArtisan(a: BackendArtisan) {
     avgRating: Number(a.averageRating ?? 0),
     totalReviews: Number(a.totalReviews ?? 0),
     completedJobsCount: Number(a.completedJobsCount ?? 0),
-    availability: a.availabilityStatus === "AVAILABLE" ? "available" : "busy",
-    availabilityLabel: availabilityLabel(a.availabilityStatus),
+    availabilityStatus: a.availabilityStatus,
+    availabilitySummary: a.availability,
     location: a.location,
     experienceYears: a.experienceYears,
     services: a.services ?? [],
@@ -397,7 +400,7 @@ export default function SearchArtisansPage() {
                   <DropdownMenuSeparator />
                   <div className="flex items-start gap-1.5 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
                     <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                    <span>Based on the artisan&apos;s stated weekly hours — not a live availability guarantee.</span>
+                    <span>Based on each artisan&apos;s working hours and time off. Pick a time on the booking page to see what&apos;s free.</span>
                   </div>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -569,17 +572,11 @@ export default function SearchArtisansPage() {
                                 </>
                               )}
                             </p>
-                            <Badge
-                              variant="outline"
-                              className={
-                                artisan.availability === "available"
-                                  ? "mt-2 border-primary/20 bg-primary/5 text-primary"
-                                  : "mt-2 border-border bg-muted text-muted-foreground"
-                              }
-                            >
-                              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                              {artisan.availabilityLabel}
-                            </Badge>
+                            <AvailabilityBadge
+                              summary={artisan.availabilitySummary}
+                              status={artisan.availabilityStatus}
+                              className="mt-2"
+                            />
                           </div>
 
                           <div className="space-y-2 border-t pt-4">

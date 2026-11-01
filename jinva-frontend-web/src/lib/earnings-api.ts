@@ -186,4 +186,47 @@ export interface PayoutDestination {
   label: string
   last4: string
   accountName: string
+  /** True when the name came from the account lookup; false when typed; null for older methods. */
+  accountNameVerified?: boolean | null
+}
+
+// ── Payout account name lookup and save ──────────────────────────────────────
+
+export type PayoutType = "mobile_money" | "bank"
+
+export interface PayoutAccountInput {
+  type: PayoutType
+  /** Mobile money: 0 + 9 digits. Bank: 6–20 digits. */
+  accountNumber: string
+  /** Mobile money: MTN | VOD | ATL. Bank: the code from `getBanks`. */
+  bankCode: string
+}
+
+/**
+ * `POST /payments/payout-method/resolve`: the name on the account. Throws an
+ * `ApiError` with status 422 (account not found), 503 (lookup unavailable,
+ * type the name instead), 400 (invalid input) or 429 (too many lookups).
+ */
+export function resolvePayoutAccount(input: PayoutAccountInput, signal?: AbortSignal): Promise<{ accountName: string }> {
+  return apiFetch<{ accountName: string }>("/payments/payout-method/resolve", {
+    method: "POST",
+    body: JSON.stringify(input),
+    cache: "no-store",
+    signal,
+  })
+}
+
+/**
+ * `POST /payments/payout-method`. The server looks the name up again and
+ * stores its own result; `accountName` is used only when that lookup is
+ * unavailable. 422 means the account was not found and nothing was saved.
+ */
+export function savePayoutMethod(
+  input: PayoutAccountInput & { accountName?: string },
+): Promise<{ accountName?: string; accountNameVerified?: boolean }> {
+  return apiFetch<{ accountName?: string; accountNameVerified?: boolean }>("/payments/payout-method", {
+    method: "POST",
+    body: JSON.stringify(input),
+    cache: "no-store",
+  })
 }

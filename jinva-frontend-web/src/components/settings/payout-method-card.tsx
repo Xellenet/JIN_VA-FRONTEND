@@ -3,16 +3,25 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group"
-import { AlertTriangle, CheckCircle2, Landmark, Loader2, Smartphone } from "lucide-react"
+import { AlertTriangle, BadgeCheck, CheckCircle2, Landmark, Loader2, Smartphone } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Checkbox } from "@/components/ui/checkbox"
 import { FieldError } from "@/components/ui/field"
 import { FormField, fieldErrorId } from "@/components/forms/form-field"
-import { apiFetch } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
 import { failureReasonText } from "@/lib/earnings"
-import { getBanks, getEarningsStatement, type Bank, type PayoutDestination } from "@/lib/earnings-api"
+import {
+  getBanks,
+  getEarningsStatement,
+  resolvePayoutAccount,
+  savePayoutMethod,
+  type Bank,
+  type PayoutDestination,
+  type PayoutType,
+} from "@/lib/earnings-api"
 import { cn, formatCurrency } from "@/lib/utils"
 import { BankPicker } from "./bank-picker"
 import {
@@ -28,8 +37,6 @@ import {
 /** The anchor "Add payout method" links land on: `/dashboard/artisan/settings?tab=payouts#payout-method`. */
 export const PAYOUT_METHOD_ANCHOR = "payout-method"
 
-type PayoutType = "mobile_money" | "bank"
-
 interface SavedPayout {
   type: PayoutType
   accountName: string
@@ -38,6 +45,8 @@ interface SavedPayout {
   /** Last 4 digits only; the full number is never sent back by the API. */
   last4: string
   bankCode: string
+  /** True when the name came from the account lookup. */
+  accountNameVerified: boolean
 }
 
 interface ProfilePayoutFields {
@@ -49,7 +58,26 @@ interface ProfilePayoutFields {
   payoutDestination?: PayoutDestination | null
 }
 
-type FieldKey = "accountName" | "accountNumber" | "network" | "bankCode"
+type FieldKey = "accountName" | "accountNumber" | "network" | "bankCode" | "confirm"
+
+/**
+ * The account name lookup for the number being typed. `key` is the
+ * type/code/number it belongs to, so a result never shows for another number.
+ */
+type Lookup =
+  | { state: "idle" }
+  | { state: "loading"; key: string }
+  | { state: "found"; key: string; name: string }
+  | { state: "not_found"; key: string; message: string }
+  | { state: "unavailable"; key: string; message: string }
+
+/** How long typing must pause before the name is looked up. */
+const LOOKUP_DEBOUNCE_MS = 500
+
+const NOT_FOUND_MESSAGE = "We couldn’t find the name on this account. Check the number and the network or bank."
+const UNAVAILABLE_MESSAGE = "We can’t look up the account name right now. Type the name on the account instead."
+const RATE_LIMITED_MESSAGE =
+  "You’ve looked up several numbers in a short time, so we can’t check this one now. Type the name on the account instead."
 
 const TYPES: { value: PayoutType; title: string; body: string; icon: typeof Smartphone }[] = [
   { value: "mobile_money", title: "Mobile money", body: "MTN MoMo, Telecel Cash or AirtelTigo Money.", icon: Smartphone },
@@ -79,6 +107,7 @@ function savedFromProfile(p: ProfilePayoutFields): SavedPayout | null {
       label: d.label,
       last4: (d.last4 ?? "").slice(-4),
       bankCode: p.payoutBankCode ?? "",
+      accountNameVerified: d.accountNameVerified === true,
     }
   }
   if (!p.payoutType) return null
@@ -89,33 +118,60 @@ function savedFromProfile(p: ProfilePayoutFields): SavedPayout | null {
     label: p.payoutType === "mobile_money" ? (networkByCode(code)?.label ?? "Mobile money") : "Bank account",
     last4: (p.payoutAccountNumber ?? "").replace(/\D/g, "").slice(-4),
     bankCode: code,
+    accountNameVerified: false,
   }
+}
+
+/**
+ * The number as the API wants it: separators removed and, for mobile money,
+ * `+233`/`233` turned into the leading `0` (`+233 24 123 4567` → `0241234567`).
+ */
+function normaliseNumber(type: PayoutType, raw: string): string {
+  const compact = raw.trim().replace(/[\s-]+/g, "")
+  if (type !== "mobile_money") return compact
+  const intl = /^(?:\+|00)?233(\d{9,10})$/.exec(compact)
+  if (!intl) return compact
+  const national = intl[1]
+  if (national.length === 10) return national.startsWith("0") ? national : compact
+  return `0${national}`
+}
+
+/** Whether the number is complete enough to look up. */
+function lookupReady(type: PayoutType, number: string, code: string): boolean {
+  if (!code) return false
+  return type === "mobile_money" ? /^0\d{9}$/.test(number) : /^\d{6,20}$/.test(number)
 }
 
 function validate(
   type: PayoutType,
   values: { accountName: string; accountNumber: string; network: string; bankCode: string },
+  lookup: Lookup,
+  confirmed: boolean,
 ): Partial<Record<FieldKey, string>> {
   const errors: Partial<Record<FieldKey, string>> = {}
-  if (values.accountName.trim().length < 2) errors.accountName = "Enter the full name on the account."
-  const digits = values.accountNumber.trim()
+  const number = normaliseNumber(type, values.accountNumber)
   if (type === "mobile_money") {
     if (!values.network) errors.network = "Choose your mobile money network."
-    if (!/^0\d{9}$/.test(digits) && !/^\+?233\d{9}$/.test(digits))
-      errors.accountNumber = "Enter your 10-digit mobile money number, like 0241234567."
+    if (!/^0\d{9}$/.test(number)) errors.accountNumber = "Enter your 10-digit mobile money number, like 0241234567."
   } else {
-    if (!/^\d{8,20}$/.test(digits)) errors.accountNumber = "Enter your account number, digits only."
     if (!values.bankCode.trim()) errors.bankCode = "Choose your bank."
+    if (!/^\d{6,20}$/.test(number)) errors.accountNumber = "Enter your account number, digits only (at least 6)."
   }
+  if (errors.accountNumber || errors.network || errors.bankCode) return errors
+  if (lookup.state === "not_found") errors.accountNumber = lookup.message
+  else if (lookup.state === "found" && !confirmed) errors.confirm = "Confirm this is your account."
+  else if (lookup.state === "unavailable" && values.accountName.trim().length < 2)
+    errors.accountName = "Enter the full name on the account."
   return errors
 }
 
-const FIELD_ORDER: FieldKey[] = ["accountName", "network", "accountNumber", "bankCode"]
+const FIELD_ORDER: FieldKey[] = ["network", "bankCode", "accountNumber", "confirm", "accountName"]
 const FIELD_ID: Record<FieldKey, string> = {
   accountName: "payout-account-name",
   network: "payout-network",
   accountNumber: "payout-account-number",
   bankCode: "payout-bank-code",
+  confirm: "payout-confirm",
 }
 
 /**
@@ -137,6 +193,10 @@ export function PayoutMethodCard() {
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({})
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [lookup, setLookup] = useState<Lookup>({ state: "idle" })
+  const [confirmed, setConfirmed] = useState(false)
+  /** Bumped by "Try again" to re-run a lookup for the same number. */
+  const [lookupAttempt, setLookupAttempt] = useState(0)
 
   // Earnings that are waiting on this method (statement stage "needs_action"):
   // never sent because there was no method, or a transfer that failed.
@@ -198,13 +258,70 @@ export function PayoutMethodCard() {
     if (editing && type === "bank" && banksState === "idle") loadBanks()
   }, [editing, type, banksState, loadBanks])
 
+  // The code and number the lookup runs on, and the key a result belongs to.
+  const lookupCode =
+    type === "mobile_money" ? (MOMO_NETWORKS.find((n) => n.value === network)?.payoutCode ?? "") : bankCode.trim()
+  const lookupNumber = normaliseNumber(type, accountNumber)
+  const lookupKey = lookupReady(type, lookupNumber, lookupCode) ? `${type}|${lookupCode}|${lookupNumber}` : ""
+
+  // Look the account name up once the number is complete and typing pauses.
+  // A change of number, network or bank cancels the request in flight, so
+  // only the latest number's result is ever shown.
+  useEffect(() => {
+    setConfirmed(false)
+    if (!editing || !lookupKey) {
+      setLookup({ state: "idle" })
+      return
+    }
+    setLookup({ state: "idle" })
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setLookup({ state: "loading", key: lookupKey })
+      resolvePayoutAccount({ type, accountNumber: lookupNumber, bankCode: lookupCode }, controller.signal)
+        .then(({ accountName: name }) => {
+          if (controller.signal.aborted) return
+          setLookup(
+            name?.trim()
+              ? { state: "found", key: lookupKey, name: name.trim() }
+              : { state: "unavailable", key: lookupKey, message: UNAVAILABLE_MESSAGE },
+          )
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted) return
+          const status = err instanceof ApiError ? err.status : 0
+          if (status === 422 || status === 400) {
+            setLookup({
+              state: "not_found",
+              key: lookupKey,
+              message: status === 422 || !(err instanceof Error) || !err.message ? NOT_FOUND_MESSAGE : err.message,
+            })
+          } else {
+            setLookup({
+              state: "unavailable",
+              key: lookupKey,
+              message: status === 429 ? RATE_LIMITED_MESSAGE : UNAVAILABLE_MESSAGE,
+            })
+          }
+        })
+    }, LOOKUP_DEBOUNCE_MS)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+    // `type`, `lookupNumber` and `lookupCode` are all inside `lookupKey`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, lookupKey, lookupAttempt])
+
+  // A result for another number is never shown.
+  const current: Lookup = lookup.state !== "idle" && lookup.key === lookupKey ? lookup : { state: "idle" }
+
   // Land on the card when the URL carries the anchor (links from Earnings and
   // job pages). Runs once the card has content to scroll to.
   useEffect(() => {
     if (loadState !== "ready" || typeof window === "undefined") return
     if (window.location.hash !== `#${PAYOUT_METHOD_ANCHOR}`) return
     cardRef.current?.scrollIntoView({ block: "start", behavior: "smooth" })
-    const first = document.getElementById(saved && !editing ? "payout-change" : FIELD_ID.accountName)
+    const first = document.getElementById(saved && !editing ? "payout-change" : FIELD_ID.accountNumber)
     first?.focus({ preventScroll: true })
   }, [loadState, saved, editing])
 
@@ -219,6 +336,7 @@ export function PayoutMethodCard() {
     setAccountNumber("")
     setErrors({})
     setSaveError(null)
+    setConfirmed(false)
     setEditing(true)
   }
 
@@ -234,7 +352,7 @@ export function PayoutMethodCard() {
   }
 
   const save = async () => {
-    const next = validate(type, { accountName, accountNumber, network, bankCode })
+    const next = validate(type, { accountName, accountNumber, network, bankCode }, current, confirmed)
     setErrors(next)
     const firstInvalid = FIELD_ORDER.find((k) => next[k])
     if (firstInvalid) {
@@ -245,34 +363,46 @@ export function PayoutMethodCard() {
       el?.focus()
       return
     }
-    const code =
-      type === "mobile_money" ? (MOMO_NETWORKS.find((n) => n.value === network)?.payoutCode ?? "") : bankCode.trim()
+    // The looked-up name, or the typed one when the lookup is unavailable.
+    // The server looks the name up again and stores its own result.
+    const name = current.state === "found" ? current.name : accountName.trim()
     setIsSaving(true)
     setSaveError(null)
     try {
-      await apiFetch("/payments/payout-method", {
-        method: "POST",
-        body: JSON.stringify({
-          type,
-          accountName: accountName.trim(),
-          accountNumber: accountNumber.trim(),
-          bankCode: code,
-        }),
+      const result = await savePayoutMethod({
+        type,
+        accountNumber: lookupNumber,
+        bankCode: lookupCode,
+        ...(name ? { accountName: name } : {}),
       })
       setSaved({
         type,
-        accountName: accountName.trim(),
+        accountName: result?.accountName?.trim() || name,
         label:
           type === "mobile_money"
             ? (MOMO_NETWORKS.find((n) => n.value === network)?.label ?? "Mobile money")
-            : (banks.find((b) => b.code === code)?.name ?? "Bank account"),
-        last4: accountNumber.trim().replace(/\D/g, "").slice(-4),
-        bankCode: code,
+            : (banks.find((b) => b.code === lookupCode)?.name ?? "Bank account"),
+        last4: lookupNumber.slice(-4),
+        bankCode: lookupCode,
+        accountNameVerified: result?.accountNameVerified === true,
       })
       setEditing(false)
       toast.success("Payout method saved")
     } catch (err) {
-      setSaveError(err instanceof Error && err.message ? err.message : "Couldn’t save your payout method. Try again.")
+      const status = err instanceof ApiError ? err.status : 0
+      if (status === 422) {
+        // The server's own lookup found no account: show it on the number.
+        setLookup({ state: "not_found", key: lookupKey, message: NOT_FOUND_MESSAGE })
+        setErrors({ accountNumber: NOT_FOUND_MESSAGE })
+        document.getElementById(FIELD_ID.accountNumber)?.focus()
+      } else if (status === 400 && current.state === "found") {
+        // The server's lookup was unavailable and needs a typed name.
+        setLookup({ state: "unavailable", key: lookupKey, message: UNAVAILABLE_MESSAGE })
+        setAccountName(name)
+        setSaveError("We couldn’t confirm the name just now. Check the name below, then save again.")
+      } else {
+        setSaveError(err instanceof Error && err.message ? err.message : "Couldn’t save your payout method. Try again.")
+      }
     } finally {
       setIsSaving(false)
     }
@@ -365,6 +495,12 @@ export function PayoutMethodCard() {
                   <p dir="auto" className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
                     {saved.accountName}
                   </p>
+                  {saved.accountNameVerified ? (
+                    <p className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+                      <BadgeCheck className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                      Verified name
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <Button id="payout-change" variant="outline" className="shrink-0 max-sm:h-11" onClick={startEditing}>
@@ -472,43 +608,6 @@ export function PayoutMethodCard() {
             )}
 
             <div className="grid gap-5 @[34rem]/controls:grid-cols-2">
-              <FormField id={FIELD_ID.accountName} label="Name on the account" error={errors.accountName}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    className="max-sm:h-11"
-                    autoComplete="name"
-                    value={accountName}
-                    disabled={isSaving}
-                    onChange={(e) => {
-                      setAccountName(e.target.value)
-                      clearError("accountName")
-                    }}
-                  />
-                )}
-              </FormField>
-              <FormField
-                id={FIELD_ID.accountNumber}
-                label={type === "mobile_money" ? "Mobile money number" : "Account number"}
-                error={errors.accountNumber}
-                hint={saved ? "Type the full number again to change it." : undefined}
-              >
-                {(control) => (
-                  <Input
-                    {...control}
-                    className="max-sm:h-11"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    placeholder={type === "mobile_money" ? "0241234567" : undefined}
-                    value={accountNumber}
-                    disabled={isSaving}
-                    onChange={(e) => {
-                      setAccountNumber(e.target.value.replace(/\s+/g, ""))
-                      clearError("accountNumber")
-                    }}
-                  />
-                )}
-              </FormField>
               {type === "bank" && (
                 <FormField id={FIELD_ID.bankCode} label="Bank" error={errors.bankCode}>
                   {(control) => (
@@ -524,10 +623,118 @@ export function PayoutMethodCard() {
                       onChange={(code) => {
                         setBankCode(code)
                         clearError("bankCode")
+                        clearError("accountNumber")
                       }}
                     />
                   )}
                 </FormField>
+              )}
+              <FormField
+                id={FIELD_ID.accountNumber}
+                label={type === "mobile_money" ? "Mobile money number" : "Account number"}
+                error={errors.accountNumber ?? (current.state === "not_found" ? current.message : undefined)}
+                hint={saved ? "Type the full number again to change it." : undefined}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    className="max-sm:h-11"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder={type === "mobile_money" ? "0241234567" : undefined}
+                    value={accountNumber}
+                    disabled={isSaving}
+                    onChange={(e) => {
+                      setAccountNumber(e.target.value.replace(/\s+/g, ""))
+                      clearError("accountNumber")
+                      clearError("confirm")
+                    }}
+                  />
+                )}
+              </FormField>
+            </div>
+
+            {/* The lookup's progress and result, announced politely. */}
+            <div aria-live="polite" className="space-y-3">
+              {current.state === "loading" && (
+                <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  Looking up the account name…
+                </p>
+              )}
+              {current.state === "found" && (
+                <div className="space-y-3 rounded-xl border p-4">
+                  <p className="flex items-start gap-2 text-sm text-foreground">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="text-muted-foreground">Name on this account: </span>
+                      <span dir="auto" className="font-semibold [overflow-wrap:anywhere]">
+                        {current.name}
+                      </span>
+                    </span>
+                  </p>
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor={FIELD_ID.confirm}
+                      className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-foreground sm:min-h-0"
+                    >
+                      <Checkbox
+                        id={FIELD_ID.confirm}
+                        checked={confirmed}
+                        disabled={isSaving}
+                        aria-invalid={errors.confirm ? true : undefined}
+                        aria-describedby={errors.confirm ? fieldErrorId(FIELD_ID.confirm) : undefined}
+                        onCheckedChange={(v) => {
+                          setConfirmed(v === true)
+                          clearError("confirm")
+                        }}
+                      />
+                      This is my account
+                    </label>
+                    {errors.confirm && <FieldError id={fieldErrorId(FIELD_ID.confirm)}>{errors.confirm}</FieldError>}
+                  </div>
+                </div>
+              )}
+              {current.state === "unavailable" && (
+                <div className="space-y-4">
+                  <p className="flex items-start gap-2 text-[13px] text-foreground">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                    <span className="min-w-0">
+                      {current.message}{" "}
+                      <button
+                        type="button"
+                        onClick={() => setLookupAttempt((n) => n + 1)}
+                        disabled={isSaving}
+                        className={cn(
+                          "inline-flex min-h-11 items-center font-medium underline decoration-foreground/30 underline-offset-4 sm:min-h-0",
+                          SETTINGS_FOCUS_RING,
+                        )}
+                      >
+                        Try the lookup again
+                      </button>
+                    </span>
+                  </p>
+                  <FormField
+                    id={FIELD_ID.accountName}
+                    label="Name on the account"
+                    error={errors.accountName}
+                    className="@[34rem]/controls:max-w-[calc(50%-0.625rem)]"
+                  >
+                    {(control) => (
+                      <Input
+                        {...control}
+                        className="max-sm:h-11"
+                        autoComplete="name"
+                        value={accountName}
+                        disabled={isSaving}
+                        onChange={(e) => {
+                          setAccountName(e.target.value)
+                          clearError("accountName")
+                        }}
+                      />
+                    )}
+                  </FormField>
+                </div>
               )}
             </div>
 
@@ -544,7 +751,11 @@ export function PayoutMethodCard() {
                   Cancel
                 </Button>
               )}
-              <Button type="submit" className="max-sm:h-11" disabled={isSaving}>
+              <Button
+                type="submit"
+                className="max-sm:h-11"
+                disabled={isSaving || current.state === "loading" || current.state === "not_found"}
+              >
                 {isSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                 Save payout method
               </Button>

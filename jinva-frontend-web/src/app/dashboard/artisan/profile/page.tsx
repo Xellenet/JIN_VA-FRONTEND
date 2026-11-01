@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
 import { splitStoredPhone } from "@/lib/phone"
 import { availabilityLabel } from "@/lib/availability"
+import { cn } from "@/lib/utils"
 import { useTabParam } from "@/lib/use-tab-param"
 import { SearchVisibilityBadge } from "@/components/artisan/profile-completeness"
 import {
@@ -33,8 +34,8 @@ const VERIFICATION_HREF = "/dashboard/artisan/settings?tab=verification"
 /** One figure in the header's stat strip. */
 function Stat({ value, label }: { value: ReactNode; label: string }) {
   return (
-    <div className="min-w-0 px-2 py-3 text-center sm:px-4">
-      <p className="text-lg font-semibold tabular-nums text-foreground sm:text-xl">{value}</p>
+    <div className="min-w-0 px-2 py-2 text-center sm:px-4 sm:py-3">
+      <p className="text-base font-semibold tabular-nums text-foreground sm:text-xl">{value}</p>
       <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
     </div>
   )
@@ -89,16 +90,25 @@ function ArtisanProfileContent() {
 
   const rating = Number(profile?.averageRating ?? user.rating ?? 0)
   const totalReviews = profile?.totalReviews ?? user.reviews ?? 0
+  const specialization = profile?.businessName || profile?.services?.[0]?.name || "Artisan"
+  // The preview's "Back to editing" returns to the tab it was opened from.
+  const previewHref = profile
+    ? `/dashboard/user/artisan/${profile.id}${activeTab === "about" ? "" : `?from=${activeTab}`}`
+    : null
+  const linkClass =
+    "font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground"
 
   return (
-    <div className="space-y-6">
-      {/* The shop front, as clients meet it. */}
+    <div className="space-y-4 sm:space-y-6">
+      {/* The shop front, as clients meet it. On phones it is compact (smaller
+          cover and avatar, one meta line, one row of links) so the tabs are on
+          the first screen; from `sm` up it is the full header. */}
       <Card className="gap-0 overflow-hidden py-0">
-        <div className="h-24 bg-gradient-to-r from-primary to-primary/80 sm:h-32" />
+        <div className="h-12 bg-gradient-to-r from-primary to-primary/80 sm:h-32" />
         <CardContent className="relative px-4 pb-4 sm:px-6 sm:pb-6">
-          <div className="flex flex-col items-start gap-4 md:flex-row md:items-end md:gap-6">
-            <div className="relative -mt-12 sm:-mt-16">
-              <Avatar className="h-24 w-24 border-4 border-background shadow-lg sm:h-28 sm:w-28">
+          <div className="flex flex-col items-start gap-2 sm:gap-4 md:flex-row md:items-end md:gap-6">
+            <div className="relative -mt-8 sm:-mt-16">
+              <Avatar className="h-16 w-16 border-4 border-background shadow-lg sm:h-28 sm:w-28">
                 <AvatarImage src={user.avatar} alt="" />
                 <AvatarFallback><UserRound className="h-10 w-10" aria-hidden="true" /></AvatarFallback>
               </Avatar>
@@ -107,7 +117,7 @@ function ArtisanProfileContent() {
             <div className="flex w-full min-w-0 flex-1 flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">{user.name}</h1>
+                  <h1 className="text-xl font-semibold tracking-tight sm:text-2xl text-foreground [overflow-wrap:anywhere]">{user.name}</h1>
                   {profile?.isVerified && (
                     <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
                       <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
@@ -117,11 +127,12 @@ function ArtisanProfileContent() {
                   {profile && (
                     <Badge
                       variant="outline"
-                      className={
+                      className={cn(
+                        "max-sm:hidden",
                         profile.availabilityStatus === "AVAILABLE"
                           ? "border-primary/30 bg-primary/5 text-primary"
-                          : "border-border bg-muted text-muted-foreground"
-                      }
+                          : "border-border bg-muted text-muted-foreground",
+                      )}
                     >
                       <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
                       {availabilityLabel(profile.availabilityStatus)}
@@ -130,10 +141,12 @@ function ArtisanProfileContent() {
                   {/* C2/§3.4: search visibility, always shown. */}
                   <SearchVisibilityBadge profile={profile} />
                 </div>
-                <p className="mt-1 text-muted-foreground">
-                  {profile?.businessName || profile?.services?.[0]?.name || "Artisan"}
+                {/* Phones: one meta line (what they do · where). */}
+                <p className="mt-0.5 truncate text-sm text-muted-foreground sm:mt-1 sm:text-base">
+                  {specialization}
+                  {profile?.location && <span className="sm:hidden"> · {profile.location}</span>}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <div className="mt-2 hidden flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground sm:flex">
                   <span className="flex min-w-0 items-center gap-1.5">
                     <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <span className="[overflow-wrap:anywhere]">{user.email}</span>
@@ -152,21 +165,33 @@ function ArtisanProfileContent() {
                   )}
                 </div>
                 {profile && !profile.isVerified && (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    <Link
-                      href={VERIFICATION_HREF}
-                      className="font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground"
-                    >
+                  <p className="mt-2 hidden text-sm text-muted-foreground sm:block">
+                    <Link href={VERIFICATION_HREF} className={linkClass}>
                       Verify your identity
                     </Link>{" "}
                     to show clients a verified badge.
                   </p>
                 )}
+                {/* Phones: the header's actions as one compact row of links. */}
+                {previewHref && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-5 text-sm sm:hidden">
+                    <Link href={previewHref} className={cn("inline-flex min-h-11 items-center gap-1.5", linkClass)}>
+                      <Eye className="h-4 w-4" aria-hidden="true" />
+                      Preview as a client
+                    </Link>
+                    {!profile?.isVerified && (
+                      <Link href={VERIFICATION_HREF} className={cn("inline-flex min-h-11 items-center gap-1.5", linkClass)}>
+                        <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                        Verify your identity
+                      </Link>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {profile && (
-                <Button variant="outline" asChild className="w-full bg-transparent max-sm:h-11 sm:w-auto md:shrink-0">
-                  <Link href={`/dashboard/user/artisan/${profile.id}`}>
+              {previewHref && (
+                <Button variant="outline" asChild className="hidden bg-transparent sm:inline-flex md:shrink-0">
+                  <Link href={previewHref}>
                     <Eye className="h-4 w-4" aria-hidden="true" />
                     Preview as a client
                   </Link>
@@ -176,7 +201,7 @@ function ArtisanProfileContent() {
           </div>
 
           {/* Stat strip: one compact row on every width (M4). */}
-          <div className="mt-5 grid grid-cols-3 divide-x rounded-lg border bg-muted/40">
+          <div className="mt-3 grid grid-cols-3 divide-x rounded-lg border bg-muted/40 sm:mt-5">
             <Stat
               value={
                 totalReviews > 0 ? (

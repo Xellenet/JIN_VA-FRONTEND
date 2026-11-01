@@ -115,7 +115,7 @@ const BACK = (
   <Button variant="ghost" asChild className="-ml-2 h-11 gap-2 text-muted-foreground hover:text-foreground sm:h-9">
     <Link href="/dashboard/artisan/jobs">
       <ArrowLeft aria-hidden className="h-4 w-4" />
-      Back to My Jobs
+      Back to My jobs
     </Link>
   </Button>
 )

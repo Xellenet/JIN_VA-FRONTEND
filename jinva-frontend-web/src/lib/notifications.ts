@@ -190,10 +190,10 @@ function artisanAction(t: string, payload: unknown): NotificationAction | null {
     return null
   }
   if (isPaymentType(t)) return { label: "View earnings", href: `${ARTISAN_BASE}/earnings` }
-  if (t.includes("REVIEW")) return { label: "View reviews", href: `${ARTISAN_BASE}/reviews` }
-  if (t.startsWith("PORTFOLIO_")) return { label: "View portfolio", href: `${ARTISAN_BASE}/portfolio` }
+  if (t.includes("REVIEW")) return { label: "View reviews", href: `${ARTISAN_BASE}/profile?tab=reviews` }
+  if (t.startsWith("PORTFOLIO_")) return { label: "View portfolio", href: `${ARTISAN_BASE}/profile?tab=portfolio` }
   if (t === "ARTISAN_PROFILE_VERIFIED" || t === "ARTISAN_VERIFICATION_REJECTED") {
-    return { label: "View verification", href: `${ARTISAN_BASE}/verification` }
+    return { label: "View verification", href: `${ARTISAN_BASE}/settings?tab=verification` }
   }
   if (bookingId !== null) return { label: "View booking", href: bookingHref(bookingId) }
   if (jobId !== null) return { label: "View job", href: `${ARTISAN_BASE}/jobs/${jobId}` }

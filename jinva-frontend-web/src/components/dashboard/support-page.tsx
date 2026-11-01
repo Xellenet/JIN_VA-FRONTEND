@@ -173,8 +173,8 @@ const ARTISAN_FAQ: readonly FaqGroup[] = [
         question: "Where is my money sent?",
         answer: (
           <>
-            To the mobile money or bank account in your{" "}
-            <TextLink href="/dashboard/artisan/settings">Settings</TextLink>. If a transfer fails, it shows in your
+            To the mobile money or bank account in{" "}
+            <TextLink href="/dashboard/artisan/settings?tab=payments">Settings → Payments</TextLink>. If a transfer fails, it shows in your
             earnings and can be sent again once the account details are corrected.
           </>
         ),
@@ -190,7 +190,7 @@ const ARTISAN_FAQ: readonly FaqGroup[] = [
           <>
             Two ways. Clients book one of your services for a date and time, and the request appears in your{" "}
             <TextLink href="/dashboard/artisan/calendar">Calendar</TextLink> for you to accept or decline. Or a
-            client posts a job, you apply from <TextLink href="/dashboard/artisan/jobs">My Jobs</TextLink>, and they
+            client posts a job, you apply from <TextLink href="/dashboard/artisan/jobs">My jobs</TextLink>, and they
             choose who does it.
           </>
         ),
@@ -199,8 +199,9 @@ const ARTISAN_FAQ: readonly FaqGroup[] = [
         question: "How do I get verified?",
         answer: (
           <>
-            Submit your ID documents on the <TextLink href="/dashboard/artisan/verification">Verification</TextLink>{" "}
-            page. An administrator reviews them and you get a notification with the result.
+            Submit your ID documents in{" "}
+            <TextLink href="/dashboard/artisan/settings?tab=verification">Settings → Verification</TextLink>. An
+            administrator reviews them and you get a notification with the result.
           </>
         ),
       },

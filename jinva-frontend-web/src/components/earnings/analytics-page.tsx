@@ -1,7 +1,8 @@
 "use client"
 
 /**
- * `/dashboard/artisan/analytics` on real data (C1, api-contract B3): the
+ * Earnings → Analytics (`/dashboard/artisan/earnings?tab=analytics`) on real
+ * data (C1, api-contract B3): the
  * Spending page's period selector, brand band and chart-or-table cards, fed
  * by `GET /analytics/artisan?range=`. Nothing here is sample data: an empty
  * period shows empty states, not invented figures.
@@ -113,7 +114,7 @@ function AnalyticsBand({ data }: Readonly<{ data: ArtisanAnalytics }>) {
                     "-my-3 inline-block rounded-sm py-3 font-medium text-brand-foreground underline decoration-white/40 underline-offset-4 hover:decoration-white",
                   )}
                 >
-                  See Earnings
+                  See your statement
                 </Link>
               </>
             ) : null}
@@ -424,7 +425,8 @@ export function AnalyticsPage() {
     (next: AnalyticsRange) => {
       const full = ANALYTICS_RANGES.find((r) => r.value === next)?.full ?? ""
       setAnnouncement(`Showing ${full.toLowerCase()}`)
-      router.replace(next === "12m" ? pathname : `${pathname}?range=${next}`, { scroll: false })
+      // Earnings → Analytics: the tab stays in the URL with the range.
+      router.replace(`${pathname}?tab=analytics${next === "12m" ? "" : `&range=${next}`}`, { scroll: false })
     },
     [router, pathname],
   )
@@ -433,13 +435,10 @@ export function AnalyticsPage() {
 
   return (
     <div className={cn("mx-auto w-full max-w-[1200px] space-y-5 sm:space-y-6 min-[1920px]:max-w-[1440px]", CHART_TOKENS)}>
-      <header data-enter className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">Analytics</h1>
-          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-            How your work is going: what you&apos;ve been paid, jobs, ratings and returning clients.
-          </p>
-        </div>
+      <header data-enter className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+        <p className="min-w-0 text-sm text-muted-foreground sm:text-base">
+          How your work is going: what you&apos;ve been paid, jobs, ratings and returning clients.
+        </p>
         <PeriodSelector value={range} onChange={changeRange} options={ANALYTICS_RANGES} />
       </header>
       <p role="status" aria-live="polite" className="sr-only">
@@ -473,9 +472,9 @@ export function AnalyticsPage() {
             <JobsCard data={data} />
           </div>
           <p className="text-sm text-muted-foreground">
-            For each payment, the fee and where your payout is, see{" "}
+            For each payment, the fee and where your payout is, see your{" "}
             <Link href="/dashboard/artisan/earnings" className={cn(FOCUS_RING, "-my-3 inline-block rounded-sm py-3 font-medium text-primary hover:underline dark:text-ring")}>
-              Earnings
+              statement
             </Link>
             .
           </p>

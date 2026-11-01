@@ -1,7 +1,8 @@
 "use client"
 
 /**
- * `/dashboard/artisan/earnings` as a statement (H7, api-contract B2).
+ * Earnings → Statement (H7, api-contract B2), the default tab of
+ * `/dashboard/artisan/earnings`; the page owns the h1.
  *
  * One request feeds the band, the months and the first page of payments;
  * changing the stage filter or the page refetches the same endpoint (the band
@@ -207,13 +208,10 @@ export function EarningsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-5 sm:space-y-6 min-[1920px]:max-w-[1440px]">
-      <header data-enter className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">Earnings</h1>
-          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-            What clients paid for your jobs, JinVa&apos;s fee, and where your payouts are.
-          </p>
-        </div>
+      <header data-enter className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
+        <p className="min-w-0 text-sm text-muted-foreground sm:text-base">
+          What clients paid for your jobs, JinVa&apos;s fee, and where your payouts are.
+        </p>
         {neverEarned ? null : <PeriodSelector value={period} onChange={changePeriod} />}
       </header>
       <p role="status" aria-live="polite" className="sr-only">

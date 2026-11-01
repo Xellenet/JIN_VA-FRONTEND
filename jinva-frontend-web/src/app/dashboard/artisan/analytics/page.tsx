@@ -1,19 +1,6 @@
-"use client"
+import { redirectWithQuery, type PageSearchParams } from "@/lib/redirect-with-query"
 
-import { Suspense } from "react"
-import { DashboardLayout } from "@/components/dashboard/layout"
-import { AnalyticsPage } from "@/components/earnings/analytics-page"
-
-/**
- * Analytics (C1): the artisan's real figures from `GET /analytics/artisan`.
- * The range is in the URL, so the page sits in Suspense.
- */
-export default function ArtisanAnalyticsPage() {
-  return (
-    <DashboardLayout>
-      <Suspense fallback={null}>
-        <AnalyticsPage />
-      </Suspense>
-    </DashboardLayout>
-  )
+/** Analytics is a tab of Earnings now. Old links and bookmarks land there, query string kept. */
+export default async function AnalyticsRedirect({ searchParams }: { searchParams: PageSearchParams }) {
+  return redirectWithQuery("/dashboard/artisan/earnings?tab=analytics", searchParams)
 }

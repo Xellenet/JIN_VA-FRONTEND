@@ -9,7 +9,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/contexts/auth-context"
 import {
   LayoutGrid,
-  Wrench,
   Users,
   UserCircle,
   ClipboardList,
@@ -57,19 +56,19 @@ const ADMIN_LINKS: readonly NavLink[] = [
   { href: "/dashboard/admin/analytics",         label: "Analytics",       icon: BarChart2     },
 ]
 
+/**
+ * The artisan's day-to-day work, then the shop front. Services, Portfolio and
+ * Reviews are tabs of Profile; Analytics is a tab of Earnings; Verification
+ * is a tab of Settings. Disputes are reached from My jobs, a job and the
+ * Overview, as before.
+ */
 const ARTISAN_LINKS: readonly NavLink[] = [
   { href: "/dashboard/artisan",                 label: "Overview",  icon: LayoutGrid    },
-  { href: "/dashboard/artisan/jobs",            label: "My Jobs",   icon: ClipboardList },
+  { href: "/dashboard/artisan/calendar",        label: "Calendar",  icon: CalendarDays  },
+  { href: "/dashboard/artisan/jobs",            label: "My jobs",   icon: ClipboardList },
+  { href: "/dashboard/artisan/messages",        label: "Messages",  icon: MessageSquare },
   { href: "/dashboard/artisan/earnings",        label: "Earnings",  icon: Wallet        },
   { href: "/dashboard/artisan/profile",         label: "Profile",   icon: UserCircle    },
-  // QA KYC-01: the only way to submit ID documents for verification.
-  { href: "/dashboard/artisan/verification",    label: "Verification", icon: ShieldCheck },
-  { href: "/dashboard/artisan/services",        label: "Services",  icon: Wrench        },
-  { href: "/dashboard/artisan/portfolio",       label: "Portfolio", icon: ImageIcon     },
-  { href: "/dashboard/artisan/reviews",         label: "Reviews",   icon: Star          },
-  { href: "/dashboard/artisan/calendar",        label: "Calendar",  icon: CalendarDays  },
-  { href: "/dashboard/artisan/analytics",       label: "Analytics", icon: BarChart2     },
-  { href: "/dashboard/artisan/messages",        label: "Messages",  icon: MessageSquare },
 ]
 
 const USER_LINKS: readonly NavLink[] = [

@@ -290,7 +290,7 @@ function ArtisanJobsContent() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My Jobs</h1>
+          <h1 className="text-2xl font-bold text-foreground">My jobs</h1>
           <p className="mt-1 text-muted-foreground">Jobs you are doing for clients, and open jobs you can apply for.</p>
         </div>
         <Button variant="outline" className="h-11 w-fit gap-2 bg-transparent sm:h-9" asChild>

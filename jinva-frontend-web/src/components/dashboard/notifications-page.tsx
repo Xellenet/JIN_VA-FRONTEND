@@ -31,7 +31,7 @@ import {
 /**
  * NR4 — real pagination instead of a hardcoded `limit=50` with nothing beyond
  * it reachable. Same "Load more" + `meta.pagination` idiom the reviews lists
- * already use (see `artisan/reviews/page.tsx`).
+ * already use (see `components/artisan/profile/reviews-tab.tsx`).
  */
 const PAGE_SIZE = 20
 

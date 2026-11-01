@@ -173,7 +173,7 @@ check("T-4 non-string type is harmless", N.notificationHref(undefined, { jobId: 
   check("H5 artisan refund → earnings", A("PAYMENT_REFUNDED", { jobId: 812 })?.href, "/dashboard/artisan/earnings")
   check("H5 artisan review → reviews", A("REVIEW_RECEIVED", { jobId: 812, rating: 4 }), {
     label: "View reviews",
-    href: "/dashboard/artisan/reviews",
+    href: "/dashboard/artisan/profile?tab=reviews",
   })
   check("H5 artisan dispute filed → dispute page", A("DISPUTE_FILED", { disputeId: 15, bookingId: 77 }), {
     label: "View dispute",
@@ -185,8 +185,8 @@ check("T-4 non-string type is harmless", N.notificationHref(undefined, { jobId: 
     label: "Open conversation",
     href: "/dashboard/artisan/messages?conversation=44",
   })
-  check("H5 artisan portfolio → portfolio", A("PORTFOLIO_REJECTED", { portfolioItemId: 3 })?.href, "/dashboard/artisan/portfolio")
-  check("H5 artisan verified → verification", A("ARTISAN_PROFILE_VERIFIED", undefined)?.href, "/dashboard/artisan/verification")
+  check("H5 artisan portfolio → portfolio", A("PORTFOLIO_REJECTED", { portfolioItemId: 3 })?.href, "/dashboard/artisan/profile?tab=portfolio")
+  check("H5 artisan verified → verification", A("ARTISAN_PROFILE_VERIFIED", undefined)?.href, "/dashboard/artisan/settings?tab=verification")
   check("H5 artisan security alert → none", A("SECURITY_ALERT", {}), null)
   check("H5 artisan job without id → none", A("JOB_STARTED", {}), null)
   check("H5 artisan url ignored", A("JOB_STARTED", { jobId: 5, url: "https://evil.example.com" })?.href, "/dashboard/artisan/jobs/5")

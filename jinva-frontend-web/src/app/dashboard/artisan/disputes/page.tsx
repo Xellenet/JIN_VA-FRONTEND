@@ -63,7 +63,7 @@ export default function ArtisanDisputesPage() {
         <Button variant="ghost" asChild className="-ml-2 h-11 gap-2 text-muted-foreground hover:text-foreground sm:h-9">
           <Link href="/dashboard/artisan/jobs">
             <ArrowLeft aria-hidden className="h-4 w-4" />
-            Back to My Jobs
+            Back to My jobs
           </Link>
         </Button>
 
@@ -118,7 +118,7 @@ export default function ArtisanDisputesPage() {
                 job.
               </p>
               <Button variant="outline" className="mt-5 h-11 bg-transparent sm:h-9" asChild>
-                <Link href="/dashboard/artisan/jobs">Go to My Jobs</Link>
+                <Link href="/dashboard/artisan/jobs">Go to My jobs</Link>
               </Button>
             </div>
           ) : (

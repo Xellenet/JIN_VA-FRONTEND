@@ -88,7 +88,7 @@ export function OpenJobsList({
             New jobs clients post show here. Keep your services and profile up to date so clients can also book you directly.
           </p>
           <Button variant="outline" className="mt-5 h-11 bg-transparent sm:h-9" asChild>
-            <Link href="/dashboard/artisan/services">Review my services</Link>
+            <Link href="/dashboard/artisan/profile?tab=services">Review my services</Link>
           </Button>
         </div>
       ) : (

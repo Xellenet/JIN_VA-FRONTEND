@@ -73,7 +73,7 @@ const FIELD_COPY: Record<KnownFieldKey, FieldCopy> = {
     label: "At least one service",
     why: "The trades you offer, e.g. Plumbing or Electrical",
     actionLabel: "Choose services",
-    href: "/dashboard/artisan/services",
+    href: "/dashboard/artisan/profile?tab=services",
     phrase: "at least one service",
   },
 }

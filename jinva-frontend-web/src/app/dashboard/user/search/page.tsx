@@ -230,7 +230,8 @@ export default function SearchArtisansPage() {
   const activeFilters = [
     selectedServiceId ? selectedServiceName : null,
     minRating > 0 ? `${minRating}+ stars` : null,
-    availabilityFilter === "AVAILABLE" ? "Available" : availabilityFilter === "BUSY" ? "Busy" : null,
+    // "Taking bookings", not "Available": the Schedule filter's "Available now" is about time.
+    availabilityFilter === "AVAILABLE" ? "Taking bookings" : availabilityFilter === "BUSY" ? "Busy" : null,
     availabilityWindow ? availabilityWindowOptions.find((o) => o.value === availabilityWindow)?.label : null,
     location ? `Near "${location}"` : null,
     minPrice || maxPrice
@@ -347,16 +348,16 @@ export default function SearchArtisansPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="h-11 gap-2 bg-transparent sm:h-9">
-                    {availabilityFilter === "AVAILABLE" ? "Available" : availabilityFilter === "BUSY" ? "Busy" : "Availability"}
+                    {availabilityFilter === "AVAILABLE" ? "Taking bookings" : availabilityFilter === "BUSY" ? "Busy" : "Booking status"}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-48">
-                  <DropdownMenuLabel>Availability</DropdownMenuLabel>
+                  <DropdownMenuLabel>Booking status</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {[
-                    { label: "Any availability", value: "" },
-                    { label: "Available now", value: "AVAILABLE" },
+                    { label: "Any status", value: "" },
+                    { label: "Taking bookings", value: "AVAILABLE" },
                     { label: "Busy", value: "BUSY" },
                   ].map((opt) => (
                     <DropdownMenuItem

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, type ReactNode } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
+import { ProfilePreviewBanner } from "@/components/artisan/profile/preview-banner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -218,13 +219,13 @@ export default function ArtisanPublicProfile() {
     return (
       <DashboardLayout>
         <div className="space-y-4">
-          <Button variant="ghost" asChild className={BACK_CLASS}>
-            {user?.role === "artisan" ? (
-              <Link href="/dashboard/artisan/profile"><ArrowLeft className="h-4 w-4" aria-hidden="true" />Back to your profile</Link>
-            ) : (
+          {isPreview ? (
+            <ProfilePreviewBanner />
+          ) : (
+            <Button variant="ghost" asChild className={BACK_CLASS}>
               <Link href="/dashboard/user/search"><ArrowLeft className="h-4 w-4" aria-hidden="true" />Back to search</Link>
-            )}
-          </Button>
+            </Button>
+          )}
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
               <h1 className="text-lg font-semibold text-foreground">Profile unavailable</h1>
@@ -237,9 +238,6 @@ export default function ArtisanPublicProfile() {
   }
 
   const name = `${artisan.user.firstname} ${artisan.user.lastname}`.trim()
-  const backLink = isPreview
-    ? { href: "/dashboard/artisan/profile", label: "Back to your profile" }
-    : { href: "/dashboard/user/search", label: "Back to search" }
   // Why Book is off (no hours, time off for 2 weeks, busy or unavailable), or null.
   const bookBlockedReason = notBookableReason(artisan.availability, artisan.availabilityStatus)
   const firstName = artisan.user.firstname?.trim() || name
@@ -252,17 +250,17 @@ export default function ArtisanPublicProfile() {
   return (
     <DashboardLayout>
       <div className="space-y-6 pb-24">
-        <Button variant="ghost" asChild className={BACK_CLASS}>
-          <Link href={backLink.href}>
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            {backLink.label}
-          </Link>
-        </Button>
-
-        {isPreview && (
-          <p className="rounded-lg border border-primary/20 bg-primary/[0.04] px-4 py-3 text-sm text-foreground">
-            This is how clients see your profile. They also get Save, Message and Book buttons here.
-          </p>
+        {/* P1: the artisan's own preview has one way back (the banner's
+            "Back to editing"); clients get the usual back link. */}
+        {isPreview ? (
+          <ProfilePreviewBanner />
+        ) : (
+          <Button variant="ghost" asChild className={BACK_CLASS}>
+            <Link href="/dashboard/user/search">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back to search
+            </Link>
+          </Button>
         )}
 
         {/* Profile hero: the same hero and stat strip as the artisan's own Profile. */}

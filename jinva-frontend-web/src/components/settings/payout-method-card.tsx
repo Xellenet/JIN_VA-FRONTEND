@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group"
-import { AlertTriangle, BadgeCheck, CheckCircle2, Landmark, Loader2, Smartphone } from "lucide-react"
+import { AlertTriangle, BadgeCheck, CheckCircle2, CircleHelp, Landmark, Loader2, Smartphone } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
-import { FieldError } from "@/components/ui/field"
-import { FormField, fieldErrorId } from "@/components/forms/form-field"
+import { FormField } from "@/components/forms/form-field"
 import { ApiError, apiFetch } from "@/lib/api"
 import { failureReasonText } from "@/lib/earnings"
 import {
@@ -22,6 +21,17 @@ import {
   type PayoutDestination,
   type PayoutType,
 } from "@/lib/earnings-api"
+import {
+  checkAccountNumber,
+  checkTypedName,
+  lookupFor,
+  lookupKeyFor,
+  nameIssueMessage,
+  normaliseAccountNumber,
+  numberIssueMessage,
+  payoutSaveState,
+  type Lookup,
+} from "@/lib/payout-rules"
 import { cn, formatCurrency } from "@/lib/utils"
 import { BankPicker } from "./bank-picker"
 import {
@@ -47,6 +57,8 @@ interface SavedPayout {
   bankCode: string
   /** True when the name came from the account lookup. */
   accountNameVerified: boolean
+  /** False for older methods saved before the check existed (no verdict either way). */
+  nameCheckKnown: boolean
 }
 
 interface ProfilePayoutFields {
@@ -58,26 +70,13 @@ interface ProfilePayoutFields {
   payoutDestination?: PayoutDestination | null
 }
 
-type FieldKey = "accountName" | "accountNumber" | "network" | "bankCode" | "confirm"
-
-/**
- * The account name lookup for the number being typed. `key` is the
- * type/code/number it belongs to, so a result never shows for another number.
- */
-type Lookup =
-  | { state: "idle" }
-  | { state: "loading"; key: string }
-  | { state: "found"; key: string; name: string }
-  | { state: "not_found"; key: string; message: string }
-  | { state: "unavailable"; key: string; message: string }
-
 /** How long typing must pause before the name is looked up. */
 const LOOKUP_DEBOUNCE_MS = 500
 
 const NOT_FOUND_MESSAGE = "We couldn’t find the name on this account. Check the number and the network or bank."
-const UNAVAILABLE_MESSAGE = "We can’t look up the account name right now. Type the name on the account instead."
+const UNAVAILABLE_MESSAGE = "Type the name on the account below."
 const RATE_LIMITED_MESSAGE =
-  "You’ve looked up several numbers in a short time, so we can’t check this one now. Type the name on the account instead."
+  "You’ve looked up several numbers in a short time, so we can’t look this one up now. Type the name on the account below."
 
 const TYPES: { value: PayoutType; title: string; body: string; icon: typeof Smartphone }[] = [
   { value: "mobile_money", title: "Mobile money", body: "MTN MoMo, Telecel Cash or AirtelTigo Money.", icon: Smartphone },
@@ -108,6 +107,7 @@ function savedFromProfile(p: ProfilePayoutFields): SavedPayout | null {
       last4: (d.last4 ?? "").slice(-4),
       bankCode: p.payoutBankCode ?? "",
       accountNameVerified: d.accountNameVerified === true,
+      nameCheckKnown: typeof d.accountNameVerified === "boolean",
     }
   }
   if (!p.payoutType) return null
@@ -119,60 +119,18 @@ function savedFromProfile(p: ProfilePayoutFields): SavedPayout | null {
     last4: (p.payoutAccountNumber ?? "").replace(/\D/g, "").slice(-4),
     bankCode: code,
     accountNameVerified: false,
+    nameCheckKnown: false,
   }
 }
 
-/**
- * The number as the API wants it: separators removed and, for mobile money,
- * `+233`/`233` turned into the leading `0` (`+233 24 123 4567` → `0241234567`).
- */
-function normaliseNumber(type: PayoutType, raw: string): string {
-  const compact = raw.trim().replace(/[\s-]+/g, "")
-  if (type !== "mobile_money") return compact
-  const intl = /^(?:\+|00)?233(\d{9,10})$/.exec(compact)
-  if (!intl) return compact
-  const national = intl[1]
-  if (national.length === 10) return national.startsWith("0") ? national : compact
-  return `0${national}`
-}
-
-/** Whether the number is complete enough to look up. */
-function lookupReady(type: PayoutType, number: string, code: string): boolean {
-  if (!code) return false
-  return type === "mobile_money" ? /^0\d{9}$/.test(number) : /^\d{6,20}$/.test(number)
-}
-
-function validate(
-  type: PayoutType,
-  values: { accountName: string; accountNumber: string; network: string; bankCode: string },
-  lookup: Lookup,
-  confirmed: boolean,
-): Partial<Record<FieldKey, string>> {
-  const errors: Partial<Record<FieldKey, string>> = {}
-  const number = normaliseNumber(type, values.accountNumber)
-  if (type === "mobile_money") {
-    if (!values.network) errors.network = "Choose your mobile money network."
-    if (!/^0\d{9}$/.test(number)) errors.accountNumber = "Enter your 10-digit mobile money number, like 0241234567."
-  } else {
-    if (!values.bankCode.trim()) errors.bankCode = "Choose your bank."
-    if (!/^\d{6,20}$/.test(number)) errors.accountNumber = "Enter your account number, digits only (at least 6)."
-  }
-  if (errors.accountNumber || errors.network || errors.bankCode) return errors
-  if (lookup.state === "not_found") errors.accountNumber = lookup.message
-  else if (lookup.state === "found" && !confirmed) errors.confirm = "Confirm this is your account."
-  else if (lookup.state === "unavailable" && values.accountName.trim().length < 2)
-    errors.accountName = "Enter the full name on the account."
-  return errors
-}
-
-const FIELD_ORDER: FieldKey[] = ["network", "bankCode", "accountNumber", "confirm", "accountName"]
-const FIELD_ID: Record<FieldKey, string> = {
+const FIELD_ID = {
   accountName: "payout-account-name",
   network: "payout-network",
   accountNumber: "payout-account-number",
   bankCode: "payout-bank-code",
   confirm: "payout-confirm",
-}
+  saveHint: "payout-save-hint",
+} as const
 
 /**
  * Settings → Payouts: where an artisan's earnings are sent. One card, one save
@@ -190,7 +148,10 @@ export function PayoutMethodCard() {
   const [accountNumber, setAccountNumber] = useState("")
   const [network, setNetwork] = useState("")
   const [bankCode, setBankCode] = useState("")
-  const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({})
+  /** The server's own "account not found" on save, shown on the number. */
+  const [serverNumberError, setServerNumberError] = useState<string | null>(null)
+  /** Field errors show once the field has been left, not while the first digits go in. */
+  const [touched, setTouched] = useState({ number: false, name: false })
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [lookup, setLookup] = useState<Lookup>({ state: "idle" })
@@ -261,8 +222,11 @@ export function PayoutMethodCard() {
   // The code and number the lookup runs on, and the key a result belongs to.
   const lookupCode =
     type === "mobile_money" ? (MOMO_NETWORKS.find((n) => n.value === network)?.payoutCode ?? "") : bankCode.trim()
-  const lookupNumber = normaliseNumber(type, accountNumber)
-  const lookupKey = lookupReady(type, lookupNumber, lookupCode) ? `${type}|${lookupCode}|${lookupNumber}` : ""
+  const lookupNumber = normaliseAccountNumber(type, accountNumber)
+  const numberIssue = checkAccountNumber(type, network, lookupNumber)
+  // Only a valid number (right length and, for mobile money, a Ghana mobile
+  // prefix of any network, since numbers can be ported) is looked up.
+  const lookupKey = lookupCode && !numberIssue ? lookupKeyFor(type, lookupCode, lookupNumber) : ""
 
   // Look the account name up once the number is complete and typing pauses.
   // A change of number, network or bank cancels the request in flight, so
@@ -313,7 +277,32 @@ export function PayoutMethodCard() {
   }, [editing, lookupKey, lookupAttempt])
 
   // A result for another number is never shown.
-  const current: Lookup = lookup.state !== "idle" && lookup.key === lookupKey ? lookup : { state: "idle" }
+  const current: Lookup = lookupFor(lookup, lookupKey)
+
+  // Whether Save is on, and why not: every rule lives in `payoutSaveState`.
+  const saveState = payoutSaveState({
+    type,
+    network,
+    bankCode,
+    accountNumber,
+    lookup,
+    lookupKey,
+    confirmed,
+    typedName: accountName,
+    isSaving,
+  })
+
+  // The number's error: the server's or the lookup's "not found" first, then
+  // the format, once the field has been left (a complete mobile money number
+  // that isn't a Ghana mobile number says so straight away).
+  const numberError =
+    serverNumberError ??
+    (current.state === "not_found" ? current.message : null) ??
+    (numberIssue && (touched.number || numberIssue === "prefix")
+      ? numberIssueMessage(type, network, numberIssue)
+      : null)
+  const nameIssue = checkTypedName(accountName)
+  const nameError = touched.name && nameIssue ? nameIssueMessage(nameIssue) : null
 
   // Land on the card when the URL carries the anchor (links from Earnings and
   // job pages). Runs once the card has content to scroll to.
@@ -334,38 +323,30 @@ export function PayoutMethodCard() {
     }
     // The full number is never sent back by the API, so it is always retyped.
     setAccountNumber("")
-    setErrors({})
+    setServerNumberError(null)
+    setTouched({ number: false, name: false })
     setSaveError(null)
     setConfirmed(false)
     setEditing(true)
   }
 
   const cancel = () => {
-    setErrors({})
+    setServerNumberError(null)
     setSaveError(null)
     setEditing(false)
   }
 
-  const clearError = (key: FieldKey) => {
-    setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e))
+  const clearErrors = () => {
+    setServerNumberError(null)
     setSaveError(null)
   }
 
   const save = async () => {
-    const next = validate(type, { accountName, accountNumber, network, bankCode }, current, confirmed)
-    setErrors(next)
-    const firstInvalid = FIELD_ORDER.find((k) => next[k])
-    if (firstInvalid) {
-      const el =
-        firstInvalid === "network"
-          ? document.querySelector<HTMLElement>(`#${FIELD_ID.network} [role=radio]`)
-          : document.getElementById(FIELD_ID[firstInvalid])
-      el?.focus()
-      return
-    }
+    // Save is off until every rule holds; Enter in a field can't get round it.
+    if (!saveState.canSave || !saveState.name) return
     // The looked-up name, or the typed one when the lookup is unavailable.
     // The server looks the name up again and stores its own result.
-    const name = current.state === "found" ? current.name : accountName.trim()
+    const name = saveState.name
     setIsSaving(true)
     setSaveError(null)
     try {
@@ -385,6 +366,7 @@ export function PayoutMethodCard() {
         last4: lookupNumber.slice(-4),
         bankCode: lookupCode,
         accountNameVerified: result?.accountNameVerified === true,
+        nameCheckKnown: typeof result?.accountNameVerified === "boolean" || !saveState.verifiedName,
       })
       setEditing(false)
       toast.success("Payout method saved")
@@ -393,7 +375,7 @@ export function PayoutMethodCard() {
       if (status === 422) {
         // The server's own lookup found no account: show it on the number.
         setLookup({ state: "not_found", key: lookupKey, message: NOT_FOUND_MESSAGE })
-        setErrors({ accountNumber: NOT_FOUND_MESSAGE })
+        setServerNumberError(NOT_FOUND_MESSAGE)
         document.getElementById(FIELD_ID.accountNumber)?.focus()
       } else if (status === 400 && current.state === "found") {
         // The server's lookup was unavailable and needs a typed name.
@@ -500,6 +482,11 @@ export function PayoutMethodCard() {
                       <BadgeCheck className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
                       Verified name
                     </p>
+                  ) : saved.accountNameVerified === false && saved.nameCheckKnown ? (
+                    <p className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+                      <CircleHelp className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                      Name not checked yet
+                    </p>
                   ) : null}
                 </div>
               </div>
@@ -537,8 +524,8 @@ export function PayoutMethodCard() {
                 value={type}
                 onValueChange={(v) => {
                   setType(v as PayoutType)
-                  setErrors({})
-                  setSaveError(null)
+                  setTouched((t) => ({ ...t, number: false }))
+                  clearErrors()
                 }}
                 disabled={isSaving}
                 aria-label="Paid to"
@@ -579,20 +566,16 @@ export function PayoutMethodCard() {
 
             {type === "mobile_money" && (
               <fieldset className="space-y-2">
-                <legend className={cn("mb-2 text-sm text-muted-foreground", errors.network && "text-destructive")}>
-                  Network
-                </legend>
+                <legend className="mb-2 text-sm text-muted-foreground">Network</legend>
                 <RadioGroupPrimitive.Root
                   id={FIELD_ID.network}
                   value={network}
                   onValueChange={(v) => {
                     setNetwork(v)
-                    clearError("network")
+                    clearErrors()
                   }}
                   disabled={isSaving}
                   aria-label="Network"
-                  aria-invalid={errors.network ? true : undefined}
-                  aria-describedby={errors.network ? fieldErrorId(FIELD_ID.network) : undefined}
                   className="grid gap-3 @[34rem]/controls:grid-cols-3"
                 >
                   {MOMO_NETWORKS.map((n) => (
@@ -603,13 +586,12 @@ export function PayoutMethodCard() {
                     </RadioGroupPrimitive.Item>
                   ))}
                 </RadioGroupPrimitive.Root>
-                {errors.network && <FieldError id={fieldErrorId(FIELD_ID.network)}>{errors.network}</FieldError>}
               </fieldset>
             )}
 
             <div className="grid gap-5 @[34rem]/controls:grid-cols-2">
               {type === "bank" && (
-                <FormField id={FIELD_ID.bankCode} label="Bank" error={errors.bankCode}>
+                <FormField id={FIELD_ID.bankCode} label="Bank">
                   {(control) => (
                     <BankPicker
                       id={control.id}
@@ -622,8 +604,7 @@ export function PayoutMethodCard() {
                       disabled={isSaving}
                       onChange={(code) => {
                         setBankCode(code)
-                        clearError("bankCode")
-                        clearError("accountNumber")
+                        clearErrors()
                       }}
                     />
                   )}
@@ -632,7 +613,7 @@ export function PayoutMethodCard() {
               <FormField
                 id={FIELD_ID.accountNumber}
                 label={type === "mobile_money" ? "Mobile money number" : "Account number"}
-                error={errors.accountNumber ?? (current.state === "not_found" ? current.message : undefined)}
+                error={numberError ?? undefined}
                 hint={saved ? "Type the full number again to change it." : undefined}
               >
                 {(control) => (
@@ -646,9 +627,9 @@ export function PayoutMethodCard() {
                     disabled={isSaving}
                     onChange={(e) => {
                       setAccountNumber(e.target.value.replace(/\s+/g, ""))
-                      clearError("accountNumber")
-                      clearError("confirm")
+                      clearErrors()
                     }}
+                    onBlur={() => setTouched((t) => (t.number || !accountNumber ? t : { ...t, number: true }))}
                   />
                 )}
               </FormField>
@@ -682,16 +663,13 @@ export function PayoutMethodCard() {
                         id={FIELD_ID.confirm}
                         checked={confirmed}
                         disabled={isSaving}
-                        aria-invalid={errors.confirm ? true : undefined}
-                        aria-describedby={errors.confirm ? fieldErrorId(FIELD_ID.confirm) : undefined}
                         onCheckedChange={(v) => {
                           setConfirmed(v === true)
-                          clearError("confirm")
+                          setSaveError(null)
                         }}
                       />
                       This is my account
                     </label>
-                    {errors.confirm && <FieldError id={fieldErrorId(FIELD_ID.confirm)}>{errors.confirm}</FieldError>}
                   </div>
                 </div>
               )}
@@ -700,24 +678,32 @@ export function PayoutMethodCard() {
                   <p className="flex items-start gap-2 text-[13px] text-foreground">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
                     <span className="min-w-0">
-                      {current.message}{" "}
-                      <button
-                        type="button"
-                        onClick={() => setLookupAttempt((n) => n + 1)}
-                        disabled={isSaving}
-                        className={cn(
-                          "inline-flex min-h-11 items-center font-medium underline decoration-foreground/30 underline-offset-4 sm:min-h-0",
-                          SETTINGS_FOCUS_RING,
-                        )}
-                      >
-                        Try the lookup again
-                      </button>
+                      <span className="block">
+                        We couldn&apos;t check this name with your network or bank right now. You can save it, but
+                        we&apos;ll check it before sending any payout. If it doesn&apos;t match, your payout will wait
+                        until you update these details.
+                      </span>
+                      <span className="mt-1 block text-muted-foreground">
+                        {current.message}{" "}
+                        <button
+                          type="button"
+                          onClick={() => setLookupAttempt((n) => n + 1)}
+                          disabled={isSaving}
+                          className={cn(
+                            "inline-flex min-h-11 items-center font-medium text-foreground underline decoration-foreground/30 underline-offset-4 sm:min-h-0",
+                            SETTINGS_FOCUS_RING,
+                          )}
+                        >
+                          Try the lookup again
+                        </button>
+                      </span>
                     </span>
                   </p>
                   <FormField
                     id={FIELD_ID.accountName}
                     label="Name on the account"
-                    error={errors.accountName}
+                    error={nameError ?? undefined}
+                    hint="As it appears on the account: first and last name."
                     className="@[34rem]/controls:max-w-[calc(50%-0.625rem)]"
                   >
                     {(control) => (
@@ -729,8 +715,9 @@ export function PayoutMethodCard() {
                         disabled={isSaving}
                         onChange={(e) => {
                           setAccountName(e.target.value)
-                          clearError("accountName")
+                          setSaveError(null)
                         }}
+                        onBlur={() => setTouched((t) => (t.name || !accountName.trim() ? t : { ...t, name: true }))}
                       />
                     )}
                   </FormField>
@@ -754,12 +741,19 @@ export function PayoutMethodCard() {
               <Button
                 type="submit"
                 className="max-sm:h-11"
-                disabled={isSaving || current.state === "loading" || current.state === "not_found"}
+                disabled={!saveState.canSave}
+                aria-describedby={saveState.reason ? FIELD_ID.saveHint : undefined}
               >
                 {isSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                 Save payout method
               </Button>
             </div>
+            {/* Why Save is off, in words (a greyed button alone doesn't say). */}
+            {saveState.reason && (
+              <p id={FIELD_ID.saveHint} className="text-[13px] text-muted-foreground sm:text-right">
+                {saveState.reason}
+              </p>
+            )}
           </form>
         )}
       </SettingsRow>

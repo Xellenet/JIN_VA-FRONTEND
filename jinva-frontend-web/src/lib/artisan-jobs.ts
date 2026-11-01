@@ -268,4 +268,4 @@ export function directionsUrl(job: Pick<ArtisanJob, "location" | "latitude" | "l
 }
 
 /** Where every "add a payout method" link goes (H8/H11). */
-export const PAYOUT_SETTINGS_HREF = "/dashboard/artisan/settings?tab=payouts#payout-method"
+export const PAYOUT_SETTINGS_HREF = "/dashboard/artisan/settings?tab=payments#payout-method"

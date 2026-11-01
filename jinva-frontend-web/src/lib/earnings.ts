@@ -1,6 +1,6 @@
 /**
  * Artisan Earnings and Analytics: the pure rules behind
- * `/dashboard/artisan/earnings` and `/dashboard/artisan/analytics`
+ * `/dashboard/artisan/earnings` (Statement and Analytics tabs)
  * (findings H7, C1; api-contract B2, B3).
  *
  * PURE MODULE: no runtime imports, so a Node script can load it with
@@ -109,7 +109,7 @@ export const PAYOUT_TIMING =
   "We start your payout when the client confirms the job is done, or 48 hours after you mark it done if they don't respond."
 
 /** Where every "Add / Update payout details" link goes. */
-export const PAYOUT_SETTINGS_HREF = "/dashboard/artisan/settings?tab=payouts#payout-method"
+export const PAYOUT_SETTINGS_HREF = "/dashboard/artisan/settings?tab=payments#payout-method"
 
 // ── Periods ──────────────────────────────────────────────────────────────────
 

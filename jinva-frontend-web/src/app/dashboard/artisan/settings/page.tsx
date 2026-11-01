@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react"
 import Link from "next/link"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,30 +30,40 @@ import {
   Wallet,
   CalendarDays,
   UserCircle,
+  ShieldCheck,
+  KeyRound,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
 import { isStrongPassword, PASSWORD_MESSAGES } from "@/components/auth/signup-fields"
-import { splitStoredPhone } from "@/lib/phone"
 import { loginUrlAfterAccountDeletion } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
 import { toast } from "sonner"
-import { ProfilePhotoCard } from "@/components/settings/profile-photo-card"
 import { PayoutMethodCard, PAYOUT_METHOD_ANCHOR } from "@/components/settings/payout-method-card"
+import { VerificationTab } from "@/components/artisan/settings/verification-tab"
 
-const TABS = ["profile", "notifications", "payouts", "security"] as const
+/** The customer Settings shape (account, notifications, payments, security) plus Verification. */
+const TABS = ["account", "notifications", "payments", "verification", "security"] as const
 type Tab = (typeof TABS)[number]
 
 /**
- * Old links used `?tab=account` (now Profile) and `?tab=availability` (removed,
- * C4: working hours live in Calendar). Anything unknown opens Profile; a bare
- * `#payout-method` anchor opens Payouts.
+ * Old tab names from links and bookmarks: `profile` (now Account), `payouts`
+ * (now Payments) and `availability` (removed, C4: working hours live in
+ * Calendar). Anything unknown opens Account; a bare `#payout-method` anchor
+ * opens Payments.
  */
+const TAB_ALIASES: Readonly<Record<string, Tab>> = {
+  profile: "account",
+  payouts: "payments",
+  availability: "account",
+}
+
 function resolveTab(param: string | null, hash: string): Tab {
   if (param && (TABS as readonly string[]).includes(param)) return param as Tab
-  if (hash === `#${PAYOUT_METHOD_ANCHOR}`) return "payouts"
-  return "profile"
+  if (param && TAB_ALIASES[param]) return TAB_ALIASES[param]
+  if (hash === `#${PAYOUT_METHOD_ANCHOR}`) return "payments"
+  return "account"
 }
 
 interface ArtisanNotifPrefs {
@@ -98,19 +108,20 @@ const CHANNEL_ROWS: { key: keyof ArtisanNotifPrefs; label: string; desc: string 
 ]
 
 function ArtisanSettingsContent() {
-  const { user, refreshUser, logout } = useAuth()
+  const { user, logout } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
+  const pathname = usePathname()
   const [hash, setHash] = useState("")
   useEffect(() => setHash(window.location.hash), [])
   const activeTab = resolveTab(searchParams.get("tab"), hash)
 
   const changeTab = (tab: string) => {
     setHash("")
-    router.replace(`?tab=${tab}`, { scroll: false })
+    router.replace(`${pathname}?tab=${tab}`, { scroll: false })
   }
 
-  // Phones: the tab strip scrolls; keep the active tab in view.
+  // Keep the active tab in view if the strip ever scrolls.
   const tabsListRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     tabsListRef.current
@@ -224,81 +235,99 @@ function ArtisanSettingsContent() {
     }
   }
 
-  const phone = user.phone ? splitStoredPhone(user.phone).national : ""
-
   return (
     <DashboardLayout>
       <div className="max-w-[1080px] space-y-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">Settings</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage your photo, notifications, payouts and security
+            Manage your account, notifications, payments, verification and security
           </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={changeTab} className="space-y-6">
-          {/* M1: a 2×2 grid on phones, so no tab (Security holds Delete account) is ever clipped off-screen. */}
-          <TabsList ref={tabsListRef} className="grid h-auto w-full grid-cols-2 gap-1 bg-muted sm:inline-flex sm:w-fit sm:gap-0">
-            <TabsTrigger value="profile" className="min-h-11 gap-2 sm:min-h-0">
+          {/* Five tabs: a two-column grid below 768px (Security spans the last
+              row), so none is ever clipped; one row from there up. */}
+          <TabsList
+            ref={tabsListRef}
+            aria-label="Settings"
+            className="grid h-auto w-full grid-cols-2 gap-1 bg-muted md:inline-flex md:w-fit md:gap-0"
+          >
+            <TabsTrigger value="account" className="min-h-11 gap-2 md:min-h-0">
               <User className="h-4 w-4" aria-hidden="true" />
-              Profile
+              Account
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="min-h-11 gap-2 sm:min-h-0">
+            <TabsTrigger value="notifications" className="min-h-11 gap-2 md:min-h-0">
               <Bell className="h-4 w-4" aria-hidden="true" />
               Notifications
             </TabsTrigger>
-            <TabsTrigger value="payouts" className="min-h-11 gap-2 sm:min-h-0">
+            <TabsTrigger value="payments" className="min-h-11 gap-2 md:min-h-0">
               <Wallet className="h-4 w-4" aria-hidden="true" />
-              Payouts
+              Payments
             </TabsTrigger>
-            <TabsTrigger value="security" className="min-h-11 gap-2 sm:min-h-0">
+            <TabsTrigger value="verification" className="min-h-11 gap-2 md:min-h-0">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              Verification
+            </TabsTrigger>
+            <TabsTrigger value="security" className="col-span-2 min-h-11 gap-2 md:col-span-1 md:min-h-0">
               <Shield className="h-4 w-4" aria-hidden="true" />
               Security
             </TabsTrigger>
           </TabsList>
 
-          {/* Profile: the photo, plus where everything else is edited. Name,
-              phone, service area, rates and policy live on the Profile page
-              only (P1) — this tab links there rather than repeating them. */}
-          <TabsContent value="profile" className="space-y-6">
-            <ProfilePhotoCard user={user} refreshUser={refreshUser} />
-
+          {/* Account: only what belongs to the account. Photo, name, phone,
+              service area, rates and policy are the public profile, edited in
+              Profile → About only (P1) — this tab links there. */}
+          <TabsContent value="account" className="space-y-6">
             <Card className="gap-0 py-0">
               <div className="border-b p-4 sm:p-6">
-                <h3 className="font-semibold">Your details</h3>
-                <p className="text-sm text-muted-foreground">
-                  Edit your name, phone, service area, rates and cancellation policy on your profile.
-                </p>
+                <h2 className="font-semibold">Your account</h2>
+                <p className="text-sm text-muted-foreground">How you sign in to JinVa</p>
               </div>
-              <CardContent className="p-4 sm:p-6">
-                <dl className="grid gap-4 text-sm sm:grid-cols-3">
+              <CardContent className="divide-y p-0">
+                <div className="min-w-0 p-4 sm:px-6">
+                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p dir="auto" className="mt-0.5 font-medium text-foreground [overflow-wrap:anywhere]">{user.email}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Email can&apos;t be changed.</p>
+                </div>
+                <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                   <div className="min-w-0">
-                    <dt className="text-muted-foreground">Name</dt>
-                    <dd dir="auto" className="mt-0.5 font-medium text-foreground [overflow-wrap:anywhere]">{user.name}</dd>
+                    <p className="text-sm text-muted-foreground">Password</p>
+                    <p className="mt-0.5 text-sm text-foreground">Change it, or delete your account, in Security.</p>
                   </div>
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground">Email</dt>
-                    <dd dir="auto" className="mt-0.5 font-medium text-foreground [overflow-wrap:anywhere]">{user.email}</dd>
-                    <dd className="mt-0.5 text-xs text-muted-foreground">Email can&apos;t be changed.</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground">Phone</dt>
-                    <dd className="mt-0.5 font-medium text-foreground">{phone || "Not added"}</dd>
-                  </div>
-                </dl>
-                <Button variant="outline" asChild className="mt-5 max-sm:h-11 max-sm:w-full">
-                  <Link href="/dashboard/artisan/profile">
-                    <UserCircle className="h-4 w-4" aria-hidden="true" />
-                    Edit your profile
-                  </Link>
-                </Button>
+                  <Button
+                    variant="outline"
+                    className="shrink-0 max-sm:h-11 max-sm:w-full"
+                    onClick={() => changeTab("security")}
+                  >
+                    <KeyRound className="h-4 w-4" aria-hidden="true" />
+                    Change password
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="gap-0 py-0">
               <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                 <div>
-                  <h3 className="font-semibold">Working hours and time off</h3>
+                  <h2 className="font-semibold">Your public details</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Your photo, name, phone, service area, rate and cancellation policy are what clients see.
+                  </p>
+                </div>
+                <Button variant="outline" asChild className="shrink-0 max-sm:h-11 max-sm:w-full">
+                  <Link href="/dashboard/artisan/profile">
+                    <UserCircle className="h-4 w-4" aria-hidden="true" />
+                    Edit your public details in Profile
+                  </Link>
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="gap-0 py-0">
+              <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <div>
+                  <h2 className="font-semibold">Working hours and time off</h2>
                   <p className="text-sm text-muted-foreground">
                     Set when you work and block out days off in your calendar.
                   </p>
@@ -335,7 +364,7 @@ function ArtisanSettingsContent() {
                         <Bell className="h-5 w-5 text-foreground" aria-hidden="true" />
                       </div>
                       <div>
-                        <h3 className="font-semibold">What we tell you about</h3>
+                        <h2 className="font-semibold">What we tell you about</h2>
                         <p className="text-sm text-muted-foreground">Choose which updates you receive</p>
                       </div>
                     </div>
@@ -365,7 +394,7 @@ function ArtisanSettingsContent() {
 
                 <Card className="gap-0 py-0">
                   <div className="border-b p-4 sm:p-6">
-                    <h3 className="font-semibold">How we reach you</h3>
+                    <h2 className="font-semibold">How we reach you</h2>
                     <p className="text-sm text-muted-foreground">
                       In-app notifications always arrive when an update is on. Not every update is sent by email.
                     </p>
@@ -403,9 +432,14 @@ function ArtisanSettingsContent() {
             )}
           </TabsContent>
 
-          {/* Payouts: one card, one save (H11 partial). */}
-          <TabsContent value="payouts" className="space-y-6">
+          {/* Payments: where payouts go. One card, one save (H11 partial). */}
+          <TabsContent value="payments" className="space-y-6">
             <PayoutMethodCard />
+          </TabsContent>
+
+          {/* Verification: identity documents, loaded when the tab opens. */}
+          <TabsContent value="verification">
+            <VerificationTab />
           </TabsContent>
 
           {/* Security. C6: no 2FA switch until two-factor sign-in exists. */}
@@ -417,7 +451,7 @@ function ArtisanSettingsContent() {
                     <Shield className="h-5 w-5 text-foreground" aria-hidden="true" />
                   </div>
                   <div>
-                    <h3 className="font-semibold">Change password</h3>
+                    <h2 className="font-semibold">Change password</h2>
                     <p className="text-sm text-muted-foreground">Change the password you sign in with</p>
                   </div>
                 </div>
@@ -508,7 +542,7 @@ function ArtisanSettingsContent() {
                     <AlertTriangle className="h-5 w-5 text-destructive" aria-hidden="true" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-destructive">Delete account</h3>
+                    <h2 className="font-semibold text-destructive">Delete account</h2>
                     <p className="text-sm text-muted-foreground">This closes your account for everyone</p>
                   </div>
                 </div>

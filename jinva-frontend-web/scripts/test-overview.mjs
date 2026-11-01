@@ -202,8 +202,11 @@ for (const f of files) {
   check("A summary new", a.artisanSummary({ toStart: 0, inProgress: 0, awaitingClient: 0, done: 0, closed: 0, total: 0, applied: 0 }, 0, 0),
     "Apply for open jobs below to get your first booking.")
   const rows = a.artisanActionRows({ requests: 2, disputes: 1, earnings: { needsAction: "120.00", needsActionCount: 1, hasPayoutMethod: false } })
-  check("A action rows", rows.map((r) => [r.kind, r.href]), [["bookingRequests", "#booking-requests"], ["disputes", "/dashboard/artisan/disputes"], ["payoutMethod", "/dashboard/artisan/earnings"]])
+  check("A action rows", rows.map((r) => [r.kind, r.href]), [["bookingRequests", "#booking-requests"], ["disputes", "/dashboard/artisan/disputes"], ["payoutMethod", "/dashboard/artisan/settings?tab=payments#payout-method"]])
   check("A action rows failed sections", a.artisanActionRows({ requests: null, disputes: null, earnings: null }), [])
+  check("A get verified (never sent)", a.artisanActionRows({ requests: 0, disputes: 0, earnings: null, verification: "none" }).map((r) => [r.kind, r.href, r.label, r.count]), [["verification", "/dashboard/artisan/settings?tab=verification", "Get verified", 0]])
+  check("A get verified (rejected)", a.artisanActionRows({ requests: 0, disputes: 0, earnings: null, verification: "rejected" })[0]?.detail, "Your last submission wasn't approved")
+  check("A no verify row when verified, in review or unknown", a.artisanActionRows({ requests: 0, disputes: 0, earnings: null, verification: null }), [])
   check("A money", a.formatGhs("1840"), "GH₵ 1,840.00")
 }
 

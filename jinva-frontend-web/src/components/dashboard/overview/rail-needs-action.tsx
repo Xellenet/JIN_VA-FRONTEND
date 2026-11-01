@@ -116,6 +116,7 @@ export interface ActionListRow {
   label: string
   /** Second line (a job title, an amount). */
   detail: string | null
+  /** 0 = no count badge. */
   count: number
   ariaLabel: string
 }
@@ -154,12 +155,15 @@ export function ActionRowList({ rows, layout }: { rows: ActionListRow[]; layout:
                   </span>
                 )}
               </span>
-              <span
-                aria-hidden
-                className="flex h-6 min-w-6 items-center justify-center rounded-full bg-attention px-1.5 text-xs font-semibold tabular-nums text-attention-foreground"
-              >
-                {row.count > 99 ? "99+" : row.count}
-              </span>
+              {/* A row that isn't a count of things (Get verified) has no badge. */}
+              {row.count > 0 && (
+                <span
+                  aria-hidden
+                  className="flex h-6 min-w-6 items-center justify-center rounded-full bg-attention px-1.5 text-xs font-semibold tabular-nums text-attention-foreground"
+                >
+                  {row.count > 99 ? "99+" : row.count}
+                </span>
+              )}
               <ChevronRight
                 aria-hidden
                 className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none"

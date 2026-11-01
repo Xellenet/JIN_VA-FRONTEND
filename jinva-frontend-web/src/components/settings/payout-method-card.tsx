@@ -34,7 +34,7 @@ import {
   type MomoNetworkOption,
 } from "./settings-row"
 
-/** The anchor "Add payout method" links land on: `/dashboard/artisan/settings?tab=payouts#payout-method`. */
+/** The anchor "Add payout method" links land on: `/dashboard/artisan/settings?tab=payments#payout-method`. */
 export const PAYOUT_METHOD_ANCHOR = "payout-method"
 
 interface SavedPayout {

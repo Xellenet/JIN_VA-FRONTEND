@@ -204,7 +204,19 @@ export function calendarGroup(b: { status: string; scheduledDate: string; endTim
 
 // ── Rail: Needs your action ──────────────────────────────────────────────────
 
-export type ArtisanActionKind = "bookingRequests" | "disputes" | "payoutsNeedAction" | "payoutMethod"
+export type ArtisanActionKind = "bookingRequests" | "disputes" | "payoutsNeedAction" | "payoutMethod" | "verification"
+
+/** Settings → Payments, at the payout card (same value as `PAYOUT_SETTINGS_HREF`). */
+export const ARTISAN_PAYOUT_SETTINGS_HREF = "/dashboard/artisan/settings?tab=payments#payout-method"
+/** Settings → Verification. */
+export const ARTISAN_VERIFICATION_HREF = "/dashboard/artisan/settings?tab=verification"
+
+/**
+ * Where the artisan's identity check stands, as far as "needs your action"
+ * cares: `none` (never sent) and `rejected` ask for documents; anything else
+ * (verified, in review, or not known because the request failed) adds no row.
+ */
+export type ArtisanVerificationNeed = "none" | "rejected" | null
 
 export interface ArtisanActionRow {
   kind: ArtisanActionKind
@@ -223,6 +235,7 @@ export function artisanActionRows(input: {
   requests: number | null
   disputes: number | null
   earnings: Pick<ArtisanEarningsSnapshot, "needsAction" | "needsActionCount" | "hasPayoutMethod"> | null
+  verification?: ArtisanVerificationNeed
 }): ArtisanActionRow[] {
   const rows: ArtisanActionRow[] = []
   if (input.requests && input.requests > 0) {
@@ -253,8 +266,8 @@ export function artisanActionRows(input: {
         count: e.needsActionCount,
         label: "Add a payout method",
         detail: `${formatGhs(e.needsAction)} is waiting for it`,
-        href: "/dashboard/artisan/earnings",
-        ariaLabel: `Add a payout method: ${formatGhs(e.needsAction)} waiting. Opens Earnings`,
+        href: ARTISAN_PAYOUT_SETTINGS_HREF,
+        ariaLabel: `Add a payout method: ${formatGhs(e.needsAction)} waiting. Opens Settings, Payments`,
       })
     } else {
       rows.push({
@@ -266,6 +279,18 @@ export function artisanActionRows(input: {
         ariaLabel: `Fix a payout: ${e.needsActionCount}. Opens Earnings`,
       })
     }
+  }
+  if (input.verification === "none" || input.verification === "rejected") {
+    const rejected = input.verification === "rejected"
+    rows.push({
+      kind: "verification",
+      // Not a count of things: no badge.
+      count: 0,
+      label: "Get verified",
+      detail: rejected ? "Your last submission wasn't approved" : "Clients see a verified badge on your profile",
+      href: ARTISAN_VERIFICATION_HREF,
+      ariaLabel: `Get verified${rejected ? ": your last submission wasn't approved" : ""}. Opens Settings, Verification`,
+    })
   }
   return rows
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { AlertTriangle, CalendarDays, Gavel, Inbox, Lock, MapPin, Send, StickyNote, Wallet, type LucideIcon } from "lucide-react"
+import { AlertTriangle, CalendarDays, Gavel, Inbox, Lock, MapPin, Send, ShieldCheck, StickyNote, Wallet, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   artisanActionRows,
@@ -14,6 +14,7 @@ import {
   type ArtisanActionKind,
   type ArtisanBooking,
   type ArtisanEarningsSnapshot,
+  type ArtisanVerificationNeed,
 } from "@/lib/artisan-overview"
 import { formatAppointment } from "@/lib/overview"
 import { cn } from "@/lib/utils"
@@ -22,7 +23,13 @@ import { RailError, RailSection, RailSkeleton, railFocusRing, type RailLayout, t
 
 export interface ArtisanRailStates {
   /** Built from three sections; `partial` = one of them failed, the rest still show. */
-  actions: RailSectionState<{ requests: number | null; disputes: number | null; earnings: ArtisanEarningsSnapshot | null; partial: boolean }>
+  actions: RailSectionState<{
+    requests: number | null
+    disputes: number | null
+    earnings: ArtisanEarningsSnapshot | null
+    verification?: ArtisanVerificationNeed
+    partial: boolean
+  }>
   appointments: RailSectionState<{ today: ArtisanBooking[]; next: ArtisanBooking | null }>
   earnings: RailSectionState<ArtisanEarningsSnapshot>
 }
@@ -32,6 +39,7 @@ const ACTION_ICONS: Record<ArtisanActionKind, LucideIcon> = {
   disputes: Gavel,
   payoutsNeedAction: AlertTriangle,
   payoutMethod: Wallet,
+  verification: ShieldCheck,
 }
 
 /**

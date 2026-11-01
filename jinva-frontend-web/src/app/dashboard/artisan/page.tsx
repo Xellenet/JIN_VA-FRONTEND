@@ -19,7 +19,7 @@ import {
 import type { RailSectionState } from "@/components/dashboard/overview/rail-section"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
 import {
   ARTISAN_STAGES,
   artisanActionRows,
@@ -29,6 +29,7 @@ import {
   type ArtisanOverview,
   type ArtisanOverviewSection,
   type BookingRequest,
+  type ArtisanVerificationNeed,
 } from "@/lib/artisan-overview"
 import { getArtisanBookings, getArtisanOverview, getOpenJobs, type OpenJob } from "@/lib/artisan-overview-api"
 import { isAbortError, isRateLimited, retryAfter } from "@/lib/customer-api"
@@ -115,13 +116,22 @@ function OverviewContent() {
 
   // C2.3: the hidden-from-search banner. Stays null if the fetch fails.
   const [completeness, setCompleteness] = useState<ProfileCompletenessSource | null>(null)
+  // "Get verified" in Needs your action: only when no documents were sent or
+  // the last ones were turned down. In review, verified or unknown → no row.
+  const [verificationNeed, setVerificationNeed] = useState<ArtisanVerificationNeed>(null)
 
   useEffect(() => {
     load(true)
     loadPrices()
     loadOpenJobs()
-    apiFetch<ProfileCompletenessSource>("/users/me/artisan-profile")
-      .then(setCompleteness)
+    apiFetch<ProfileCompletenessSource & { isVerified?: boolean }>("/users/me/artisan-profile")
+      .then((profile) => {
+        setCompleteness(profile)
+        if (profile.isVerified !== false) return
+        apiFetch<{ status?: string }>("/verification/me")
+          .then((v) => setVerificationNeed(v?.status === "REJECTED" ? "rejected" : null))
+          .catch((err) => setVerificationNeed(err instanceof ApiError && err.status === 404 ? "none" : null))
+      })
       .catch(() => {})
     const refresh = () => {
       if (document.visibilityState !== "visible") return
@@ -204,6 +214,7 @@ function OverviewContent() {
                   requests: requestsOk ? d.pendingRequests!.total : null,
                   disputes: disputesOk ? d.disputesNeedingResponse : null,
                   earnings: earningsOk ? d.earnings : null,
+                  verification: verificationNeed,
                   partial,
                 },
               },
@@ -213,7 +224,7 @@ function OverviewContent() {
         earnings: earningsOk ? { kind: "ready", data: d.earnings! } : err,
       } satisfies ArtisanRailStates,
     }
-  }, [overview])
+  }, [overview, verificationNeed])
 
   if (!user) return null
 

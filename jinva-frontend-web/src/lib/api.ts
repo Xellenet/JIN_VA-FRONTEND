@@ -94,13 +94,20 @@ export class ApiError extends Error {
   readonly status: number
   readonly code?: string
   readonly retryAfterSeconds?: number
+  /**
+   * The error envelope's top-level `data`, when the server sends one (the pay
+   * endpoints' 409 PAYMENT_ATTEMPT_ACTIVE carries the active attempt, and
+   * ALREADY_PAID the paid payment). Untyped: the caller narrows it.
+   */
+  readonly data?: unknown
 
-  constructor(message: string, status: number, code?: string, retryAfterSeconds?: number) {
+  constructor(message: string, status: number, code?: string, retryAfterSeconds?: number, data?: unknown) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
     this.retryAfterSeconds = retryAfterSeconds
+    this.data = data
   }
 }
 
@@ -190,6 +197,7 @@ async function authedRequest(path: string, options: ApiFetchOptions = {}): Promi
       error?: string
       retryAfterSeconds?: number
       meta?: { error?: string; retryAfterSeconds?: number }
+      data?: unknown
     } = await res.json().catch(() => ({ message: "Request failed" }))
     // A ValidationPipe rejection returns `message` as an array of strings.
     const message = Array.isArray(err.message) ? err.message.join(" ") : err.message
@@ -210,6 +218,7 @@ async function authedRequest(path: string, options: ApiFetchOptions = {}): Promi
       res.status,
       err.meta?.error ?? err.error,
       err.meta?.retryAfterSeconds ?? err.retryAfterSeconds,
+      err.data,
     )
   }
 

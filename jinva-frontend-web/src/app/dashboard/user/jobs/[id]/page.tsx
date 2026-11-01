@@ -19,6 +19,7 @@ import {
   Star,
   Tag,
   Timer,
+  Undo2,
   Wallet,
   Wrench,
   XCircle,
@@ -40,6 +41,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { apiFetch } from "@/lib/api"
+import { getJobPaymentState } from "@/lib/payment-methods-api"
+import { duplicateRefundNote, visibleDuplicateRefunds, type DuplicateRefund } from "@/lib/payment-intent"
 import { formatDay, initialsOf } from "@/lib/artisan-jobs"
 import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dashboard/job-status-timeline"
@@ -120,6 +123,8 @@ export default function JobDetailPage() {
   const [isConfirming, setIsConfirming] = useState(false)
   const [payment, setPayment] = useState<BackendPayment | null>(null)
   const [isPaymentLoading, setIsPaymentLoading] = useState(true)
+  /** A second payment for this job that we refunded automatically. */
+  const [refunds, setRefunds] = useState<DuplicateRefund[]>([])
   // Bumped after accepting an application so the job and its new payment reload.
   const [reloadKey, setReloadKey] = useState(0)
   const [isEditing, setIsEditing] = useState(false)
@@ -137,6 +142,21 @@ export default function JobDetailPage() {
       .catch(() => setPayment(null))
       .finally(() => setIsPaymentLoading(false))
   }, [id, reloadKey])
+
+  // Only when there is a paid payment: a duplicate can only follow one. A
+  // failure (or an older server) just shows no note.
+  const paymentStatus = payment?.status
+  useEffect(() => {
+    if (!paymentStatus || paymentStatus === "PENDING" || paymentStatus === "CANCELLED") {
+      setRefunds([])
+      return
+    }
+    const controller = new AbortController()
+    getJobPaymentState(Number(id), controller.signal)
+      .then((state) => setRefunds(visibleDuplicateRefunds(state.duplicateRefunds)))
+      .catch(() => setRefunds([]))
+    return () => controller.abort()
+  }, [id, paymentStatus, reloadKey])
 
   const handleConfirmCompletion = async () => {
     if (!job) return
@@ -460,6 +480,16 @@ export default function JobDetailPage() {
                       )}
                     </div>
                   )}
+                  {refunds.map((r) => (
+                    <p
+                      key={r.reference}
+                      role="note"
+                      className="mt-4 flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-[13px] leading-relaxed text-foreground"
+                    >
+                      <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <span>{duplicateRefundNote(r)}</span>
+                    </p>
+                  ))}
                 </div>
               </Card>
             )}

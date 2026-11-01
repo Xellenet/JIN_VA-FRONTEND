@@ -27,6 +27,7 @@ import {
   Smartphone,
   ExternalLink,
   KeyRound,
+  Clock,
 } from "lucide-react"
 import { ApiError, apiFetch } from "@/lib/api"
 import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
@@ -34,9 +35,30 @@ import { getPaymentStatusConfig } from "@/lib/status-badges"
 import {
   chargeWithSavedMethod,
   getChargeStatus,
+  getJobPaymentState,
   getPaymentMethods,
+  initializeHostedPayment,
   submitChargeOtp,
 } from "@/lib/payment-methods-api"
+import {
+  attemptActiveMessage,
+  attemptAsCharge,
+  clearIntentKey,
+  getOrCreateIntentKey,
+  keepKeyAfter,
+  parsePaySync,
+  payErrorKind,
+  paySyncChannelName,
+  paySyncStorageKey,
+  safeSessionStorage,
+  samePressRetryDelay,
+  shouldRetrySamePress,
+  type AlreadyPaid,
+  type AttemptView,
+  type JobPaymentState,
+  type PayMethod,
+  type PaySyncMessage,
+} from "@/lib/payment-intent"
 import {
   chargeFailureMessage,
   chargeView,
@@ -83,14 +105,6 @@ interface VerifyResult {
   currency: string
 }
 
-interface InitializeResult {
-  reference: string
-  authorizationUrl: string
-  accessCode: string
-  amount: number
-  currency: string
-}
-
 // Paystack redirects the browser back to whatever URL the backend registered
 // as PAYSTACK_CALLBACK_URL, appending ?trxref=...&reference=... (both equal).
 // This page doubles as that landing target — presence of either query param
@@ -112,11 +126,23 @@ type Phase =
   | "error"
   | "unavailable"
   // Paying with a saved method:
-  | "charging"
   | "waiting_phone"
   | "charge_confirming"
   | "otp"
   | "charge_failed"
+  // An open Paystack page for this job (started here or in another tab).
+  | "hosted_open"
+
+/** Phases where the job's payment state may be refreshed (focus, other tabs). */
+const REFRESHABLE_PHASES: readonly Phase[] = [
+  "confirm",
+  "waiting_phone",
+  "charge_confirming",
+  "otp",
+  "charge_failed",
+  "hosted_open",
+]
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const SAVED_UNAVAILABLE_MESSAGE = "Paying with a saved method isn’t available right now. You can pay another way."
 
@@ -146,6 +172,11 @@ export default function PaymentCheckoutPage() {
   const [otp, setOtp] = useState("")
   const [otpError, setOtpError] = useState<string | null>(null)
   const [otpSubmitting, setOtpSubmitting] = useState(false)
+  /** Pay was pressed and its request hasn't answered yet (aria-busy, disabled). */
+  const [payBusy, setPayBusy] = useState(false)
+  /** Why the customer can't pay another way right now (an active attempt). */
+  const [activeNotice, setActiveNotice] = useState<string | null>(null)
+  const [hostedAttempt, setHostedAttempt] = useState<AttemptView | null>(null)
 
   // C2: synchronous, ref-backed guard — state alone can lag a fast double
   // click by a render, a ref cannot.
@@ -155,12 +186,38 @@ export default function PaymentCheckoutPage() {
 
   const reference = searchParams.get("reference") ?? searchParams.get("trxref")
 
+  const phaseRef = useRef<Phase>(phase)
+  phaseRef.current = phase
+
+  // ── Other tabs of the same job ──────────────────────────────────────────────
+  // BroadcastChannel where the browser has it, else a localStorage write that
+  // other tabs see as a `storage` event.
+  const channelRef = useRef<BroadcastChannel | null>(null)
+  const publish = useCallback(
+    (m: PaySyncMessage) => {
+      try {
+        if (channelRef.current) {
+          channelRef.current.postMessage(m)
+          return
+        }
+        window.localStorage.setItem(paySyncStorageKey(id), JSON.stringify({ ...m, at: Date.now() }))
+      } catch {
+        // Other tabs catch up on focus instead.
+      }
+    },
+    [id],
+  )
+
+  const publishRef = useRef(publish)
+  publishRef.current = publish
+
   const runVerify = useCallback(async (ref: string) => {
     try {
       const res = await apiFetch<VerifyResult>(`/payments/verify/${encodeURIComponent(ref)}`)
       setResultAmount(res.amount)
       if (res.status === "HELD" || res.status === "PENDING_TRANSFER" || res.status === "RELEASED") {
         setPhase("success")
+        publishRef.current({ type: "paid", jobId: Number(id), amount: res.amount })
         return
       }
       // QA PAY-03/PAY-06: Paystack already knows the attempt failed (declined
@@ -196,7 +253,7 @@ export default function PaymentCheckoutPage() {
       setPhase("error")
       setMessage("We couldn't confirm this payment right now.")
     }
-  }, [])
+  }, [id])
 
   const loadConfirmState = useCallback(async () => {
     setPhase("loading")
@@ -239,6 +296,10 @@ export default function PaymentCheckoutPage() {
         return
       }
       setPayment(match)
+      // Paid in another tab, or a payment already waiting (a phone prompt,
+      // a Telecel code, Paystack's page): show that instead of a second Pay.
+      const state = await getJobPaymentState(Number(id)).catch(() => null)
+      if (state && applyStateRef.current(state, { initial: true })) return
       setPhase("confirm")
     } catch {
       setPhase("error")
@@ -266,6 +327,8 @@ export default function PaymentCheckoutPage() {
         case "succeeded":
           setResultAmount(payment?.amount ?? null)
           setPhase("success")
+          setActiveNotice(null)
+          publishRef.current({ type: "paid", jobId: r.jobId, amount: payment?.amount ?? null })
           return
         case "otp":
           setPhase("otp")
@@ -286,6 +349,179 @@ export default function PaymentCheckoutPage() {
     },
     [payment?.amount],
   )
+
+  /** Shows an active attempt: the phone/OTP panel for a saved method, or Paystack's open page. */
+  const applyAttempt = useCallback(
+    (a: AttemptView, notice: string | null) => {
+      setActiveNotice(notice)
+      if (a.kind === "hosted") {
+        setCharge(null)
+        setHostedAttempt(a)
+        setPhase("hosted_open")
+        return
+      }
+      setHostedAttempt(null)
+      if (a.paymentMethodId != null) setSelected(a.paymentMethodId)
+      const c = attemptAsCharge(a)
+      if (c) applyCharge(c)
+    },
+    [applyCharge],
+  )
+
+  const showPaid = useCallback((amount: number | null | undefined) => {
+    setResultAmount(amount ?? null)
+    setActiveNotice(null)
+    setPhase("success")
+  }, [])
+
+  /**
+   * Applies the server's view of this job's payment. Returns true when it
+   * decided the screen (paid, or an attempt to resume).
+   */
+  const applyState = useCallback(
+    (state: JobPaymentState, opts: { initial?: boolean } = {}): boolean => {
+      if (state.paid) {
+        showPaid(state.payment?.amount)
+        return true
+      }
+      const a = state.activeAttempt
+      if (a) {
+        const showing = phaseRef.current === "hosted_open" ? hostedRef.current : chargeRefCurrent.current
+        if (opts.initial || showing !== a.reference) applyAttempt(a, null)
+        return true
+      }
+      // The attempt we were showing ended without paying (declined, expired):
+      // let the status poll or the customer move on.
+      if (phaseRef.current === "hosted_open") {
+        setHostedAttempt(null)
+        setActiveNotice(null)
+        setPhase("confirm")
+      }
+      return false
+    },
+    [applyAttempt, showPaid],
+  )
+  const applyStateRef = useRef(applyState)
+  applyStateRef.current = applyState
+  const hostedRef = useRef<string | null>(null)
+  hostedRef.current = hostedAttempt?.reference ?? null
+  const chargeRefCurrent = useRef<string | null>(null)
+  chargeRefCurrent.current = charge?.reference ?? null
+
+  const lastRefreshRef = useRef(0)
+  const refreshState = useCallback(async () => {
+    if (reference || isSubmittingRef.current) return
+    if (!REFRESHABLE_PHASES.includes(phaseRef.current)) return
+    const now = Date.now()
+    if (now - lastRefreshRef.current < 1500) return
+    lastRefreshRef.current = now
+    try {
+      const state = await getJobPaymentState(Number(id))
+      if (!isSubmittingRef.current && REFRESHABLE_PHASES.includes(phaseRef.current)) applyStateRef.current(state)
+    } catch {
+      // An older server without this endpoint, or offline: keep the screen.
+    }
+  }, [id, reference])
+
+  // Back on this tab (focus, or it became visible): ask what changed.
+  useEffect(() => {
+    const onFocus = () => void refreshState()
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshState()
+    }
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [refreshState])
+
+  // Messages from other tabs of this job.
+  const onSyncRef = useRef<(m: PaySyncMessage) => void>(() => {})
+  onSyncRef.current = (m: PaySyncMessage) => {
+    if (m.type === "paid") {
+      if (phaseRef.current !== "success" && phaseRef.current !== "unavailable") showPaid(m.amount ?? payment?.amount)
+      return
+    }
+    if (m.type === "attempt") {
+      if (phaseRef.current === "confirm" || phaseRef.current === "charge_failed") applyAttempt(m.attempt, null)
+      return
+    }
+    lastRefreshRef.current = 0
+    void refreshState()
+  }
+  useEffect(() => {
+    const jobId = Number(id)
+    const onMessage = (raw: unknown) => {
+      const m = parsePaySync(raw, jobId)
+      if (m) onSyncRef.current(m)
+    }
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel(paySyncChannelName(jobId))
+        bc.onmessage = (e: MessageEvent) => onMessage(e.data)
+        channelRef.current = bc
+      }
+    } catch {
+      channelRef.current = null
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === paySyncStorageKey(jobId) && e.newValue) onMessage(e.newValue)
+    }
+    window.addEventListener("storage", onStorage)
+    return () => {
+      window.removeEventListener("storage", onStorage)
+      channelRef.current?.close()
+      channelRef.current = null
+    }
+  }, [id])
+
+  /**
+   * One press of Pay: the same Idempotency-Key for the automatic retries of
+   * this press (no answer, or the server still working on the same key), and
+   * kept for a refresh mid-request; cleared once the server answered.
+   */
+  const runPress = async <T,>(method: PayMethod, send: (key: string) => Promise<T>): Promise<T> => {
+    const storage = safeSessionStorage()
+    const key = getOrCreateIntentKey(storage, id, method)
+    for (let retries = 0; ; retries++) {
+      try {
+        const result = await send(key)
+        clearIntentKey(storage, id, method)
+        return result
+      } catch (err) {
+        const kind = payErrorKind(err instanceof ApiError ? err : { status: 0 })
+        if (shouldRetrySamePress(kind, retries)) {
+          await sleep(samePressRetryDelay(retries))
+          continue
+        }
+        if (!keepKeyAfter(kind)) clearIntentKey(storage, id, method)
+        throw err
+      }
+    }
+  }
+
+  /** Paid already, or another attempt is active: the answers every pay call shares. */
+  const handlePayConflict = (err: unknown): boolean => {
+    if (!(err instanceof ApiError)) return false
+    const kind = payErrorKind(err)
+    if (kind === "already_paid") {
+      const paid = (err.data ?? null) as Partial<AlreadyPaid> | null
+      const amount = typeof paid?.amount === "number" ? paid.amount : (payment?.amount ?? null)
+      showPaid(amount)
+      publish({ type: "paid", jobId: Number(id), amount })
+      return true
+    }
+    if (kind === "attempt_active") {
+      const a = (err.data ?? null) as AttemptView | null
+      if (a && typeof a.reference === "string" && a.kind) {
+        applyAttempt(a, attemptActiveMessage(a, err.message))
+        return true
+      }
+    }
+    return false
+  }
 
   // Ask the server how the charge is going while the customer approves it.
   // Quick checks first, then every 10 s; paused while the tab is hidden, and
@@ -348,15 +584,19 @@ export default function PaymentCheckoutPage() {
   const handleProceed = async () => {
     if (isSubmittingRef.current || !payment) return
     isSubmittingRef.current = true
-    setPhase("redirecting")
+    // The Pay step stays, with the button disabled and busy, until the server answers.
+    setPayBusy(true)
     try {
-      const res = await apiFetch<InitializeResult>("/payments/initialize", {
-        method: "POST",
-        body: JSON.stringify({ jobId: Number(id), ...(saveCard ? { saveCard: true } : {}) }),
-      })
+      const res = await runPress("hosted", (key) =>
+        initializeHostedPayment({ jobId: Number(id), saveCard }, key),
+      )
+      setPhase("redirecting")
+      publish({ type: "refresh", jobId: Number(id) })
       window.location.href = res.authorizationUrl
     } catch (err) {
       isSubmittingRef.current = false
+      setPayBusy(false)
+      if (handlePayConflict(err)) return
       setPhase("error")
       setMessage(err instanceof Error ? err.message : "Couldn't start the payment. Please try again.")
     }
@@ -368,15 +608,22 @@ export default function PaymentCheckoutPage() {
   const handleChargeSaved = async () => {
     if (isSubmittingRef.current || !payment || !selectedMethod) return
     isSubmittingRef.current = true
-    setPhase("charging")
+    setPayBusy(true)
     setOtp("")
     setOtpError(null)
+    setActiveNotice(null)
+    const methodId = selectedMethod.id
     try {
-      applyCharge(await chargeWithSavedMethod(Number(id), selectedMethod.id))
+      const r = await runPress(methodId, (key) => chargeWithSavedMethod(Number(id), methodId, key))
+      applyCharge(r)
+      if (r.status === "pending" || r.status === "needs_otp") publish({ type: "refresh", jobId: Number(id) })
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0
-      if (status === 409) {
-        // Already paid (perhaps in another tab): show the job's real state.
+      if (handlePayConflict(err)) {
+        // Shown: paid, or the attempt that is already waiting.
+      } else if (status === 409) {
+        // An older server's "already paid": show the job's real state.
+        isSubmittingRef.current = false
         await loadConfirmState()
       } else {
         setCanRetryCharge(status !== 503 && status !== 404)
@@ -391,9 +638,12 @@ export default function PaymentCheckoutPage() {
       }
     } finally {
       isSubmittingRef.current = false
+      setPayBusy(false)
     }
   }
 
+  // Both handlers set the ref-backed guard and `payBusy` before any await, so
+  // a double click sends one request.
   const handlePay = () => (selectedMethod ? handleChargeSaved() : handleProceed())
 
   const handleSubmitOtp = async () => {
@@ -405,7 +655,8 @@ export default function PaymentCheckoutPage() {
     setOtpSubmitting(true)
     setOtpError(null)
     try {
-      const r = await submitChargeOtp(charge.reference, tidyOtp(otp))
+      const code = tidyOtp(otp)
+      const r = await runPress("otp", (key) => submitChargeOtp(charge.reference, code, key))
       if (r.status === "needs_otp") {
         setCharge(r)
         setOtp("")
@@ -414,6 +665,7 @@ export default function PaymentCheckoutPage() {
         applyCharge(r)
       }
     } catch (err) {
+      if (handlePayConflict(err)) return
       setOtpError(err instanceof Error && err.message ? err.message : "We couldn’t check that code. Try again.")
     } finally {
       setOtpSubmitting(false)
@@ -423,6 +675,7 @@ export default function PaymentCheckoutPage() {
   /** Back to the pay step with Paystack's own page chosen. */
   const payAnotherWay = () => {
     setCharge(null)
+    setHostedAttempt(null)
     setSelected("hosted")
     setChoosing(false)
     setMessage("")
@@ -432,6 +685,7 @@ export default function PaymentCheckoutPage() {
   /** Back to the pay step with the same saved method, after a failed charge. */
   const retryCharge = () => {
     setCharge(null)
+    setActiveNotice(null)
     setMessage("")
     setPhase("confirm")
   }
@@ -635,9 +889,11 @@ export default function PaymentCheckoutPage() {
               size="lg"
               className="h-auto min-h-11 w-full whitespace-normal bg-primary py-3 text-primary-foreground hover:bg-primary/90"
               onClick={handlePay}
-              disabled={choosing}
+              disabled={choosing || payBusy}
+              aria-busy={payBusy}
             >
-              {payButtonLabel(amountLabel, selectedMethod)}
+              {payBusy && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              {payBusy ? "Starting your payment…" : payButtonLabel(amountLabel, selectedMethod)}
             </Button>
             <p className="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
               <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -646,12 +902,12 @@ export default function PaymentCheckoutPage() {
           </>
         )}
 
-        {(phase === "redirecting" || phase === "charging") && (
+        {phase === "redirecting" && (
           <Card>
             <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center" role="status">
               <Loader2 className="h-8 w-8 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
               <p className="font-medium text-foreground">
-                {phase === "charging" ? "Starting your payment…" : "Redirecting to secure payment…"}
+                Redirecting to secure payment…
               </p>
               <p className="text-sm text-muted-foreground">Please don&apos;t close this tab.</p>
             </CardContent>
@@ -694,6 +950,7 @@ export default function PaymentCheckoutPage() {
                   </>
                 )}
               </p>
+              {activeNotice && <ActiveAttemptNotice text={activeNotice} />}
               <div className="mt-2 flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                 {pollStalled && (
                   <Button className="max-sm:h-11" onClick={() => setPollRun((n) => n + 1)}>
@@ -725,6 +982,7 @@ export default function PaymentCheckoutPage() {
                   </p>
                 </div>
               </div>
+              {activeNotice && <ActiveAttemptNotice text={activeNotice} />}
               <form
                 noValidate
                 className="space-y-4"
@@ -766,6 +1024,46 @@ export default function PaymentCheckoutPage() {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {phase === "hosted_open" && hostedAttempt && (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center gap-3 px-5 py-12 text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-info/10 text-info">
+                <ExternalLink className="h-7 w-7" aria-hidden="true" />
+              </span>
+              <h2 className="text-lg font-semibold text-foreground">Your payment is open on Paystack&apos;s page</h2>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                You started paying {amountLabel ? `${amountLabel} ` : ""}on Paystack&apos;s page. Continue there to finish.
+              </p>
+              <ActiveAttemptNotice
+                text={
+                  activeNotice ??
+                  "To pay another way, close that page first. You can pay another way once it's closed or has expired."
+                }
+              />
+              <div className="mt-2 flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                {hostedAttempt.authorizationUrl && (
+                  <Button className="h-11 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                    <a href={hostedAttempt.authorizationUrl}>
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                      Continue on the checkout page
+                    </a>
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  className="h-11 bg-transparent"
+                  onClick={() => {
+                    lastRefreshRef.current = 0
+                    void refreshState()
+                  }}
+                >
+                  Check again
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -890,5 +1188,18 @@ export default function PaymentCheckoutPage() {
         )}
       </div>
     </DashboardLayout>
+  )
+}
+
+/** Why the customer can't pay another way yet: icon and text, never colour alone. */
+function ActiveAttemptNotice({ text }: { text: string }) {
+  return (
+    <p
+      role="status"
+      className="flex max-w-sm items-start gap-2 rounded-lg border bg-muted/40 p-3 text-left text-[13px] leading-relaxed text-foreground"
+    >
+      <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span>{text}</span>
+    </p>
   )
 }

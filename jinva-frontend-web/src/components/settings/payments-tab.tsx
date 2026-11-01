@@ -21,6 +21,7 @@ import { threeLetterMonth } from "@/lib/spending"
 import { cn } from "@/lib/utils"
 import { HistoryMovedBanner } from "./history-moved-banner"
 import { ProtectionPath } from "./protection-path"
+import { SavedPaymentMethodsCard } from "./saved-payment-methods-card"
 import {
   MOMO_NETWORKS,
   NetworkMark,
@@ -92,13 +93,14 @@ function formatSavedAt(iso: string | null): string {
 // ── The tab ──────────────────────────────────────────────────────────────────
 
 /**
- * Settings → Payments (item 5). Sections in FR-5.1 order: the "history has
- * moved" banner, the editable preferences form (preferred method, mobile
- * money network, explicit Save), then the read-only Receipts and Payment
- * protection card. There is no payment list here any more.
+ * Settings → Payments (item 5). Sections: the "history has moved" banner,
+ * the saved payment methods card, the editable preferences form (preferred
+ * method, mobile money network, explicit Save), then the read-only Receipts
+ * and Payment protection card. There is no payment list here any more.
  *
- * Nothing here is a card, expiry or CVV input and nothing suggests saved
- * cards (SEC-11, AC-5.7). No mobile money number is collected (Q6).
+ * Nothing here is a card number, expiry, CVV or PIN input. Mobile money
+ * numbers are saved in the saved-methods card with the looked-up name; cards
+ * are saved only after a card payment, on the customer's explicit opt-in.
  */
 export function PaymentsTab({
   accountEmail,
@@ -247,6 +249,8 @@ export function PaymentsTab({
   return (
     <div className="space-y-6">
       <HistoryMovedBanner />
+
+      <SavedPaymentMethodsCard editable={saved ? saved.editable : true} />
 
       {/* ── The editable form ── */}
       {loadState === "loading" ? (
@@ -401,8 +405,8 @@ export function PaymentsTab({
             </RadioGroupPrimitive.Root>
             <div className="mt-3 flex flex-col items-start gap-2 @[34rem]/controls:flex-row @[34rem]/controls:justify-between @[34rem]/controls:gap-6">
               <p className="text-[13px] leading-relaxed text-muted-foreground">
-                We use this to show your network on the pay page. Paystack still asks for your mobile money number each
-                time you pay.
+                We use this to show your network on the pay page. To skip typing your number when you pay, save it
+                under Saved payment methods.
               </p>
               {editable && draft.momoNetwork !== null && (
                 <button

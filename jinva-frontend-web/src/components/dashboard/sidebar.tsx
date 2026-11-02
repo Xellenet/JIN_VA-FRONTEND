@@ -27,6 +27,7 @@ import {
   Plus,
   Wallet,
   ShieldCheck,
+  Wrench,
 } from "lucide-react"
 import type { UserRole } from "@/lib/types"
 
@@ -47,6 +48,8 @@ const ADMIN_LINKS: readonly NavLink[] = [
   { href: "/dashboard/admin/artisans",          label: "Artisans",        icon: Users         },
   { href: "/dashboard/admin/clients",           label: "Clients",         icon: UserCircle    },
   { href: "/dashboard/admin/orders",            label: "Jobs",            icon: ClipboardList },
+  // The service types customers post jobs under and artisans offer.
+  { href: "/dashboard/admin/services",          label: "Services",        icon: Wrench        },
   { href: "/dashboard/admin/portfolio-queue",   label: "Portfolio Queue", icon: ImageIcon     },
   // Placed with the other moderation queue so the two sit together (AT1).
   { href: "/dashboard/admin/verifications",      label: "Verifications",   icon: ShieldCheck   },

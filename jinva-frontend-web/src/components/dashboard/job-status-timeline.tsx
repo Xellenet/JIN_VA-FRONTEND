@@ -1,7 +1,7 @@
 "use client"
 
-import { CheckCircle2, Cpu, FileText, UserRound } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
+import { formatDayTime, jobStatusName } from "@/lib/artisan-jobs"
 
 export interface JobStatusHistoryEntry {
   id: number
@@ -12,64 +12,110 @@ export interface JobStatusHistoryEntry {
   createdAt: string
 }
 
-function actorLabel(changedBy: string): string {
-  if (changedBy === "SYSTEM") return "System (automated)"
-  return `User #${changedBy}`
+interface Person {
+  id: number | string
+  firstname?: string | null
+  lastname?: string | null
+}
+
+interface JobStatusTimelineProps {
+  readonly history: JobStatusHistoryEntry[] | undefined
+  /** The job's accepted artisan, so their changes read as their name. */
+  readonly artisan?: Person | null
+  /** When the job was posted; shown when there is no recorded history. */
+  readonly createdAt?: string | null
+  /** When the artisan asked the client to confirm the work is done. */
+  readonly completionRequestedAt?: string | null
+}
+
+/** Event names in the client's words (the artisan job page uses the same set). */
+const EVENT_NAMES: Record<string, string> = {
+  OPEN: "Posted",
+  PENDING: "Artisan chosen",
+  IN_PROGRESS: "Work started",
+  COMPLETED: "Done",
+  CANCELLED: "Cancelled",
+  EXPIRED: "Expired",
+}
+
+/** System reasons are written for logs; say them in the client's words. */
+function readableReason(reason?: string | null): string | null {
+  if (!reason) return null
+  if (/auto-?completed/i.test(reason)) return "Marked done automatically because the work wasn't confirmed in time."
+  if (/expired?/i.test(reason) && /deadline/i.test(reason)) return "The deadline passed."
+  return reason.replace(/\bcustomer\b/gi, "client")
+}
+
+function nameOf(p?: Person | null): string {
+  return `${p?.firstname ?? ""} ${p?.lastname ?? ""}`.trim()
 }
 
 /**
- * J3: renders the real, chronological job status-history array returned by
- * `GET /jobs/:id`. Both parties viewing the same job see this identical
- * component fed the identical array — no per-role fabrication.
- *
- * Per api-contract.md §12, jobs created before this migration simply have an
- * empty `statusHistory` array — that's expected, not an error, so an empty
- * array renders an explicit "not available" note rather than looking broken.
+ * J3: the real, chronological job status history from `GET /jobs/:id`, read
+ * from the client's side: readable event names, who made each change ("You",
+ * the artisan by name, or JinVa) and en-GB times without seconds. Jobs created
+ * before status tracking have an empty `statusHistory`; that's expected, so it
+ * says so instead of looking broken.
  */
-export function JobStatusTimeline({ history }: { readonly history: JobStatusHistoryEntry[] | undefined }) {
-  if (!history || history.length === 0) {
+export function JobStatusTimeline({ history, artisan, createdAt, completionRequestedAt }: JobStatusTimelineProps) {
+  const { user } = useAuth()
+  const userId = user?.id
+  const artisanName = nameOf(artisan)
+
+  const actor = (changedBy: string): string | null => {
+    if (changedBy === "SYSTEM") return "JinVa, automatically"
+    if (userId != null && changedBy === String(userId)) return "You"
+    if (artisan?.id != null && changedBy === String(artisan.id)) return artisanName || "The artisan"
+    // Without the artisan we can't tell them apart from our team, so say nothing rather than guess.
+    return artisan ? "JinVa team" : null
+  }
+
+  const events = (history ?? []).map((e) => ({
+    key: `h${e.id}`,
+    title: EVENT_NAMES[e.toStatus] ?? jobStatusName(e.toStatus),
+    detail: e.fromStatus ? `${jobStatusName(e.fromStatus)} to ${jobStatusName(e.toStatus)}` : null,
+    reason: readableReason(e.reason),
+    by: actor(e.changedBy),
+    at: e.createdAt,
+  }))
+  if (completionRequestedAt) {
+    events.push({
+      key: "completion",
+      title: "Completion requested",
+      detail: null,
+      reason: null,
+      by: artisanName || "The artisan",
+      at: completionRequestedAt,
+    })
+  }
+  events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+
+  if (events.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-        <FileText className="h-6 w-6 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">
-          Detailed history is not available for this job (it predates status tracking).
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        {createdAt ? `Posted ${formatDayTime(createdAt)}. ` : ""}
+        Earlier changes to this job weren&apos;t recorded.
+      </p>
     )
   }
 
   return (
-    <div className="space-y-0">
-      {history.map((entry, idx) => {
-        const isSystem = entry.changedBy === "SYSTEM"
-        return (
-          <div key={entry.id} className="flex gap-4">
-            <div className="flex flex-col items-center">
-              <div
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                  "bg-primary text-primary-foreground",
-                )}
-              >
-                {isSystem ? <Cpu className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-              </div>
-              {idx < history.length - 1 && <div className="h-full w-0.5 min-h-6 bg-primary/30" />}
-            </div>
-            <div className="pb-6">
-              <p className="text-sm font-medium text-foreground">
-                {entry.fromStatus ? `${entry.fromStatus} → ${entry.toStatus}` : `Created — ${entry.toStatus}`}
-              </p>
-              {entry.reason && (
-                <p className="mt-0.5 text-sm text-muted-foreground">{entry.reason}</p>
-              )}
-              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                <UserRound className="h-3 w-3" />
-                {actorLabel(entry.changedBy)} · {new Date(entry.createdAt).toLocaleString()}
-              </p>
-            </div>
+    <ol className="space-y-0">
+      {events.map((e, i) => (
+        <li key={e.key} className="relative flex gap-3 pb-5 last:pb-0">
+          {i < events.length - 1 && <span aria-hidden className="absolute left-[5px] top-4 h-[calc(100%-6px)] w-px bg-primary/30" />}
+          <span aria-hidden className="relative z-10 mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full bg-primary ring-4 ring-card" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">{e.title}</p>
+            {e.reason && <p className="mt-0.5 break-words text-sm text-muted-foreground">{e.reason}</p>}
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              <time dateTime={e.at}>{formatDayTime(e.at)}</time>
+              {e.by ? `, by ${e.by}` : ""}
+              {e.detail ? <span className="sr-only">. {e.detail}</span> : null}
+            </p>
           </div>
-        )
-      })}
-    </div>
+        </li>
+      ))}
+    </ol>
   )
 }

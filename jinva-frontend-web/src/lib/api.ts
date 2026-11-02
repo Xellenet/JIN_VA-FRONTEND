@@ -44,6 +44,21 @@ export async function ensureAccessToken(): Promise<boolean> {
   return getAccessToken() ? true : tryRefresh()
 }
 
+/**
+ * X4: whether this page can only be reached with a session, so a missing
+ * in-memory token means "reloaded", not "logged out".
+ *
+ * Middleware (S2) only serves /dashboard/* to a browser holding a signed
+ * session cookie, so there the refresh cookie is all but certain to exist and
+ * every authenticated call should wait for the silent refresh instead of
+ * firing bare and failing with a 401 first. Public pages keep the old
+ * behaviour — a logged-out visitor there must not trigger a refresh call that
+ * can only fail.
+ */
+function pageExpectsSession(): boolean {
+  return typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")
+}
+
 type ApiFetchOptions = RequestInit & { skipAuth?: boolean }
 
 interface ApiEnvelope<T> {
@@ -79,13 +94,20 @@ export class ApiError extends Error {
   readonly status: number
   readonly code?: string
   readonly retryAfterSeconds?: number
+  /**
+   * The error envelope's top-level `data`, when the server sends one (the pay
+   * endpoints' 409 PAYMENT_ATTEMPT_ACTIVE carries the active attempt, and
+   * ALREADY_PAID the paid payment). Untyped: the caller narrows it.
+   */
+  readonly data?: unknown
 
-  constructor(message: string, status: number, code?: string, retryAfterSeconds?: number) {
+  constructor(message: string, status: number, code?: string, retryAfterSeconds?: number, data?: unknown) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
     this.retryAfterSeconds = retryAfterSeconds
+    this.data = data
   }
 }
 
@@ -102,6 +124,15 @@ export class ApiError extends Error {
  */
 async function authedRequest(path: string, options: ApiFetchOptions = {}): Promise<Response> {
   const { skipAuth, ...init } = options
+  // X4: after a full reload the access token is gone (memory only, S1). On a
+  // page that needs a session, wait for the shared refresh before the first
+  // call rather than letting each call 401 and retry. Concurrent callers share
+  // one refresh (tryRefresh dedupes). If it fails, the request still goes out
+  // bare and the 401 below ends the session — without a second refresh.
+  let refreshFailed = false
+  if (!skipAuth && !getAccessToken() && pageExpectsSession()) {
+    refreshFailed = !(await tryRefresh())
+  }
   const token = skipAuth ? null : getAccessToken()
 
   const isFormData = init.body instanceof FormData
@@ -120,7 +151,7 @@ async function authedRequest(path: string, options: ApiFetchOptions = {}): Promi
   let res = await request()
 
   if (res.status === 401 && !skipAuth) {
-    const refreshed = await tryRefresh()
+    const refreshed = !refreshFailed && (await tryRefresh())
     if (refreshed) {
       const newToken = getAccessToken()
       if (newToken) headers["Authorization"] = `Bearer ${newToken}`
@@ -166,6 +197,7 @@ async function authedRequest(path: string, options: ApiFetchOptions = {}): Promi
       error?: string
       retryAfterSeconds?: number
       meta?: { error?: string; retryAfterSeconds?: number }
+      data?: unknown
     } = await res.json().catch(() => ({ message: "Request failed" }))
     // A ValidationPipe rejection returns `message` as an array of strings.
     const message = Array.isArray(err.message) ? err.message.join(" ") : err.message
@@ -186,6 +218,7 @@ async function authedRequest(path: string, options: ApiFetchOptions = {}): Promi
       res.status,
       err.meta?.error ?? err.error,
       err.meta?.retryAfterSeconds ?? err.retryAfterSeconds,
+      err.data,
     )
   }
 

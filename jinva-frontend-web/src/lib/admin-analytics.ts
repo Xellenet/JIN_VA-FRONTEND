@@ -6,6 +6,8 @@
  * Any section listed in `degraded` is `null` and must read as unavailable,
  * never as zero.
  */
+import { threeLetterMonth } from "@/lib/spending"
+
 export type AnalyticsRange = "7d" | "30d" | "90d" | "1y"
 
 export const ANALYTICS_RANGES: ReadonlyArray<{ value: AnalyticsRange; label: string; period: string }> = [
@@ -113,10 +115,11 @@ export function fillSeries<T extends { bucket: string }>(
   const end = new Date(data.to)
   for (let d = startOf(new Date(data.from), data.bucket); d <= end; d = step(d, data.bucket)) {
     const key = d.toISOString()
-    const label =
+    const label = threeLetterMonth(
       data.bucket === "month"
         ? d.toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" })
-        : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })
+        : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }),
+    )
     out.push({ ...(byKey.get(key) ?? ({ ...empty, bucket: key } as T)), label })
   }
   return out

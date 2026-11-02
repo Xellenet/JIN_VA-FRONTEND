@@ -39,6 +39,7 @@ import { resolveMediaUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api"
 import { QueueCounterCard } from "@/components/dashboard/admin/queue-counter-card"
+import { threeLetterMonth } from "@/lib/spending"
 
 interface QueueItem {
   id: number
@@ -130,7 +131,7 @@ export default function PortfolioQueuePage() {
     }
   }
 
-  const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  const fmtDate = (d: string) => threeLetterMonth(new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 
   return (
     <DashboardLayout>

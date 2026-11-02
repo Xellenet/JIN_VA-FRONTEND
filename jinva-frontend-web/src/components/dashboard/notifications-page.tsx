@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,16 +19,19 @@ import { useAuth } from "@/contexts/auth-context"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { getNotificationTypeConfig } from "@/lib/status-badges"
 import {
+  formatFullDateTime,
   mapNotification,
+  notificationAction,
   readNotificationList,
   type BackendNotification,
+  type NotificationRole,
   type UnreadCountResponse,
 } from "@/lib/notifications"
 
 /**
  * NR4 — real pagination instead of a hardcoded `limit=50` with nothing beyond
  * it reachable. Same "Load more" + `meta.pagination` idiom the reviews lists
- * already use (see `artisan/reviews/page.tsx`).
+ * already use (see `components/artisan/profile/reviews-tab.tsx`).
  */
 const PAGE_SIZE = 20
 
@@ -46,12 +50,27 @@ function extractTotalPages(meta: Record<string, unknown> | undefined): number {
   return value > 0 ? value : 1
 }
 
-function fetchPage(page: number, unreadOnly = false): Promise<{ items: Notification[]; totalPages: number }> {
+/**
+ * H5: the number of notifications the server has, not the number loaded.
+ * `meta.pagination.total` (notifications.service `findAll`), tolerating the
+ * `totalItems` spelling the shared response DTO documents. Null when absent.
+ */
+function extractTotal(meta: Record<string, unknown> | undefined): number | null {
+  const p = meta?.pagination as { total?: unknown; totalItems?: unknown } | undefined
+  const value = p?.total ?? p?.totalItems ?? meta?.total
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function fetchPage(
+  page: number,
+  unreadOnly = false,
+): Promise<{ items: Notification[]; totalPages: number; total: number | null }> {
   return apiFetchWithMeta<BackendNotification[] | { items: BackendNotification[] }>(
     `/notifications?page=${page}&limit=${PAGE_SIZE}${unreadOnly ? "&isRead=false" : ""}`,
   ).then(({ data, meta }) => ({
     items: readNotificationList(data).map(mapNotification),
     totalPages: extractTotalPages(meta),
+    total: extractTotal(meta),
   }))
 }
 
@@ -79,6 +98,8 @@ export function NotificationsPage() {
    */
   const unreadOnly = useRef(false)
   const [unreadTotal, setUnreadTotal] = useState<number | null>(null)
+  /** H5: "All (n)" is the server's total, kept from the last unfiltered fetch. */
+  const [allTotal, setAllTotal] = useState<number | null>(null)
   const refreshUnreadTotal = useCallback(() => {
     apiFetch<UnreadCountResponse>("/notifications/unread-count")
       .then((r) => setUnreadTotal(typeof r?.count === "number" ? r.count : null))
@@ -100,6 +121,7 @@ export function NotificationsPage() {
       )
       setNotifications(applyLocalReads(pages.flatMap((p) => p.items)))
       setTotalPages(pages[pages.length - 1]?.totalPages ?? 1)
+      if (!unreadOnly.current && pages[0]?.total != null) setAllTotal(pages[0].total)
     } catch {
       // Keep what's on screen rather than blanking the feed on a transient error.
     }
@@ -120,10 +142,11 @@ export function NotificationsPage() {
     setIsLoadingMore(true)
     try {
       const next = page + 1
-      const { items, totalPages: total } = await fetchPage(next, unreadOnly.current)
+      const { items, totalPages: pagesTotal, total } = await fetchPage(next, unreadOnly.current)
       setNotifications((prev) => [...prev, ...applyLocalReads(items)])
       setPage(next)
-      setTotalPages(total)
+      setTotalPages(pagesTotal)
+      if (!unreadOnly.current && total != null) setAllTotal(total)
       loadedPages.current = next
     } catch {
       // Nothing appended; the button stays available for another try.
@@ -135,6 +158,9 @@ export function NotificationsPage() {
   if (!user) return null
 
   const unreadCount = unreadTotal ?? notifications.filter((n) => !n.isRead).length
+  const allCount = allTotal ?? (filter === "all" ? notifications.length : null)
+  const actionRole: NotificationRole | null =
+    user.role === "artisan" ? "artisan" : user.role === "user" ? "user" : null
   const displayed = filter === "unread" ? notifications.filter((n) => !n.isRead) : notifications
 
   const changeFilter = (next: "all" | "unread") => {
@@ -177,43 +203,52 @@ export function NotificationsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Notifications</p>
-            <h1 className="mt-0.5 text-2xl font-bold text-foreground">Activity Feed</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">Notifications</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               {unreadCount > 0
                 ? `You have ${unreadCount} unread notification${unreadCount > 1 ? "s" : ""}`
                 : "You're all caught up"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={filter === "all" ? "default" : "outline"}
-              size="sm"
-              onClick={() => changeFilter("all")}
-              className={filter === "all" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-transparent"}
-            >
-              All ({notifications.length})
-            </Button>
-            <Button
-              variant={filter === "unread" ? "default" : "outline"}
-              size="sm"
-              onClick={() => changeFilter("unread")}
-              className={filter === "unread" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-transparent"}
-            >
-              Unread ({unreadCount})
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Show" className="flex gap-2">
+              <Button
+                variant={filter === "all" ? "default" : "outline"}
+                size="sm"
+                aria-pressed={filter === "all"}
+                onClick={() => changeFilter("all")}
+                className={cn(
+                  "h-11 sm:h-9",
+                  filter === "all" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-transparent",
+                )}
+              >
+                {allCount == null ? "All" : `All (${allCount})`}
+              </Button>
+              <Button
+                variant={filter === "unread" ? "default" : "outline"}
+                size="sm"
+                aria-pressed={filter === "unread"}
+                onClick={() => changeFilter("unread")}
+                className={cn(
+                  "h-11 sm:h-9",
+                  filter === "unread" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-transparent",
+                )}
+              >
+                Unread ({unreadCount})
+              </Button>
+            </div>
             {unreadCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={markAllRead} className="text-primary hover:text-primary/80">
-                <CheckCheck className="mr-1.5 h-4 w-4" />
+              <Button variant="ghost" size="sm" onClick={markAllRead} className="h-11 text-primary hover:text-primary/80 sm:h-9">
+                <CheckCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />
                 Mark all read
               </Button>
             )}
           </div>
         </div>
 
-        <Card>
+        <Card className="gap-0 py-0">
           <CardContent className="p-0">
             {isLoading ? (
               <div className="flex items-center justify-center py-16">
@@ -256,11 +291,14 @@ export function NotificationsPage() {
                         }
                       }}
                       className={cn(
-                        "flex w-full cursor-pointer items-start gap-4 px-6 py-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "flex w-full cursor-pointer items-start gap-3 px-4 py-4 text-left sm:gap-4 sm:px-6 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         !notification.isRead && "bg-accent/50",
                       )}
                     >
-                      <div className={cn("mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full", config.bg)}>
+                      <div
+                        className={cn("mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full", config.bg)}
+                        aria-hidden="true"
+                      >
                         <Icon className={cn("h-5 w-5", config.color)} />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -272,12 +310,20 @@ export function NotificationsPage() {
                             <p className="mt-0.5 text-sm text-muted-foreground">{notification.message}</p>
                           </div>
                           {!notification.isRead && (
-                            <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-primary" />
+                            <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-primary">
+                              <span className="sr-only">Unread</span>
+                            </span>
                           )}
                         </div>
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-muted-foreground">{notification.time}</span>
-                          <Badge variant="outline" className="text-[10px] capitalize">
+                          <time
+                            dateTime={notification.createdAt}
+                            title={formatFullDateTime(notification.createdAt) || undefined}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {notification.time}
+                          </time>
+                          <Badge variant="outline" className="text-[11px]">
                             {config.label}
                           </Badge>
                         </div>
@@ -287,14 +333,14 @@ export function NotificationsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="Mark read"
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            aria-label={`Mark "${notification.title}" as read`}
+                            className="-my-1.5 -mr-2 h-11 w-11 text-muted-foreground hover:text-foreground sm:h-9 sm:w-9"
                             onClick={(e) => {
                               e.stopPropagation()
                               markRead(notification.id)
                             }}
                           >
-                            <Check className="h-4 w-4" />
+                            <Check className="h-4 w-4" aria-hidden="true" />
                           </Button>
                         )}
                       </div>
@@ -309,7 +355,7 @@ export function NotificationsPage() {
         {/* NR4 — anything past the first page is reachable rather than lost. */}
         {!isLoading && page < totalPages && (
           <div className="flex justify-center">
-            <Button variant="outline" className="bg-transparent" onClick={loadMore} disabled={isLoadingMore}>
+            <Button variant="outline" className="h-11 bg-transparent sm:h-9" onClick={loadMore} disabled={isLoadingMore}>
               {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Load more notifications
             </Button>
@@ -322,18 +368,28 @@ export function NotificationsPage() {
           {selectedNotification && (() => {
             const config = getNotificationTypeConfig(selectedNotification.type)
             const Icon = config.icon
+            const fullDate = formatFullDateTime(selectedNotification.createdAt)
+            // H5: the same typed-id action the bell menu shows, for this role.
+            const action = actionRole
+              ? notificationAction(selectedNotification.rawType ?? "", selectedNotification.payload, actionRole)
+              : null
             return (
               <>
                 <DialogHeader>
                   <div className="flex items-center gap-3">
-                    <div className={cn("flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full", config.bg)}>
+                    <div
+                      className={cn("flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full", config.bg)}
+                      aria-hidden="true"
+                    >
                       <Icon className={cn("h-5 w-5", config.color)} />
                     </div>
                     <div>
                       <DialogTitle className="text-left">{selectedNotification.title}</DialogTitle>
-                      <div className="mt-1 flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px] capitalize">{config.label}</Badge>
-                        <span className="text-xs text-muted-foreground">{selectedNotification.time}</span>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="text-[11px]">{config.label}</Badge>
+                        <time dateTime={selectedNotification.createdAt} className="text-xs text-muted-foreground">
+                          {fullDate || selectedNotification.time}
+                        </time>
                       </div>
                     </div>
                   </div>
@@ -341,10 +397,21 @@ export function NotificationsPage() {
                 <div className="rounded-lg border border-border bg-muted/30 p-4">
                   <p className="text-sm leading-relaxed text-foreground">{selectedNotification.message}</p>
                 </div>
-                <div className="flex justify-end">
-                  <Button variant="outline" className="bg-transparent" onClick={() => setSelectedNotification(null)}>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    variant="outline"
+                    className="h-11 bg-transparent sm:h-9"
+                    onClick={() => setSelectedNotification(null)}
+                  >
                     Close
                   </Button>
+                  {action && (
+                    <Button className="h-11 sm:h-9" asChild>
+                      <Link href={action.href} onClick={() => setSelectedNotification(null)}>
+                        {action.label}
+                      </Link>
+                    </Button>
+                  )}
                 </div>
               </>
             )

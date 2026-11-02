@@ -29,6 +29,7 @@ import {
 import {
   AlertTriangle,
   ArrowLeft,
+  Briefcase,
   Calendar,
   ClipboardList,
   Clock,
@@ -55,6 +56,7 @@ import {
 } from "@/lib/status-badges"
 import { DisputeProgressStrip } from "@/components/disputes/dispute-progress-strip"
 import { PartyDisputeSkeleton } from "@/components/disputes/party-dispute-skeleton"
+import { threeLetterMonth } from "@/lib/spending"
 
 /**
  * DC3 — the party-facing dispute page (design-spec.md §2,
@@ -122,6 +124,9 @@ export interface PartyDispute {
   updatedAt?: string
   viewerRole: "RAISER" | "COUNTERPARTY"
   canRespond: boolean
+  /** B5: the job behind the dispute's booking, or null when none exists. */
+  jobId?: number | null
+  responseDue?: boolean
 }
 
 /**
@@ -146,11 +151,11 @@ function firstNameOrNull(person?: DisputePerson | null): string | undefined {
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return "—"
-  return new Date(iso).toLocaleDateString("en-GB", {
+  return threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
-  })
+  }))
 }
 
 export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
@@ -171,8 +176,8 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  const backHref = role === "artisan" ? "/dashboard/artisan/jobs" : "/dashboard/user/bookings"
-  const backLabel = role === "artisan" ? "Back to My Jobs" : "Back to My Bookings"
+  const backHref = role === "artisan" ? "/dashboard/artisan/disputes" : "/dashboard/user/bookings"
+  const backLabel = role === "artisan" ? "Back to disputes" : "Back to My Bookings"
   const supportHref = `/dashboard/${role}/support`
 
   const load = useCallback(async (id: string) => {
@@ -194,7 +199,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
   }, [disputeId, load])
 
   const backButton = (
-    <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
+    <Button variant="ghost" asChild className="h-11 gap-2 text-muted-foreground hover:text-foreground sm:h-9">
       <Link href={backHref}>
         <ArrowLeft className="h-4 w-4" />
         {backLabel}
@@ -233,7 +238,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
                 className="bg-transparent"
                 onClick={() => disputeId && load(disputeId)}
               >
-                Try Again
+                Try again
               </Button>
               <Button variant="ghost" asChild>
                 <Link href={supportHref}>Get help</Link>
@@ -354,7 +359,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
       : dispute.status === "CLOSED"
         ? { text: `Closed on ${fmtDate(dispute.resolvedAt)}.`, emphasised: false }
         : {
-            text: "Our team is reviewing this. We aim to resolve disputes within 48 hours.",
+            text: "Our team is reviewing this. You'll get a notification when there's a decision.",
             emphasised: false,
           }
 
@@ -536,7 +541,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
 
                     {viewerWasRefunded && (
                       <p className="text-xs text-muted-foreground">
-                        Refunds usually reach your account within 5–10 business days.
+                        The refund goes back to the account you paid from. How long it takes to show depends on your bank or mobile money provider.
                       </p>
                     )}
                   </>
@@ -640,7 +645,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
 
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    className="h-11 bg-primary text-primary-foreground hover:bg-primary/90 sm:h-9"
                     disabled={!draftValid || isSubmitting}
                     onClick={() => setConfirmOpen(true)}
                   >
@@ -649,7 +654,7 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
                   </Button>
                   <Button
                     variant="outline"
-                    className="bg-transparent"
+                    className="h-11 bg-transparent sm:h-9"
                     disabled={isSubmitting || draft.length === 0}
                     onClick={() => setDraft("")}
                   >
@@ -787,17 +792,25 @@ export function PartyDisputePage({ role }: Readonly<{ role: PartyRole }>) {
             <CardContent className="space-y-2 p-5">
               {/* "Message {counterparty}" needs the counterparty summary the
                   party read doesn't carry yet — omitted rather than rendered
-                  disabled, since the only reason would be missing data. Same
-                  for the artisan's "View linked job", which needs a jobId. */}
+                  disabled, since the only reason would be missing data.
+                  "View job" shows only when the API links a job (B5 jobId). */}
+              {dispute.jobId != null && (
+                <Button variant="outline" className="h-11 w-full bg-transparent sm:h-9" asChild>
+                  <Link href={`/dashboard/${role}/jobs/${dispute.jobId}`}>
+                    <Briefcase className="mr-2 h-4 w-4" />
+                    View job
+                  </Link>
+                </Button>
+              )}
               {role === "user" && dispute.booking?.id && (
-                <Button variant="outline" className="w-full bg-transparent" asChild>
+                <Button variant="outline" className="h-11 w-full bg-transparent sm:h-9" asChild>
                   <Link href={`/dashboard/user/bookings/${dispute.booking.id}`}>
                     <ClipboardList className="mr-2 h-4 w-4" />
                     View booking
                   </Link>
                 </Button>
               )}
-              <Button variant="ghost" className="w-full" asChild>
+              <Button variant="ghost" className="h-11 w-full sm:h-9" asChild>
                 <Link href={supportHref}>
                   <HelpCircle className="mr-2 h-4 w-4" />
                   Get help

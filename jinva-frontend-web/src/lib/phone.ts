@@ -62,7 +62,7 @@ export function isSupportedPhoneCountry(country: string | undefined | null): cou
  * prefix; every other country uses the library's mobile example.
  */
 const CURATED_EXAMPLES: Partial<Record<SupportedPhoneCountry, string>> = {
-  GH: "024 123 4567",
+  GH: "24 123 4567",
 }
 
 let displayNames: Intl.DisplayNames | null | undefined
@@ -90,7 +90,57 @@ export function getCountryFlag(country: string): string {
 }
 
 export function getPhoneExample(country: SupportedPhoneCountry): string {
-  return CURATED_EXAMPLES[country] ?? getExampleNumber(country, examples)?.formatNational() ?? ""
+  const example = getExampleNumber(country, examples)
+  return CURATED_EXAMPLES[country] ?? (example ? formatAfterCallingCode(example) : "")
+}
+
+/**
+ * Sign-up form v2: once the calling code is in the picker, a trunk 0 must not
+ * appear in the field (`+233` + `24 123 4567`, never `+233` + `024…`).
+ *
+ * Whether a country dials a trunk 0 comes from libphonenumber's own metadata:
+ * its national format starts with a 0 that isn't part of the number. Today
+ * that is GH, LR, NG and SL. In BJ and CI the leading 0 **is** part of the
+ * number (`+225 07…`), so it is kept; elsewhere a 0 is simply not valid and
+ * the usual "Enter a valid … number" error says so.
+ */
+const trunkZeroCache = new Map<SupportedPhoneCountry, boolean>()
+
+export function usesTrunkZero(country: SupportedPhoneCountry): boolean {
+  let known = trunkZeroCache.get(country)
+  if (known === undefined) {
+    const example = getExampleNumber(country, examples)
+    known = !!example && !example.nationalNumber.startsWith("0") && /^\D*0/.test(example.formatNational())
+    trunkZeroCache.set(country, known)
+  }
+  return known
+}
+
+/** `24 123 4567` for +233241234567: the international format without `+CC `. */
+function formatAfterCallingCode(parsed: { formatInternational(): string; countryCallingCode: string }): string {
+  return parsed
+    .formatInternational()
+    .slice(parsed.countryCallingCode.length + 1)
+    .trim()
+}
+
+/**
+ * Removes a typed trunk 0 for a country that uses one: the first digit, when
+ * it is a 0 and the next digit isn't (so `00…` can still start an
+ * international prefix). Separators are kept. `caret` moves back by one when
+ * the removed 0 was before it.
+ */
+export function stripTrunkZero(
+  raw: string,
+  country: SupportedPhoneCountry,
+  caret: number | null = null,
+): { value: string; caret: number | null } {
+  if (!usesTrunkZero(country)) return { value: raw, caret }
+  const match = /^(\D*)0(?=\D*[1-9])/.exec(raw)
+  if (!match) return { value: raw, caret }
+  const at = match[1].length
+  const value = raw.slice(0, at) + raw.slice(at + 1)
+  return { value, caret: caret === null ? null : caret > at ? caret - 1 : caret }
 }
 
 export interface PhoneCountryOption {
@@ -155,8 +205,8 @@ export function readInternationalInput(raw: string): InternationalInput {
       kind: "supported",
       country: parsed.country,
       national: parsed.isValid()
-        ? parsed.formatNational()
-        : afterCallingCode(trimmed, getCallingCode(parsed.country), isDoubleZero),
+        ? formatAfterCallingCode(parsed)
+        : afterCallingCode(trimmed, parsed.country, isDoubleZero),
     }
   }
   return matchCallingCode(trimmed, digits, isDoubleZero)
@@ -166,7 +216,7 @@ function matchCallingCode(trimmed: string, digits: string, isDoubleZero: boolean
   for (const country of SUPPORTED_PHONE_COUNTRIES) {
     const code = getCallingCode(country)
     if (digits.startsWith(code)) {
-      return { kind: "supported", country, national: afterCallingCode(trimmed, code, isDoubleZero) }
+      return { kind: "supported", country, national: afterCallingCode(trimmed, country, isDoubleZero) }
     }
   }
   return digits.length >= MAX_CALLING_CODE_LENGTH ? { kind: "unsupported" } : { kind: "pending" }
@@ -175,16 +225,35 @@ function matchCallingCode(trimmed: string, digits: string, isDoubleZero: boolean
 /**
  * What the user wrote after `+CC` / `00CC`, with their own spacing kept
  * (`+233 24 123 456` → `24 123 456`), for a number that isn't complete yet.
- * A typed trunk 0 is kept too, so `+2330241…` reads `0241…`.
+ * Sign-up form v2: a typed trunk 0 is dropped where the country uses one, so
+ * `+2330241…` reads `241…`; in BJ and CI the 0 is part of the number and stays.
  */
-function afterCallingCode(trimmed: string, code: string, isDoubleZero: boolean): string {
-  let skip = (isDoubleZero ? 2 : 0) + code.length
+function afterCallingCode(trimmed: string, country: SupportedPhoneCountry, isDoubleZero: boolean): string {
+  let skip = (isDoubleZero ? 2 : 0) + getCallingCode(country).length
   let i = 0
   while (i < trimmed.length && skip > 0) {
     if (/\d/.test(trimmed[i])) skip--
     i++
   }
-  return trimmed.slice(i).replace(/^[\s.-]+/, "")
+  return stripTrunkZero(trimmed.slice(i).replace(/^[\s.-]+/, ""), country).value
+}
+
+/**
+ * A complete number typed or pasted with the calling code but no `+`
+ * (`2330241234567` with Ghana selected): what the field should show instead
+ * (`24 123 4567`), or `null` to leave the input alone. Only once the whole
+ * number is valid, so a national number that merely starts with the same
+ * digits (`23…` in Ghana) is never touched while it is being typed.
+ */
+export function nationalFromBareCallingCode(raw: string, country: SupportedPhoneCountry): string | null {
+  if (/^\s*\+/.test(raw)) return null
+  const digits = raw.replace(/\D/g, "")
+  if (!digits.startsWith(getCallingCode(country))) return null
+  const international = parsePhoneNumberFromString(`+${digits}`)
+  if (!international?.isValid() || international.country !== country) return null
+  const national = parsePhoneNumberFromString(raw, country)
+  if (national?.isValid() && national.number !== international.number) return null
+  return formatAfterCallingCode(international)
 }
 
 /**
@@ -204,10 +273,15 @@ export function phoneToE164(raw: string, country: SupportedPhoneCountry): string
   return parsed.number
 }
 
-/** PH5: the national display form on blur (`024 123 4567`), or `null` if not valid. */
+/**
+ * PH5: the display form on blur, or `null` if not valid. Sign-up form v2: the
+ * number as written after the calling code (`24 123 4567`), with no trunk 0,
+ * because the picker already shows `+233`.
+ */
 export function formatPhoneNational(raw: string, country: SupportedPhoneCountry): string | null {
   const e164 = phoneToE164(raw, country)
-  return e164 ? (parsePhoneNumberFromString(e164)?.formatNational() ?? null) : null
+  const parsed = e164 ? parsePhoneNumberFromString(e164) : undefined
+  return parsed ? formatAfterCallingCode(parsed) : null
 }
 
 /**
@@ -222,9 +296,19 @@ export function splitStoredPhone(stored: string | null | undefined): {
   if (!stored) return { country: DEFAULT_PHONE_COUNTRY, national: "" }
   const parsed = parsePhoneNumberFromString(stored, DEFAULT_PHONE_COUNTRY)
   if (parsed?.isValid() && isSupportedPhoneCountry(parsed.country)) {
-    return { country: parsed.country, national: parsed.formatNational() }
+    return { country: parsed.country, national: formatAfterCallingCode(parsed) }
   }
   return { country: DEFAULT_PHONE_COUNTRY, national: stored }
+}
+
+/**
+ * A stored number shown on its own, with no country picker beside it (a
+ * profile header): the familiar national form, trunk 0 included
+ * (`024 123 4567`). Anything unparseable is shown as stored.
+ */
+export function formatStoredPhone(stored: string): string {
+  const parsed = parsePhoneNumberFromString(stored, DEFAULT_PHONE_COUNTRY)
+  return parsed?.isValid() ? parsed.formatNational() : stored
 }
 
 /**

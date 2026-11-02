@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import type { UserRole } from "@/lib/types"
+import { isArtisanPreviewPath } from "@/lib/auth"
 
 const ROLE_HOME: Record<UserRole, string> = {
   admin: "/dashboard/admin",
@@ -28,14 +29,17 @@ const ROLE_HOME: Record<UserRole, string> = {
 export function RoleGuard({ allow, children }: { allow: UserRole; children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
+  // P1: "Preview as a client" (see isArtisanPreviewPath).
+  const allowed = !user || user.role === allow || isArtisanPreviewPath(user.role, pathname)
 
   useEffect(() => {
     if (isLoading) return
     if (!user) return // AuthProvider already handles the unauthenticated redirect
-    if (user.role !== allow) {
+    if (!allowed) {
       router.replace(ROLE_HOME[user.role])
     }
-  }, [isLoading, user, allow, router])
+  }, [isLoading, user, allowed, router])
 
   if (isLoading) {
     return (
@@ -45,7 +49,7 @@ export function RoleGuard({ allow, children }: { allow: UserRole; children: Reac
     )
   }
 
-  if (user && user.role !== allow) {
+  if (!allowed) {
     return null
   }
 

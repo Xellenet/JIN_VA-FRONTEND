@@ -6,7 +6,6 @@ import { formatDistanceToNow } from "date-fns"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -31,11 +30,12 @@ import {
   ChevronDown,
   AlertTriangle,
 } from "lucide-react"
-import { cn, resolveAvatarUrl } from "@/lib/utils"
+import { resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { fetchAllFavourites } from "@/hooks/use-favourites"
 import { toast } from "sonner"
-import { availabilityLabel } from "@/lib/availability"
+import type { AvailabilitySummary } from "@/lib/availability"
+import { AvailabilityBadge } from "@/components/dashboard/availability-badge"
 
 interface BackendArtisan {
   id: string
@@ -44,6 +44,8 @@ interface BackendArtisan {
   totalReviews: number
   completedJobsCount?: number
   availabilityStatus: string
+  /** Computed from the artisan's Calendar settings; absent on an older API. */
+  availability?: AvailabilitySummary
   isVerified: boolean
   location?: string
   businessName?: string
@@ -69,8 +71,8 @@ function mapArtisan(a: BackendArtisan) {
     avgRating: Number(a.averageRating ?? 0),
     totalReviews: Number(a.totalReviews ?? 0),
     completedJobsCount: a.completedJobsCount,
-    availability: a.availabilityStatus === "AVAILABLE" ? "available" : "busy",
-    availabilityLabel: availabilityLabel(a.availabilityStatus),
+    availabilityStatus: a.availabilityStatus,
+    availabilitySummary: a.availability,
     isVerified: a.isVerified,
     favouritedAt: a.favouritedAt,
   }
@@ -324,18 +326,11 @@ export default function FavouritesPage() {
                               Saved {formatDistanceToNow(new Date(artisan.favouritedAt), { addSuffix: true })}
                             </p>
                           )}
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "mt-2 text-xs",
-                              artisan.availability === "available"
-                                ? "border-primary/30 bg-primary/5 text-primary"
-                                : "border-border bg-muted text-muted-foreground",
-                            )}
-                          >
-                            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                            {artisan.availabilityLabel}
-                          </Badge>
+                          <AvailabilityBadge
+                            summary={artisan.availabilitySummary}
+                            status={artisan.availabilityStatus}
+                            className="mt-2 text-xs"
+                          />
                         </div>
 
                         {artisan.completedJobsCount != null && (

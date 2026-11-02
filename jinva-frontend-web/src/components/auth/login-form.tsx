@@ -20,6 +20,7 @@ import {
   RESTORABLE_UNTIL_PARAM,
 } from "@/lib/auth"
 import { setFlashToast } from "@/lib/flash"
+import { threeLetterMonth } from "@/lib/spending"
 import { AuthSplitLayout } from "./auth-split-layout"
 import { EMAIL_MESSAGES, PASSWORD_MESSAGES, validateEmail } from "./signup-fields"
 
@@ -51,7 +52,7 @@ function formatWindowDate(iso: string | undefined): string | null {
   if (!iso) return null
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  return threeLetterMonth(date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 }
 
 /**

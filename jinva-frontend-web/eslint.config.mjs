@@ -11,6 +11,20 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
+  // SEC-17: user text renders only as text nodes. No dangerouslySetInnerHTML.
+  {
+    rules: {
+      "react/no-danger": "error",
+    },
+  },
+  // The single reviewed exception: shadcn/ui's chart builds a <style> tag
+  // from static config keys and var(--chart-n) colours only (SEC-22).
+  {
+    files: ["src/components/ui/chart.tsx"],
+    rules: {
+      "react/no-danger": "off",
+    },
+  },
   {
     ignores: [
       "node_modules/**",

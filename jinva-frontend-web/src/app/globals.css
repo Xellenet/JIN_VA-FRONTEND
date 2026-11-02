@@ -282,6 +282,36 @@
       animation: jinva-enter 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
       animation-delay: var(--reveal-delay, 0ms);
     }
+
+    /* A line that draws itself from the left, e.g. the dashboard's job track. */
+    @keyframes jinva-draw {
+      from {
+        transform: scaleX(0);
+      }
+      to {
+        transform: scaleX(1);
+      }
+    }
+    [data-draw] {
+      transform-origin: left center;
+      animation: jinva-draw 900ms cubic-bezier(0.65, 0, 0.35, 1) both;
+      animation-delay: var(--reveal-delay, 0ms);
+    }
+
+    /* Content swapped in answer to a person's action, e.g. a filter change. */
+    @keyframes jinva-swap {
+      from {
+        opacity: 0;
+        transform: translateY(0.25rem);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+    [data-swap] {
+      animation: jinva-swap 220ms ease-out both;
+    }
   }
 
   /* Thin, theme-aware scrollbar */

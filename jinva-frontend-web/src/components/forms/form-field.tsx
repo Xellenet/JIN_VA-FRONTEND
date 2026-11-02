@@ -143,11 +143,15 @@ export function FormAnnouncer({ message }: { message: string }) {
   )
 }
 
-/** Input classes shared by `/signup` and "Complete your account" (LY1). */
-export const AUTH_INPUT_CLASS = "h-10 bg-background border-input text-foreground"
+/**
+ * Input classes shared by `/signup` and "Complete your account" (LY1).
+ * Sign-up form v2: 44px on phones (tap target), 40px from `sm` up as before.
+ */
+export const AUTH_INPUT_CLASS = "h-11 sm:h-10 bg-background border-input text-foreground"
 
 /**
  * §3.9 fix 3: Radix `SelectTrigger`'s own `data-[size=default]:h-9` and `w-fit`
  * beat a plain `h-10`, so triggers rendered 36px and content-width.
  */
-export const AUTH_SELECT_TRIGGER_CLASS = "w-full data-[size=default]:h-10 bg-background border-input text-foreground"
+export const AUTH_SELECT_TRIGGER_CLASS =
+  "w-full data-[size=default]:h-11 sm:data-[size=default]:h-10 bg-background border-input text-foreground"

@@ -9,7 +9,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/contexts/auth-context"
 import {
   LayoutGrid,
-  Wrench,
   Users,
   UserCircle,
   ClipboardList,
@@ -37,61 +36,78 @@ interface SidebarProps {
   readonly onClose: () => void
 }
 
+export interface NavLink {
+  readonly href: string
+  readonly label: string
+  readonly icon: React.ElementType
+}
+
+const ADMIN_LINKS: readonly NavLink[] = [
+  { href: "/dashboard/admin",                  label: "Overview",        icon: LayoutGrid    },
+  { href: "/dashboard/admin/artisans",          label: "Artisans",        icon: Users         },
+  { href: "/dashboard/admin/clients",           label: "Clients",         icon: UserCircle    },
+  { href: "/dashboard/admin/orders",            label: "Jobs",            icon: ClipboardList },
+  { href: "/dashboard/admin/portfolio-queue",   label: "Portfolio Queue", icon: ImageIcon     },
+  // Placed with the other moderation queue so the two sit together (AT1).
+  { href: "/dashboard/admin/verifications",      label: "Verifications",   icon: ShieldCheck   },
+  { href: "/dashboard/admin/reviews",           label: "Reviews",         icon: Star          },
+  { href: "/dashboard/admin/transactions",      label: "Transactions",    icon: CreditCard    },
+  { href: "/dashboard/admin/disputes",          label: "Disputes",        icon: AlertTriangle },
+  { href: "/dashboard/admin/analytics",         label: "Analytics",       icon: BarChart2     },
+]
+
+/**
+ * The artisan's day-to-day work, then the shop front. Services, Portfolio and
+ * Reviews are tabs of Profile; Analytics is a tab of Earnings; Verification
+ * is a tab of Settings. Disputes are reached from My jobs, a job and the
+ * Overview, as before.
+ */
+const ARTISAN_LINKS: readonly NavLink[] = [
+  { href: "/dashboard/artisan",                 label: "Overview",  icon: LayoutGrid    },
+  { href: "/dashboard/artisan/calendar",        label: "Calendar",  icon: CalendarDays  },
+  { href: "/dashboard/artisan/jobs",            label: "My jobs",   icon: ClipboardList },
+  { href: "/dashboard/artisan/messages",        label: "Messages",  icon: MessageSquare },
+  { href: "/dashboard/artisan/earnings",        label: "Earnings",  icon: Wallet        },
+  { href: "/dashboard/artisan/profile",         label: "Profile",   icon: UserCircle    },
+]
+
+const USER_LINKS: readonly NavLink[] = [
+  { href: "/dashboard/user",                    label: "Overview",      icon: LayoutGrid    },
+  { href: "/dashboard/user/post-job",           label: "Post a Job",    icon: Plus          },
+  { href: "/dashboard/user/search",             label: "Find Artisans", icon: Search        },
+  { href: "/dashboard/user/bookings",           label: "My Bookings",   icon: CalendarDays  },
+  { href: "/dashboard/user/report",             label: "Spending",      icon: Wallet        },
+  { href: "/dashboard/user/jobs",               label: "My Jobs",       icon: ClipboardList },
+  { href: "/dashboard/user/favourites",         label: "Favourites",    icon: Heart         },
+  { href: "/dashboard/user/messages",           label: "Messages",      icon: MessageSquare },
+]
+
+const NAVIGATION_BY_ROLE = {
+  admin: { links: ADMIN_LINKS, roleBase: "/dashboard/admin" },
+  artisan: { links: ARTISAN_LINKS, roleBase: "/dashboard/artisan" },
+  user: { links: USER_LINKS, roleBase: "/dashboard/user" },
+} as const
+
+/**
+ * X3: every link a role's sidebar shows, main and workspace. The header reads
+ * its page title from here, so nav, header and page all use one name.
+ */
+export function navLinksFor(role: UserRole): readonly NavLink[] {
+  const { links, roleBase } = NAVIGATION_BY_ROLE[role]
+  return [
+    ...links,
+    { href: `${roleBase}/settings`, label: "Settings", icon: Settings },
+    { href: `${roleBase}/support`, label: "Support", icon: HelpCircle },
+  ]
+}
+
 export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
   const pathname = usePathname()
   const { user } = useAuth()
 
-  const adminLinks = [
-    { href: "/dashboard/admin",                  label: "Overview",        icon: LayoutGrid    },
-    { href: "/dashboard/admin/artisans",          label: "Artisans",        icon: Users         },
-    { href: "/dashboard/admin/clients",           label: "Clients",         icon: UserCircle    },
-    { href: "/dashboard/admin/orders",            label: "Jobs",            icon: ClipboardList },
-    { href: "/dashboard/admin/portfolio-queue",   label: "Portfolio Queue", icon: ImageIcon     },
-    // Placed with the other moderation queue so the two sit together (AT1).
-    { href: "/dashboard/admin/verifications",      label: "Verifications",   icon: ShieldCheck   },
-    { href: "/dashboard/admin/reviews",           label: "Reviews",         icon: Star          },
-    { href: "/dashboard/admin/transactions",      label: "Transactions",    icon: CreditCard    },
-    { href: "/dashboard/admin/disputes",          label: "Disputes",        icon: AlertTriangle },
-    { href: "/dashboard/admin/analytics",         label: "Analytics",       icon: BarChart2     },
-  ]
+  const { links } = NAVIGATION_BY_ROLE[role]
 
-  const artisanLinks = [
-    { href: "/dashboard/artisan",                 label: "Overview",  icon: LayoutGrid    },
-    { href: "/dashboard/artisan/jobs",            label: "My Jobs",   icon: ClipboardList },
-    { href: "/dashboard/artisan/earnings",        label: "Earnings",  icon: Wallet        },
-    { href: "/dashboard/artisan/profile",         label: "Profile",   icon: UserCircle    },
-    // QA KYC-01: the only way to submit ID documents for verification.
-    { href: "/dashboard/artisan/verification",    label: "Verification", icon: ShieldCheck },
-    { href: "/dashboard/artisan/services",        label: "Services",  icon: Wrench        },
-    { href: "/dashboard/artisan/portfolio",       label: "Portfolio", icon: ImageIcon     },
-    { href: "/dashboard/artisan/reviews",         label: "Reviews",   icon: Star          },
-    { href: "/dashboard/artisan/calendar",        label: "Calendar",  icon: CalendarDays  },
-    { href: "/dashboard/artisan/analytics",       label: "Analytics", icon: BarChart2     },
-    { href: "/dashboard/artisan/messages",        label: "Messages",  icon: MessageSquare },
-  ]
-
-  const userLinks = [
-    { href: "/dashboard/user",                    label: "Overview",      icon: LayoutGrid    },
-    { href: "/dashboard/user/post-job",           label: "Post a Job",    icon: Plus          },
-    { href: "/dashboard/user/search",             label: "Find Artisans", icon: Search        },
-    { href: "/dashboard/user/bookings",           label: "My Bookings",   icon: CalendarDays  },
-    { href: "/dashboard/user/jobs",               label: "My Jobs",       icon: ClipboardList },
-    { href: "/dashboard/user/favourites",         label: "Favourites",    icon: Heart         },
-    { href: "/dashboard/user/messages",           label: "Messages",      icon: MessageSquare },
-  ]
-
-  const navigationByRole = {
-    admin: { links: adminLinks, roleBase: "/dashboard/admin" },
-    artisan: { links: artisanLinks, roleBase: "/dashboard/artisan" },
-    user: { links: userLinks, roleBase: "/dashboard/user" },
-  } as const
-
-  const { links, roleBase } = navigationByRole[role]
-
-  const workspaceLinks = [
-    { href: `${roleBase}/settings`, label: "Settings", icon: Settings },
-    { href: `${roleBase}/support`,  label: "Support",  icon: HelpCircle },
-  ]
+  const workspaceLinks = navLinksFor(role).slice(links.length)
 
   const userInitials = user?.name
     .split(" ")
@@ -103,7 +119,7 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
   const roleLabel =
     role === "admin" ? "Administrator" : role === "artisan" ? "Artisan" : "Client"
 
-  const navLink = (link: { href: string; label: string; icon: React.ElementType }) => {
+  const navLink = (link: NavLink) => {
     const Icon = link.icon
     const isActive = pathname === link.href
     return (
@@ -111,14 +127,15 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
         key={link.href}
         href={link.href}
         onClick={onClose}
+        aria-current={isActive ? "page" : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors max-lg:min-h-11",
           isActive
             ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
         )}
       >
-        <Icon className="h-4 w-4 shrink-0" />
+        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
         {link.label}
       </Link>
     )
@@ -133,7 +150,7 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
         <button
           type="button"
           onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent/50 lg:hidden"
+          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent/50 lg:hidden"
           aria-label="Close sidebar"
         >
           <X className="h-4 w-4" />
@@ -142,19 +159,19 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
 
       {/* Main nav — scrollbar hidden but scrollable */}
       <div className="flex-1 overflow-y-auto px-3 py-3 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-        <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">
+        <p id="sidebar-main" className="mb-1.5 px-3 text-xs font-medium text-sidebar-foreground/60">
           Main
         </p>
-        <nav className="space-y-0.5">
+        <nav aria-labelledby="sidebar-main" className="space-y-0.5">
           {links.map(navLink)}
         </nav>
 
         <div className="my-3 border-t border-sidebar-border" />
 
-        <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">
+        <p id="sidebar-workspace" className="mb-1.5 px-3 text-xs font-medium text-sidebar-foreground/60">
           Workspace
         </p>
-        <nav className="space-y-0.5">
+        <nav aria-labelledby="sidebar-workspace" className="space-y-0.5">
           {workspaceLinks.map(navLink)}
         </nav>
       </div>
@@ -164,7 +181,7 @@ export function Sidebar({ role, open, onClose }: Readonly<SidebarProps>) {
         <div className="border-t border-sidebar-border p-3">
           <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
             <Avatar className="h-8 w-8 shrink-0">
-              <AvatarImage src={user.avatar} alt={user.name} />
+              <AvatarImage src={user.avatar || undefined} alt={user.name} />
               <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
                 {userInitials}
               </AvatarFallback>

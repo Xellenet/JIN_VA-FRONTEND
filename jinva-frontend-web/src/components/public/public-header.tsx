@@ -56,7 +56,8 @@ export function PublicHeader() {
         <Link
           href="/"
           aria-label="JinVa home"
-          className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          // 44px tall tap target on phones; the negative margin keeps the logo where it was.
+          className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:-my-1.5 max-sm:py-1.5"
         >
           <Logo />
         </Link>
@@ -88,7 +89,7 @@ export function PublicHeader() {
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Open menu" className="lg:hidden">
+              <Button variant="ghost" size="icon" aria-label="Open menu" className="max-sm:size-11 lg:hidden">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>

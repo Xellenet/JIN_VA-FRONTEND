@@ -1,99 +1,138 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { Info, LifeBuoy, UserPlus } from "lucide-react"
+import { Briefcase, Info, Mail, MessageSquare, UserCog, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Reveal } from "@/components/public/reveal"
+import { LEGAL_ENTITY } from "@/lib/legal-entity"
 
 /**
- * PUB4 — `/contact`, per design-spec.md §8.4.
+ * `/contact`. The dashboard's Support entry points here, for both roles.
  *
  * FULLY STATIC and it must not consult a session: public routes may not call an
- * authenticated endpoint. So it cannot detect whether you are signed in — it
- * shows both paths, clearly labelled, and lets you pick.
+ * authenticated endpoint. So it cannot tell whether you are signed in. It lists
+ * where each kind of problem is actually handled in the app (every place named
+ * here exists), and the support email from `LEGAL_ENTITY` when one is set.
  *
- * NO CONTACT FORM (nothing exists to receive it, and a form that posts nowhere
- * is worse than no form) and NO invented email address, phone number or postal
- * address — the same no-fabrication rule as LP8. Requirements.md Open Question 7
- * supplied no real support address, so none is invented.
- *
- * REVISIT TRIGGER: the moment a real support address is supplied, it becomes a
- * third Card at the top of this page with a `Mail` icon and a `mailto:` link, and
- * the note below shrinks to one line.
+ * NO CONTACT FORM (nothing exists to receive it) and NO invented email address,
+ * phone number or postal address. With `supportEmail` blank, the page says so
+ * plainly instead of pointing at a ticket system that doesn't exist.
  */
 export const metadata: Metadata = {
   title: "Contact & support",
-  description:
-    "Every JinVa support request goes through your account, so it arrives attached to you and to the job it is about.",
+  description: "Where to get help with a job, a payment or your JinVa account.",
 }
+
+const SUPPORT_EMAIL = LEGAL_ENTITY.supportEmail?.trim() || null
+
+const ROUTES = [
+  {
+    icon: Briefcase,
+    title: "Something went wrong with a job",
+    body: (
+      <>
+        Open the job from <strong className="font-medium text-foreground">My Jobs</strong> and choose{" "}
+        <strong className="font-medium text-foreground">Report a problem</strong>. The report goes to our team with
+        the job, the booking and the payment attached, and you can follow it from there.
+      </>
+    ),
+  },
+  {
+    icon: MessageSquare,
+    title: "A question for the client or artisan",
+    body: (
+      <>
+        Use <strong className="font-medium text-foreground">Messages</strong> in your dashboard. Keeping the
+        conversation there means it&rsquo;s on record if you need to report a problem later.
+      </>
+    ),
+  },
+  {
+    icon: Wallet,
+    title: "A payment or payout",
+    body: (
+      <>
+        Clients can see every payment, refund and receipt in{" "}
+        <strong className="font-medium text-foreground">Spending</strong>. Artisans can see what&rsquo;s on its way,
+        what needs their action and why in <strong className="font-medium text-foreground">Earnings</strong>, and
+        change where they&rsquo;re paid in Settings, under Payouts.
+      </>
+    ),
+  },
+  {
+    icon: UserCog,
+    title: "Your account",
+    body: (
+      <>
+        Change your details, password and notifications, or delete your account, in{" "}
+        <strong className="font-medium text-foreground">Settings</strong>.
+      </>
+    ),
+  },
+]
 
 export default function ContactPage() {
   return (
     <main className="py-12 md:py-16">
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
         <Reveal>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Support</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-            Get in touch.
-          </h1>
-          <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-            Every support request goes through your JinVa account, so it arrives attached to you and to the
-            job it&rsquo;s about.
+          <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Get help</h1>
+          <p className="mt-3 max-w-[60ch] text-base leading-relaxed text-muted-foreground">
+            Most problems are fastest to sort out from inside your JinVa account, where the job, the booking and the
+            payment are already on record. Here&rsquo;s where to go.
           </p>
           <Separator className="my-8" />
         </Reveal>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Reveal asChild delay={60}>
-            <Card className="h-full gap-4 px-6 py-6">
-              <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <LifeBuoy className="size-5" aria-hidden="true" />
-              </span>
-              <h2 className="text-base font-semibold text-card-foreground">
-                Already have a JinVa account?
-              </h2>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Log in and open <strong className="font-medium text-foreground">Support</strong> in your
-                sidebar. Every role has it. You can browse answers, open a ticket, or use{" "}
-                <strong className="font-medium text-foreground">Report a problem</strong> if something&rsquo;s
-                gone wrong with a specific job.
-              </p>
-              <Button asChild className="mt-auto w-fit">
-                <Link href="/login">Log in</Link>
-              </Button>
-            </Card>
-          </Reveal>
-
-          <Reveal asChild delay={140}>
-            <Card className="h-full gap-4 px-6 py-6">
-              <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <UserPlus className="size-5" aria-hidden="true" />
-              </span>
-              <h2 className="text-base font-semibold text-card-foreground">Not signed up yet?</h2>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Create an account and you&rsquo;ll get the same support channel &mdash; plus the booking and
-                payment record that makes a problem easy to sort out.
-              </p>
-              <Button variant="outline" asChild className="mt-auto w-fit">
-                <Link href="/signup">Create an account</Link>
-              </Button>
-            </Card>
-          </Reveal>
-        </div>
-
-        <Reveal delay={200}>
-          <div className="mt-6 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              <strong className="font-semibold text-foreground">
-                We don&rsquo;t publish a support email address yet.
-              </strong>{" "}
-              Support runs through your account so that a request arrives with your jobs, bookings and
-              payments already attached &mdash; which is usually what&rsquo;s needed to resolve it. If that
-              changes, this page is where the address will appear.
-            </p>
+        <Reveal delay={60}>
+          <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+            {ROUTES.map(({ icon: Icon, title, body }) => (
+              <li key={title} className="flex gap-4 px-5 py-5 sm:px-6">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Icon className="size-5" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-card-foreground">{title}</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{body}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <Button asChild className="h-11 sm:w-auto">
+              <Link href="/login">Log in to your account</Link>
+            </Button>
+            <Button variant="outline" asChild className="h-11 bg-transparent sm:w-auto">
+              <Link href="/signup">Create an account</Link>
+            </Button>
           </div>
+        </Reveal>
+
+        <Reveal delay={140}>
+          {SUPPORT_EMAIL ? (
+            <div className="mt-8 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
+              <Mail className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                <strong className="font-semibold text-foreground">Anything else?</strong> Email us at{" "}
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}`}
+                  className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                >
+                  {SUPPORT_EMAIL}
+                </a>
+                . If it&rsquo;s about a job, include the job title so we can find it.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-8 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                <strong className="font-semibold text-foreground">We don&rsquo;t have a support email address yet.</strong>{" "}
+                For a problem with a job, Report a problem is the way to reach our team. When an address is set up, it
+                will appear here.
+              </p>
+            </div>
+          )}
         </Reveal>
       </div>
     </main>

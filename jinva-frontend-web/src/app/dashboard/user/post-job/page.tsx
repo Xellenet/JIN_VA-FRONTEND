@@ -38,6 +38,7 @@ import {
 import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { threeLetterMonth } from "@/lib/spending"
 
 interface BackendService {
   id: string
@@ -201,7 +202,7 @@ export default function PostJobPage() {
   const today = new Date().toISOString().split("T")[0]
 
   const fmtDate = (d: string) =>
-    new Date(d).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
+    threeLetterMonth(new Date(d).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }))
 
   const fmtTime = (t: string) => {
     const [h, m] = t.split(":")

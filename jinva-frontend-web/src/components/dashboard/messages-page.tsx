@@ -48,6 +48,14 @@ interface MessagesPageProps {
   readonly jobId?: string
   /** MC2 — booking this conversation was opened from (`&booking=`). */
   readonly bookingId?: string
+  /**
+   * Item 6 — a **conversation** id to pre-open (`?conversation=`), for links
+   * that have no usable contact id (message notifications, deleted contacts).
+   * Already parsed to a positive integer by the route wrapper.
+   */
+  readonly openConversationRowId?: number
+  /** Item 6 / Q9 — `?reply=1`: focus the reply box once the thread is open. */
+  readonly focusReply?: boolean
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -164,7 +172,13 @@ interface MessageContext {
 const MESSAGE_MAX_LENGTH = 2000
 const MESSAGE_COUNTER_FROM = 1800
 
-export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesPageProps) {
+export function MessagesPage({
+  openConversationId,
+  jobId,
+  bookingId,
+  openConversationRowId,
+  focusReply,
+}: MessagesPageProps) {
   const { user } = useAuth()
   const [conversations, setConversations] = useState<BackendConversation[]>([])
   const [selected, setSelected] = useState<BackendConversation | null>(null)
@@ -197,6 +211,9 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   const bottomRef = useRef<HTMLDivElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const replyBoxRef = useRef<HTMLTextAreaElement>(null)
+  /** `?reply=1` focuses the reply box once, not on every later thread switch. */
+  const replyFocusPendingRef = useRef(!!focusReply)
   const attachmentToken = useRef(0)
   /** The page the poll watches — it moves forward as the thread grows. */
   const newestPageRef = useRef(1)
@@ -248,6 +265,11 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
   // Initial load + deep-link resolution.
   useEffect(() => {
     loadConversations().then((items) => {
+      if (!openConversationId && openConversationRowId) {
+        const byRow = items.find((c) => c.id === openConversationRowId)
+        if (byRow) setSelected(byRow)
+        return
+      }
       if (!openConversationId) return
       const found = items.find((c) => String(c.contact.id) === String(openConversationId))
       if (found) {
@@ -278,7 +300,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
       setSelected(placeholder)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openConversationId])
+  }, [openConversationId, openConversationRowId])
 
   // NR1 — keep the list (and its unread badges) fresh while the page is open.
   useEffect(() => {
@@ -486,6 +508,20 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
+  // Q9 — "Reply" in the envelope menu lands here with `?reply=1`: focus the
+  // reply box once the thread has loaded, so the customer can type at once.
+  // Re-armed when the menu is used again while this page is already open.
+  useEffect(() => {
+    if (focusReply) replyFocusPendingRef.current = true
+  }, [focusReply, openConversationId, openConversationRowId])
+
+  useEffect(() => {
+    if (!replyFocusPendingRef.current || !selected || isLoadingMsgs) return
+    if (!Number.isFinite(Number(selected.contact.id))) return
+    replyFocusPendingRef.current = false
+    replyBoxRef.current?.focus()
+  }, [selected, isLoadingMsgs])
+
   if (!user) return null
 
   const filtered = conversations.filter((c) => {
@@ -507,6 +543,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
    * user has typed it out. Block the composer up front and say why.
    */
   const canReplyToSelected = !selected || Number.isFinite(Number(selected.contact.id))
+
 
   const retryThread = () => {
     setThreadError(false)
@@ -745,8 +782,8 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
       <div className="flex h-[calc(100vh-8rem)] flex-col gap-0 overflow-hidden md:h-[calc(100vh-7rem)]">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Messages</p>
-            <h1 className="mt-0.5 text-2xl font-bold text-foreground">Inbox</h1>
+            {/* X2/X3: no eyebrow, and the heading uses the nav name. */}
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Messages</h1>
             <p className="text-sm text-muted-foreground">
               {conversations.length > 0
                 ? `${conversations.length} conversation${conversations.length !== 1 ? "s" : ""}`
@@ -767,10 +804,12 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
           >
             <div className="p-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
+                  type="search"
+                  aria-label="Search conversations"
                   placeholder="Search conversations..."
-                  className="rounded-full bg-muted/60 pl-9 text-sm border-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="rounded-full bg-muted/60 pl-9 text-sm border-none focus-visible:ring-1 focus-visible:ring-ring max-sm:h-11"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -874,13 +913,15 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                   const name = contactName(selected.contact)
                   return (
                     <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+                      {/* M3: 44px on phones and a name for screen readers. */}
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 md:hidden"
+                        className="-ml-2 h-11 w-11 shrink-0 md:hidden"
                         onClick={() => setSelected(null)}
+                        aria-label="Back to conversations"
                       >
-                        <ArrowLeft className="h-5 w-5 text-primary" />
+                        <ArrowLeft className="h-5 w-5 text-primary" aria-hidden="true" />
                       </Button>
                       <Avatar className="h-10 w-10 flex-shrink-0">
                         <AvatarImage src={resolveAvatarUrl(selected.contact.profilePicture)} alt={name} />
@@ -1138,6 +1179,7 @@ export function MessagesPage({ openConversationId, jobId, bookingId }: MessagesP
                           2,000 characters, with a count as the limit nears. */}
                       <div className="relative flex-1">
                         <Textarea
+                          ref={replyBoxRef}
                           rows={1}
                           maxLength={MESSAGE_MAX_LENGTH}
                           placeholder={canReplyToSelected ? "Message" : "You can't reply to this conversation"}

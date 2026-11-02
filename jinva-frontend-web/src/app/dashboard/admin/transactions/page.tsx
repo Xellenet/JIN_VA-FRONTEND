@@ -53,6 +53,7 @@ import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { getPaymentStatusConfig, paymentStatusConfig } from "@/lib/status-badges"
+import { threeLetterMonth } from "@/lib/spending"
 
 // Ad1: the real, paginated shape of GET /payments/admin/all — replaces the
 // old mockTx/TxStatus/TxType entirely. There is no `artisan` relation on
@@ -157,7 +158,7 @@ export default function TransactionsPage() {
   const filtered = payments
   const stats = summary ?? { totalRevenue: 0, totalPayouts: 0, totalFees: 0, needsReview: 0 }
 
-  const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  const fmtDate = (d: string) => threeLetterMonth(new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 
   const canRefund = (p: BackendPayment) => p.status === "HELD" || p.status === "RELEASED"
 

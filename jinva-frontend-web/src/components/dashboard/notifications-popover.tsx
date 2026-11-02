@@ -1,36 +1,42 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AlertTriangle, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiFetch } from "@/lib/api"
+import { markNotificationRead } from "@/lib/customer-api"
 import { cn } from "@/lib/utils"
 import { getNotificationTypeConfig } from "@/lib/status-badges"
 import {
+  formatFullDateTime,
+  isMessageExcerpt,
   mapNotification,
+  notificationAction,
+  notificationRoleFor,
   readNotificationList,
   type BackendNotification,
   type UnreadCountResponse,
 } from "@/lib/notifications"
 import type { Notification } from "@/lib/types"
 import { HeaderIconBadge, POPOVER_POLL_MS, PREVIEW_ROW_LIMIT } from "./header-badge"
+import { InboxSurface } from "./inbox/inbox-surface"
+import { DisclosureItem, FullText } from "./inbox/disclosure-item"
+
+/** FR-6.10: an item has to stay open this long before it counts as read. */
+const READ_AFTER_MS = 1000
 
 /**
- * HB1 / design-spec.md section 3 — the Bell icon's real unread badge and
- * preview dropdown.
+ * The Bell icon's unread badge and menu (HB1), now with read in place
+ * (item 6): each row is a disclosure that shows the full body, the full date
+ * and one action built from typed ids only (`notificationAction`, SEC-18).
  *
- * Replaces a hardcoded, always-on dot and a plain Link-to-page with:
- *   - a numeric badge driven by `GET /notifications/unread-count` (already
- *     implemented backend-side, never called by the frontend before now),
- *     rendering nothing at all at zero;
- *   - a Popover preview of the 5 most recent notifications, with "Mark all
- *     read" and a "View all notifications" footer link to the existing page.
- *
- * Clicking a row marks it read in place and keeps the popover open — a peek,
- * not a navigation. Full detail stays on the Notifications page's Dialog.
+ * - One item open at a time; closing the menu collapses everything (FR-6.7).
+ * - An unread item is marked read after 1 s open, once per item per menu
+ *   opening; the badge drops at once and a failed call quietly reverts.
+ * - The list is fetched when the menu opens and is not refreshed while it is
+ *   open, so nothing moves under the reader (FR-6.19). The badge keeps polling.
  */
 export function NotificationsPopover({ roleBase }: Readonly<{ roleBase: string }>) {
   const [open, setOpen] = useState(false)
@@ -38,16 +44,21 @@ export function NotificationsPopover({ roleBase }: Readonly<{ roleBase: string }
   const [items, setItems] = useState<Notification[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hasError, setHasError] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState("")
+  const attemptedRef = useRef(new Set<string>())
+  const headerRefs = useRef(new Map<string, HTMLButtonElement>())
+  // H5: actions point at the reader's own dashboard (SEC-18: fixed paths
+  // under `/dashboard/user/` or `/dashboard/artisan/`). Admins read in place.
+  const actionRole = notificationRoleFor(roleBase)
 
-  // ── Badge count — fetched on mount and polled, so the badge is accurate
-  //    before the dropdown is ever opened and clears itself after a read.
+  // ── Badge count: fetched on mount and polled.
   const loadUnreadCount = useCallback(async () => {
     try {
       const r = await apiFetch<UnreadCountResponse>("/notifications/unread-count")
       setUnreadCount(typeof r?.count === "number" ? r.count : 0)
     } catch {
-      // A failed count shows no badge at all rather than a stale or fake one
-      // (copy guidelines: "a badge that's always on is worse than no badge").
+      // A failed count shows no badge rather than a stale or fake one.
       setUnreadCount(0)
     }
   }, [])
@@ -63,7 +74,7 @@ export function NotificationsPopover({ roleBase }: Readonly<{ roleBase: string }
     }
   }, [loadUnreadCount])
 
-  // ── Preview rows — fetched lazily when the popover opens.
+  // ── Rows: fetched when the menu opens.
   const loadItems = useCallback(async () => {
     setIsLoading(true)
     setHasError(false)
@@ -79,21 +90,40 @@ export function NotificationsPopover({ roleBase }: Readonly<{ roleBase: string }
     }
   }, [])
 
-  useEffect(() => {
-    if (open) loadItems()
-  }, [open, loadItems])
-
-  const markRead = async (id: string) => {
-    const target = items.find((n) => n.id === id)
-    if (!target || target.isRead) return
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
-    setUnreadCount((c) => Math.max(0, c - 1))
-    try {
-      await apiFetch(`/notifications/${id}/read`, { method: "PATCH" })
-    } catch {
-      // Optimistic update stands; the next poll reconciles the real count.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next)
+    if (next) {
+      loadItems()
+    } else {
+      // FR-6.7 / SEC-33: nothing stays expanded for the next glance.
+      setOpenId(null)
+      attemptedRef.current = new Set()
+      setAnnouncement("")
     }
   }
+
+  // ── FR-6.10: read after 1 s open.
+  useEffect(() => {
+    if (!openId) return
+    const target = items.find((n) => n.id === openId)
+    if (!target || target.isRead || attemptedRef.current.has(openId)) return
+    const id = openId
+    const timer = setTimeout(async () => {
+      attemptedRef.current.add(id)
+      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
+      setUnreadCount((c) => Math.max(0, c - 1))
+      setAnnouncement("Marked as read")
+      try {
+        await markNotificationRead(id)
+      } catch {
+        // Quietly back to unread; no toast (FR-6.10).
+        setItems((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: false } : n)))
+        setUnreadCount((c) => c + 1)
+        setAnnouncement("")
+      }
+    }, READ_AFTER_MS)
+    return () => clearTimeout(timer)
+  }, [openId, items])
 
   const markAllRead = async () => {
     setItems((prev) => prev.map((n) => ({ ...n, isRead: true })))
@@ -101,130 +131,171 @@ export function NotificationsPopover({ roleBase }: Readonly<{ roleBase: string }
     try {
       await apiFetch("/notifications/read-all", { method: "PATCH" })
     } catch {
-      // Same as above — reconciled by the next poll.
+      // Reconciled by the next poll.
     }
   }
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-8 w-8" aria-label="Notifications">
-          <Bell className="h-[1.1rem] w-[1.1rem] text-muted-foreground" />
-          <HeaderIconBadge count={unreadCount} />
-        </Button>
-      </PopoverTrigger>
+  const collapseOpenItem = () => {
+    if (!openId) return false
+    const header = headerRefs.current.get(openId)
+    setOpenId(null)
+    header?.focus()
+    return true
+  }
 
-      <PopoverContent align="end" className="w-80 p-0 sm:w-96">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold text-foreground">Notifications</span>
-          {items.some((n) => !n.isRead) && (
+  const unreadInList = items.filter((n) => !n.isRead).length
+  const unreadShown = Math.max(unreadCount, unreadInList)
+
+  const trigger = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="relative h-8 w-8"
+      aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+    >
+      <Bell className="h-[1.1rem] w-[1.1rem] text-muted-foreground" />
+      <HeaderIconBadge count={unreadCount} />
+    </Button>
+  )
+
+  return (
+    <>
+      <InboxSurface
+        open={open}
+        onOpenChange={handleOpenChange}
+        trigger={trigger}
+        label="Notifications"
+        onEscape={collapseOpenItem}
+        heading={
+          <>
+            <h2 className="text-sm font-semibold text-foreground max-sm:text-base">Notifications</h2>
+            {unreadShown > 0 && (
+              <span className="text-xs tabular-nums text-muted-foreground">{unreadShown} unread</span>
+            )}
+          </>
+        }
+        headingAction={
+          unreadInList > 0 ? (
             <button
               type="button"
               onClick={markAllRead}
-              className="text-xs font-medium text-primary transition-opacity hover:opacity-80"
+              className="h-7 rounded-md px-2 text-xs font-medium text-primary outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary max-sm:h-11 dark:focus-visible:ring-ring"
             >
               Mark all read
             </button>
-          )}
-        </div>
-
-        <div className="max-h-80 overflow-y-auto">
-          {isLoading ? (
-            <div className="space-y-1 p-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 px-1 py-2">
-                  <Skeleton className="h-8 w-8 flex-shrink-0 rounded-full" />
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <Skeleton className="h-2.5 w-2/3" />
-                    <Skeleton className="h-2.5 w-2/5" />
-                  </div>
+          ) : null
+        }
+        footer={
+          <div className="p-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-[13px] font-medium max-sm:h-11"
+              asChild
+            >
+              <Link href={`${roleBase}/notifications`} onClick={() => handleOpenChange(false)}>
+                View all notifications
+              </Link>
+            </Button>
+          </div>
+        }
+      >
+        {isLoading ? (
+          <div className="space-y-1 p-3" aria-busy="true" aria-label="Loading notifications">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-1 py-2">
+                <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-2.5 w-2/3" />
+                  <Skeleton className="h-2.5 w-2/5" />
                 </div>
-              ))}
-            </div>
-          ) : hasError ? (
-            <div className="flex flex-col items-center gap-2 px-4 py-6 text-center">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-destructive/10">
-                <AlertTriangle className="h-4 w-4 text-destructive" />
               </div>
-              <p className="text-xs font-semibold text-foreground">Couldn&apos;t load notifications</p>
-              <button
-                type="button"
-                onClick={loadItems}
-                className="text-xs font-medium text-primary transition-opacity hover:opacity-80"
-              >
-                Retry
-              </button>
+            ))}
+          </div>
+        ) : hasError ? (
+          <div className="flex flex-col items-center gap-1 px-6 py-8 text-center">
+            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+              <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden="true" />
             </div>
-          ) : items.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-4 py-7 text-center">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
-                <Bell className="h-4 w-4 text-muted-foreground/60" />
-              </div>
-              <p className="text-xs font-semibold text-foreground">You&apos;re all caught up</p>
-              <p className="text-xs text-muted-foreground">Nothing new right now.</p>
+            <p className="text-[13px] font-semibold text-foreground">Couldn&apos;t load notifications</p>
+            <p className="text-[13px] text-muted-foreground">Check your connection, then try again.</p>
+            <Button variant="outline" size="sm" className="mt-3 max-sm:h-11" onClick={loadItems}>
+              Try again
+            </Button>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center gap-1 px-6 py-8 text-center">
+            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+              <Bell className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {items.map((n) => {
-                const config = getNotificationTypeConfig(n.type)
-                const Icon = config.icon
-                return (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => markRead(n.id)}
-                    className={cn(
-                      "flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50",
-                      !n.isRead && "bg-accent/50",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full",
-                        config.bg,
-                      )}
+            <p className="text-[13px] font-semibold text-foreground">You&apos;re all caught up</p>
+            <p className="text-[13px] text-muted-foreground">
+              New notifications about your jobs and payments show up here.
+            </p>
+          </div>
+        ) : (
+          <ul role="list" className="divide-y divide-border">
+            {items.map((n) => {
+              const config = getNotificationTypeConfig(n.type)
+              const Icon = config.icon
+              const isOpen = openId === n.id
+              const fullDate = formatFullDateTime(n.createdAt)
+              const action = actionRole ? notificationAction(n.rawType ?? "", n.payload, actionRole) : null
+              const excerpt = isMessageExcerpt(n.rawType, n.message)
+              return (
+                <DisclosureItem
+                  key={n.id}
+                  id={`notification-${n.id}`}
+                  open={isOpen}
+                  onToggle={() => setOpenId(isOpen ? null : n.id)}
+                  headerRef={(el) => {
+                    if (el) headerRefs.current.set(n.id, el)
+                    else headerRefs.current.delete(n.id)
+                  }}
+                  leading={
+                    <span
+                      className={cn("flex h-8 w-8 items-center justify-center rounded-full", config.bg)}
+                      aria-hidden="true"
                     >
                       <Icon className={cn("h-4 w-4", config.color)} />
+                    </span>
+                  }
+                  title={n.title}
+                  time={n.time}
+                  timeTitle={fullDate || undefined}
+                  timeDateTime={n.createdAt}
+                  unread={!n.isRead}
+                  preview={n.message}
+                >
+                  <FullText>{n.message}</FullText>
+                  {excerpt && (
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      This is the start of the message. Open the conversation to read the rest.
+                    </p>
+                  )}
+                  {fullDate && (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      <time dateTime={n.createdAt}>{fullDate}</time>
+                    </p>
+                  )}
+                  {action && (
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" className="text-[13px] max-sm:h-11 max-sm:flex-1" asChild>
+                        <Link href={action.href} onClick={() => handleOpenChange(false)}>
+                          {action.label}
+                        </Link>
+                      </Button>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <span
-                          className={cn(
-                            "truncate text-xs text-foreground",
-                            n.isRead ? "font-medium" : "font-semibold",
-                          )}
-                        >
-                          {n.title}
-                        </span>
-                        <span className="flex-shrink-0 text-[10px] text-muted-foreground">{n.time}</span>
-                      </div>
-                      <p
-                        className={cn(
-                          "mt-0.5 line-clamp-1 text-[11px]",
-                          n.isRead ? "text-muted-foreground" : "font-medium text-foreground/80",
-                        )}
-                      >
-                        {n.message}
-                      </p>
-                    </div>
-                    {!n.isRead && (
-                      <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" />
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-border p-2">
-          <Button variant="ghost" size="sm" className="w-full text-xs font-medium" asChild>
-            <Link href={`${roleBase}/notifications`} onClick={() => setOpen(false)}>
-              View all notifications
-            </Link>
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+                  )}
+                </DisclosureItem>
+              )
+            })}
+          </ul>
+        )}
+      </InboxSurface>
+      <span className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </span>
+    </>
   )
 }

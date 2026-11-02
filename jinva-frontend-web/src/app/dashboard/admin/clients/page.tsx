@@ -16,6 +16,7 @@ import { resolveAvatarUrl } from "@/lib/utils"
 import { AccountActionsMenu, AccountStatusBadge, type AccountStatus } from "@/components/admin/account-actions-menu"
 import { PagePager } from "@/components/admin/page-pager"
 import { useAdminList } from "@/hooks/use-admin-list"
+import { threeLetterMonth } from "@/lib/spending"
 
 interface BackendUser {
   id: number
@@ -161,11 +162,11 @@ export default function ClientsPage() {
                               </div>
                             </td>
                             <td className="py-4 text-sm text-muted-foreground">
-                              {new Date(client.createdAt).toLocaleDateString("en-GB", {
+                              {threeLetterMonth(new Date(client.createdAt).toLocaleDateString("en-GB", {
                                 day: "numeric",
                                 month: "short",
                                 year: "numeric",
-                              })}
+                              }))}
                             </td>
                             <td className="py-4">
                               <AccountStatusBadge status={client.accountStatus} />

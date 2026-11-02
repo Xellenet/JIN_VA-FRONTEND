@@ -27,7 +27,8 @@ export type DisputeCategory = (typeof DISPUTE_CATEGORIES)[number]["value"]
 
 export function getDisputeCategoryLabel(value?: string | null): string | undefined {
   if (!value) return undefined
-  return DISPUTE_CATEGORIES.find((c) => c.value === value)?.label ?? value
+  // A key this list doesn't know (the backend added one) reads as "Other", never the raw enum.
+  return DISPUTE_CATEGORIES.find((c) => c.value === value)?.label ?? "Other"
 }
 
 /** Backend `CreateDisputeDto` bounds — validated client-side before the request (DP1). */

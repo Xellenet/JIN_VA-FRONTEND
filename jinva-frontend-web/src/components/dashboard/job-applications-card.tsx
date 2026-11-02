@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { apiFetch } from "@/lib/api"
 import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
+import { threeLetterMonth } from "@/lib/spending"
 
 interface Application {
   id: number
@@ -72,17 +73,17 @@ export function JobApplicationsCard({
   const pending = applications?.filter((a) => a.status === "PENDING") ?? []
 
   return (
-    <Card>
-      <div className="border-b border-border p-5">
-        <h3 className="flex items-center gap-2 font-semibold text-foreground">
-          <Inbox className="h-4 w-4 text-primary" />
+    <Card className="gap-0 py-0">
+      <div className="border-b border-border px-5 py-4">
+        <h2 className="flex items-center gap-2 font-semibold text-foreground">
+          <Inbox aria-hidden className="h-4 w-4 text-primary" />
           Applications{applications ? ` (${pending.length})` : ""}
-        </h3>
+        </h2>
       </div>
-      <CardContent className="space-y-3 p-5">
+      <CardContent className="space-y-3 px-5 py-5">
         {applications === null && !loadFailed && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading applications…
+            <Loader2 aria-hidden className="h-4 w-4 motion-safe:animate-spin" /> Loading applications…
           </div>
         )}
         {loadFailed && <p className="text-sm text-muted-foreground">Couldn&apos;t load applications. Refresh to try again.</p>}
@@ -103,7 +104,7 @@ export function JobApplicationsCard({
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-foreground">{nameOf(a)}</p>
                 <p className="text-xs text-muted-foreground">
-                  Applied {new Date(a.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                  Applied {threeLetterMonth(new Date(a.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }))}
                 </p>
               </div>
               <p className="font-semibold text-foreground">
@@ -112,8 +113,7 @@ export function JobApplicationsCard({
             </div>
             {a.message && <p className="whitespace-pre-line text-sm text-muted-foreground">{a.message}</p>}
             <Button
-              size="sm"
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              className="h-11 w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:h-8"
               onClick={() => setConfirming(a)}
             >
               Accept
@@ -134,16 +134,16 @@ export function JobApplicationsCard({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isAccepting}>Not yet</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 sm:h-9" disabled={isAccepting}>Not yet</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
                 void accept()
               }}
               disabled={isAccepting}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              className="h-11 bg-primary text-primary-foreground hover:bg-primary/90 sm:h-9"
             >
-              {isAccepting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isAccepting && <Loader2 aria-hidden className="mr-2 h-4 w-4 motion-safe:animate-spin" />}
               Accept and continue
             </AlertDialogAction>
           </AlertDialogFooter>

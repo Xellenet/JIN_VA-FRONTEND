@@ -44,6 +44,7 @@ import {
   getPaymentStatusConfig,
 } from "@/lib/status-badges"
 import { DisputeConversationPanel } from "@/components/admin/dispute-conversation-panel"
+import { threeLetterMonth } from "@/lib/spending"
 
 /**
  * DC1 — the admin resolve surface, restructured into three steps
@@ -232,11 +233,11 @@ const STEP_LABELS: Record<1 | 2 | 3, string> = {
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return "—"
-  return new Date(iso).toLocaleDateString("en-GB", {
+  return threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
-  })
+  }))
 }
 
 /**

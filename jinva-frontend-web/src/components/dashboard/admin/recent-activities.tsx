@@ -14,6 +14,7 @@ import {
 import { Clock, UserRound, Briefcase, CalendarDays } from "lucide-react"
 import { resolveAvatarUrl } from "@/lib/utils"
 import { getBookingStatusConfig, getJobStatusConfig } from "@/lib/status-badges"
+import { threeLetterMonth } from "@/lib/spending"
 export interface Activity {
   kind: "booking" | "job"
   id: number
@@ -32,7 +33,7 @@ function timeAgo(iso: string): string {
   if (hours < 24) return `${hours}h ago`
   const days = Math.round(hours / 24)
   if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+  return threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }))
 }
 
 /**

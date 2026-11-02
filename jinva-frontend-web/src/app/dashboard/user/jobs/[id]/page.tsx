@@ -3,8 +3,30 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
+import {
+  ArrowLeft,
+  CalendarDays,
+  CalendarX,
+  CheckCircle2,
+  CircleDot,
+  Hash,
+  Hourglass,
+  Loader2,
+  MapPin,
+  MessageSquare,
+  Pencil,
+  PlayCircle,
+  Star,
+  Tag,
+  Timer,
+  Undo2,
+  Wallet,
+  Wrench,
+  XCircle,
+} from "lucide-react"
+import { toast } from "sonner"
 import { DashboardLayout } from "@/components/dashboard/layout"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -18,23 +40,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  ArrowLeft,
-  MapPin,
-  Wrench,
-  MessageSquare,
-  Star,
-  FileText,
-  Loader2,
-  UserRound,
-  CheckCircle,
-  Link2,
-  CreditCard,
-  Pencil,
-} from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
-import { toast } from "sonner"
+import { getJobPaymentState } from "@/lib/payment-methods-api"
+import { duplicateRefundNote, visibleDuplicateRefunds, type DuplicateRefund } from "@/lib/payment-intent"
+import { formatDay, initialsOf } from "@/lib/artisan-jobs"
+import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dashboard/job-status-timeline"
 import { AttachmentGallery, type JobAttachment } from "@/components/dashboard/attachment-gallery"
 import { EditJobDialog } from "@/components/dashboard/edit-job-dialog"
@@ -54,10 +64,6 @@ interface BackendJob {
   budgetMax?: number
   bookingId?: number
   customer?: { id: number; firstname: string; lastname: string }
-  // Not yet exposed by GET /jobs/:id (see write-up) — optional-chained
-  // throughout so this page degrades gracefully today and "just works" once
-  // the backend adds it, consistent with how the rest of the app already
-  // expects this field.
   acceptedArtisan?: { id: number; firstname: string; lastname: string; profilePicture?: string }
   completionRequestedAt?: string
   service?: { id: number; name: string }
@@ -81,14 +87,32 @@ interface BackendPayment {
   releasedAt?: string
 }
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  IN_PROGRESS: { label: "In Progress", className: "border-border bg-muted text-muted-foreground" },
-  COMPLETED: { label: "Completed", className: "border-primary/20 bg-primary/10 text-primary" },
-  CANCELLED: { label: "Cancelled", className: "border-destructive/20 bg-destructive/10 text-destructive" },
-  PENDING: { label: "Pending", className: "border-border bg-muted text-muted-foreground" },
-  OPEN: { label: "Open", className: "border-primary/15 bg-primary/5 text-primary" },
-  EXPIRED: { label: "Expired", className: "border-border bg-muted text-muted-foreground" },
+type BadgeKey = "OPEN" | "PENDING" | "IN_PROGRESS" | "TO_CONFIRM" | "COMPLETED" | "CANCELLED" | "EXPIRED"
+
+/** The same badges as My Jobs: an icon as well as a colour, so status never reads by colour alone. */
+const STATUS_BADGES: Record<BadgeKey, { label: string; className: string; icon: typeof CircleDot }> = {
+  OPEN: { label: "Open", className: "bg-info/10 text-info border-info/20", icon: CircleDot },
+  PENDING: { label: "Awaiting start", className: "bg-warning/10 text-warning border-warning/25", icon: PlayCircle },
+  IN_PROGRESS: { label: "In progress", className: "bg-primary/10 text-primary border-primary/20", icon: Timer },
+  TO_CONFIRM: { label: "Ready to confirm", className: "bg-warning/10 text-warning border-warning/25", icon: Hourglass },
+  COMPLETED: { label: "Completed", className: "bg-success/10 text-success border-success/20", icon: CheckCircle2 },
+  CANCELLED: { label: "Cancelled", className: "bg-destructive/10 text-destructive border-destructive/20", icon: XCircle },
+  EXPIRED: { label: "Expired", className: "bg-muted text-muted-foreground border-border", icon: CalendarX },
 }
+
+function badgeFor(job: BackendJob) {
+  if (job.status === "IN_PROGRESS" && job.completionRequestedAt) return STATUS_BADGES.TO_CONFIRM
+  return STATUS_BADGES[job.status as BadgeKey] ?? { label: job.status, className: "", icon: CircleDot }
+}
+
+const BACK = (
+  <Button variant="ghost" asChild className="-ml-2 h-11 w-fit gap-2 text-muted-foreground hover:text-foreground sm:h-9">
+    <Link href="/dashboard/user/jobs">
+      <ArrowLeft aria-hidden className="h-4 w-4" />
+      Back to jobs
+    </Link>
+  </Button>
+)
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -99,6 +123,8 @@ export default function JobDetailPage() {
   const [isConfirming, setIsConfirming] = useState(false)
   const [payment, setPayment] = useState<BackendPayment | null>(null)
   const [isPaymentLoading, setIsPaymentLoading] = useState(true)
+  /** A second payment for this job that we refunded automatically. */
+  const [refunds, setRefunds] = useState<DuplicateRefund[]>([])
   // Bumped after accepting an application so the job and its new payment reload.
   const [reloadKey, setReloadKey] = useState(0)
   const [isEditing, setIsEditing] = useState(false)
@@ -117,13 +143,28 @@ export default function JobDetailPage() {
       .finally(() => setIsPaymentLoading(false))
   }, [id, reloadKey])
 
+  // Only when there is a paid payment: a duplicate can only follow one. A
+  // failure (or an older server) just shows no note.
+  const paymentStatus = payment?.status
+  useEffect(() => {
+    if (!paymentStatus || paymentStatus === "PENDING" || paymentStatus === "CANCELLED") {
+      setRefunds([])
+      return
+    }
+    const controller = new AbortController()
+    getJobPaymentState(Number(id), controller.signal)
+      .then((state) => setRefunds(visibleDuplicateRefunds(state.duplicateRefunds)))
+      .catch(() => setRefunds([]))
+    return () => controller.abort()
+  }, [id, paymentStatus, reloadKey])
+
   const handleConfirmCompletion = async () => {
     if (!job) return
     setIsConfirming(true)
     try {
       await apiFetch(`/jobs/${job.id}/confirm`, { method: "POST" })
-      setJob((prev) => prev ? { ...prev, status: "COMPLETED" } : prev)
-      toast.success("Job marked as completed!")
+      setJob((prev) => (prev ? { ...prev, status: "COMPLETED" } : prev))
+      toast.success("Job marked as completed.")
     } catch (err) {
       // e.g. "The artisan has not yet signalled completion..." — a real,
       // specific 400 from the backend, not a generic failure.
@@ -138,7 +179,7 @@ export default function JobDetailPage() {
     setIsCancelling(true)
     try {
       await apiFetch(`/jobs/${job.id}/cancel`, { method: "PATCH" })
-      setJob((prev) => prev ? { ...prev, status: "CANCELLED" } : prev)
+      setJob((prev) => (prev ? { ...prev, status: "CANCELLED" } : prev))
       setShowCancelDialog(false)
       toast.success("Job cancelled.")
     } catch (err) {
@@ -151,8 +192,14 @@ export default function JobDetailPage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div className="space-y-6" aria-busy>
+          {BACK}
+          <div className="space-y-3">
+            <div className="h-5 w-24 rounded-md bg-muted motion-safe:animate-pulse" />
+            <div className="h-8 w-2/3 rounded-md bg-muted motion-safe:animate-pulse" />
+            <div className="h-4 w-1/3 rounded-md bg-muted motion-safe:animate-pulse" />
+          </div>
+          <div className="h-64 rounded-xl border bg-card" />
         </div>
       </DashboardLayout>
     )
@@ -161,218 +208,244 @@ export default function JobDetailPage() {
   if (!job) {
     return (
       <DashboardLayout>
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <p className="text-muted-foreground">Job not found.</p>
-          <Button variant="outline" className="mt-4" asChild>
-            <Link href="/dashboard/user/jobs">Back to Jobs</Link>
-          </Button>
+        <div className="space-y-6">
+          {BACK}
+          <Card className="items-center gap-0 px-4 py-16 text-center">
+            <h1 className="text-lg font-semibold text-foreground">This job isn&apos;t available</h1>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              It may have been removed, or the connection dropped. Go back to your jobs and try again.
+            </p>
+          </Card>
         </div>
       </DashboardLayout>
     )
   }
 
-  const artisanName = job.acceptedArtisan
-    ? `${job.acceptedArtisan.firstname} ${job.acceptedArtisan.lastname}`.trim()
-    : "Awaiting artisan"
-  const cfg = statusConfig[job.status] ?? { label: job.status, className: "" }
+  const artisan = job.acceptedArtisan
+  const artisanName = artisan ? `${artisan.firstname} ${artisan.lastname}`.trim() || "Your artisan" : "the artisan"
+  const badge = badgeFor(job)
+  const BadgeIcon = badge.icon
   // QA JOB-14: the API returns `completionRequestedAt` now, so the button
   // appears only once the artisan has said the work is finished (the server
   // refuses a confirmation before that).
   const canConfirmCompletion = job.status === "IN_PROGRESS" && !!job.completionRequestedAt
   const awaitingArtisanFinish = job.status === "IN_PROGRESS" && !job.completionRequestedAt
+  const canCancel = job.status === "OPEN" || job.status === "PENDING"
+  const hasBudget = job.budgetMin != null || job.budgetMax != null
+
+  const timeline = (
+    <Card className="gap-0 py-0">
+      <div className="border-b px-5 py-4">
+        <h2 className="font-semibold text-foreground">Job timeline</h2>
+      </div>
+      <div className="px-5 py-5">
+        <JobStatusTimeline
+          history={job.statusHistory}
+          artisan={job.acceptedArtisan}
+          createdAt={job.createdAt}
+          completionRequestedAt={job.completionRequestedAt}
+        />
+      </div>
+    </Card>
+  )
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
-          <Link href="/dashboard/user/jobs">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Jobs
-          </Link>
-        </Button>
+        {BACK}
 
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">{job.title}</h1>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-2">
+            <Badge variant="outline" className={cn("w-fit gap-1 text-xs", badge.className)}>
+              <BadgeIcon aria-hidden className="h-3 w-3" />
+              {badge.label}
+            </Badge>
+            <h1 dir="auto" className="break-words text-2xl font-bold text-foreground [unicode-bidi:isolate] sm:text-3xl">
+              {job.title}
+            </h1>
             <p className="text-muted-foreground">
-              {job.service?.name ?? "Job"} · {new Date(job.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              {job.service?.name ? `${job.service.name}, posted ` : "Posted "}
+              {formatDay(job.createdAt)}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {/* QA JOB-16: editable only while open (the server enforces it too). */}
-            {job.status === "OPEN" && (
-              <Button variant="outline" size="sm" className="gap-1.5 bg-transparent" onClick={() => setIsEditing(true)}>
-                <Pencil className="h-3.5 w-3.5" />
-                Edit Job
-              </Button>
-            )}
-            <Badge variant="outline" className={cfg.className}>
-              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-              {cfg.label}
-            </Badge>
-          </div>
-        </div>
+          {/* QA JOB-16: editable only while open (the server enforces it too). */}
+          {job.status === "OPEN" && (
+            <Button variant="outline" className="h-11 w-fit shrink-0 gap-1.5 bg-transparent sm:h-9" onClick={() => setIsEditing(true)}>
+              <Pencil aria-hidden className="h-3.5 w-3.5" />
+              Edit job
+            </Button>
+          )}
+        </header>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
-            <Card>
-              <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <Wrench className="h-4 w-4 text-primary" />
-                  Job Information
-                </h3>
+        {/* What the client can do next, or what they are waiting for. */}
+        {(canConfirmCompletion || awaitingArtisanFinish || job.status === "COMPLETED") && (
+          <section
+            aria-label="Next step"
+            className="flex flex-col gap-4 rounded-xl border border-primary/25 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+          >
+            {canConfirmCompletion && (
+              <>
+                <StepText
+                  icon={<CheckCircle2 aria-hidden className="h-5 w-5 text-primary" />}
+                  title="Ready to confirm"
+                  body={`${artisan ? artisanName : "The artisan"} says the work is done. Confirm it and your payment is released to them.`}
+                />
+                <Button
+                  className="h-11 shrink-0 bg-success text-success-foreground hover:bg-success/90 sm:h-10"
+                  onClick={() => void handleConfirmCompletion()}
+                  disabled={isConfirming}
+                >
+                  {isConfirming && <Loader2 aria-hidden className="h-4 w-4 motion-safe:animate-spin" />}
+                  Confirm completion
+                </Button>
+              </>
+            )}
+            {awaitingArtisanFinish && (
+              <StepText
+                icon={<Hourglass aria-hidden className="h-5 w-5 text-warning" />}
+                title="Work in progress"
+                body={`You can confirm completion once ${artisanName} marks the job as finished.`}
+              />
+            )}
+            {job.status === "COMPLETED" && (
+              <>
+                <StepText
+                  icon={<Star aria-hidden className="h-5 w-5 text-rating" />}
+                  title="Job done"
+                  body="Tell other clients how it went."
+                />
+                <Button className="h-11 shrink-0 sm:h-10" asChild>
+                  <Link href={`/dashboard/user/review/${job.id}`}>Leave a review</Link>
+                </Button>
+              </>
+            )}
+          </section>
+        )}
+
+        {/* Phones read Details, Applications, Artisan, Payment, then the timeline; wide screens keep the rail beside both. */}
+        <div className="grid items-start gap-6 lg:grid-cols-3">
+          <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
+            <Card className="gap-0 py-0">
+              <div className="border-b px-5 py-4">
+                <h2 className="flex items-center gap-2 font-semibold text-foreground">
+                  <Wrench aria-hidden className="h-4 w-4 text-primary" />
+                  Job information
+                </h2>
               </div>
-              <CardContent className="p-5">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Job Title</p>
-                    <p className="mt-1 font-medium text-foreground">{job.title}</p>
-                  </div>
-                  {job.service && (
-                    <div className="rounded-lg border border-border p-4">
-                      <p className="text-xs text-muted-foreground">Service</p>
-                      <p className="mt-1 font-medium text-foreground">{job.service.name}</p>
-                    </div>
+              <div className="space-y-5 px-5 py-5">
+                <dl className="grid gap-4 sm:grid-cols-2">
+                  {job.location && (
+                    <Fact icon={<MapPin aria-hidden className="h-4 w-4" />} term="Location" wide>
+                      <span className="break-words">{job.location}</span>
+                    </Fact>
                   )}
-                  {(job.budgetMin != null || job.budgetMax != null) && (
-                    <div className="rounded-lg border border-border p-4 md:col-span-2">
-                      <p className="text-xs text-muted-foreground">Budget</p>
-                      <p className="mt-1 font-medium text-foreground">
+                  {job.service && (
+                    <Fact icon={<Tag aria-hidden className="h-4 w-4" />} term="Service">
+                      {job.service.name}
+                    </Fact>
+                  )}
+                  {hasBudget && (
+                    <Fact icon={<Wallet aria-hidden className="h-4 w-4" />} term="Budget">
+                      <span className="tabular-nums">
                         {job.budgetMin != null ? formatCurrency(job.budgetMin) : "—"}
                         {job.budgetMax != null ? ` – ${formatCurrency(job.budgetMax)}` : ""}
-                      </p>
-                    </div>
+                      </span>
+                    </Fact>
                   )}
-                  {job.bookingId && (
-                    <div className="rounded-lg border border-border bg-primary/5 p-4 md:col-span-2">
-                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Link2 className="h-3.5 w-3.5" />
-                        Linked Booking
-                      </p>
-                      <div className="mt-1 flex items-center justify-between">
-                        <p className="font-medium text-foreground">Booking #{job.bookingId}</p>
-                        <Button variant="link" size="sm" className="h-auto p-0" asChild>
-                          <Link href={`/dashboard/user/bookings/${job.bookingId}`}>View booking</Link>
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                  <Fact icon={<CalendarDays aria-hidden className="h-4 w-4" />} term="Posted">
+                    {formatDay(job.createdAt)}
+                  </Fact>
+                  <Fact icon={<Hash aria-hidden className="h-4 w-4" />} term="Job number">
+                    <span>
+                      <span className="tabular-nums">{String(job.id)}</span>
+                      {job.bookingId ? <span className="text-muted-foreground"> from booking {job.bookingId}</span> : null}
+                    </span>
+                    {job.bookingId && (
+                      <Link
+                        href={`/dashboard/user/bookings/${job.bookingId}`}
+                        className="inline-flex min-h-11 items-center rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:min-h-0"
+                      >
+                        View booking
+                      </Link>
+                    )}
+                  </Fact>
+                </dl>
 
-            {(job.location || job.description) && (
-              <Card>
-                <div className="border-b border-border p-5">
-                  <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                    <MapPin className="h-4 w-4 text-primary" />
-                    Location &amp; Description
-                  </h3>
-                </div>
-                <CardContent className="p-5">
-                  {job.location && (
-                    <div className="rounded-lg border border-border bg-muted/30 p-4">
-                      <p className="font-medium text-foreground">{job.location}</p>
-                    </div>
-                  )}
-                  {job.description && (
-                    <div className="mt-4 text-sm text-muted-foreground">
-                      <p className="font-medium text-foreground">Description:</p>
-                      <p className="mt-1 whitespace-pre-wrap leading-relaxed">{job.description}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                {job.description && (
+                  <div>
+                    <h3 className="mb-1.5 text-sm font-semibold text-foreground">Description</h3>
+                    <p dir="auto" className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">
+                      {job.description}
+                    </p>
+                  </div>
+                )}
 
-            {job.attachments && job.attachments.length > 0 && (
-              <Card>
-                <div className="border-b border-border p-5">
-                  <h3 className="font-semibold text-foreground">Photos</h3>
-                </div>
-                <CardContent className="p-5">
-                  <AttachmentGallery attachments={job.attachments} />
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <FileText className="h-4 w-4 text-primary" />
-                  Job Timeline
-                </h3>
+                {job.attachments && job.attachments.length > 0 && (
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-foreground">Photos</h3>
+                    <AttachmentGallery attachments={job.attachments} />
+                  </div>
+                )}
               </div>
-              <CardContent className="p-5">
-                <JobStatusTimeline history={job.statusHistory} />
-              </CardContent>
             </Card>
+            <div className="hidden lg:block">{timeline}</div>
           </div>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             {job.status === "OPEN" && (
               <JobApplicationsCard jobId={job.id} onAccepted={() => setReloadKey((k) => k + 1)} />
             )}
-            <Card>
-              <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <UserRound className="h-4 w-4 text-primary" />
-                  Assigned Artisan
-                </h3>
+
+            <Card className="gap-0 py-0">
+              <div className="border-b px-5 py-4">
+                <h2 className="font-semibold text-foreground">Assigned artisan</h2>
               </div>
-              <CardContent className="p-5">
-                {job.acceptedArtisan ? (
+              <div className="space-y-4 px-5 py-5">
+                {artisan ? (
                   <>
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-14 w-14">
-                        <AvatarImage src={resolveAvatarUrl(job.acceptedArtisan.profilePicture)} />
-                        <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-11 w-11 shrink-0">
+                        <AvatarImage src={resolveAvatarUrl(artisan.profilePicture)} alt="" />
+                        <AvatarFallback className="text-sm font-medium text-foreground/80">
+                          {initialsOf(artisanName) || "?"}
+                        </AvatarFallback>
                       </Avatar>
-                      <div>
-                        <h4 className="font-semibold text-foreground">{artisanName}</h4>
-                        <div className="mt-1 flex items-center gap-1">
-                          <Star className="h-3.5 w-3.5 fill-rating text-rating" />
-                          <span className="text-sm font-medium">—</span>
-                        </div>
-                      </div>
+                      <p dir="auto" className="min-w-0 truncate font-medium text-foreground [unicode-bidi:isolate]">
+                        {artisanName}
+                      </p>
                     </div>
-                    <div className="mt-4 flex gap-2">
-                      <Button variant="outline" className="flex-1 bg-transparent" size="sm" asChild>
-                        {/* MC2 — `&job=` rides along so the message carries a
-                            reference to this job (feeds AD1's evidence view). */}
-                        <Link href={`/dashboard/user/messages?artisan=${job.acceptedArtisan.id}&job=${job.id}`}>
-                          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                          Chat
-                        </Link>
-                      </Button>
-                    </div>
+                    <Button variant="outline" className="h-11 w-full bg-transparent sm:h-10" asChild>
+                      {/* MC2 — `&job=` rides along so the message carries a
+                          reference to this job (feeds AD1's evidence view). */}
+                      <Link href={`/dashboard/user/messages?artisan=${artisan.id}&job=${job.id}`}>
+                        <MessageSquare aria-hidden className="h-4 w-4" />
+                        Message artisan
+                      </Link>
+                    </Button>
                   </>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No artisan assigned yet.</p>
+                  <p className="text-sm text-muted-foreground">
+                    {job.status === "OPEN" ? "No artisan yet. Choose one from the applications." : "No artisan assigned."}
+                  </p>
                 )}
-              </CardContent>
+              </div>
             </Card>
 
-            {/* Payment status card (3.1) — reuses the same Card/CardContent/Badge
-                block already used for "Assigned Artisan" directly above. */}
             {!isPaymentLoading && (
-              <Card>
-                <div className="border-b border-border p-5">
-                  <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                    <CreditCard className="h-4 w-4 text-primary" />
-                    Payment
-                  </h3>
+              <Card className="gap-0 py-0">
+                <div className="border-b px-5 py-4">
+                  <h2 className="font-semibold text-foreground">Payment</h2>
                 </div>
-                <CardContent className="p-5">
+                <div className="px-5 py-5">
                   {!payment ? (
                     <p className="text-sm text-muted-foreground">
-                      No payment due yet — this shows up once an artisan accepts the job.
+                      No payment due yet. It shows up here once an artisan accepts the job.
                     </p>
                   ) : payment.status === "PENDING" ? (
                     <div className="space-y-3">
-                      <p className="text-xl font-bold text-foreground">{formatCurrency(payment.amount)}</p>
-                      <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                        <Link href={`/dashboard/user/jobs/${job.id}/pay`}>Pay Now</Link>
+                      <p className="tnum text-xl font-bold tabular-nums text-foreground">{formatCurrency(payment.amount)}</p>
+                      <Button className="h-11 w-full sm:h-10" asChild>
+                        <Link href={`/dashboard/user/jobs/${job.id}/pay`}>Pay now</Link>
                       </Button>
                     </div>
                   ) : payment.status === "HELD" || (RETRYABLE_PAYOUT_STATUSES as readonly string[]).includes(payment.status) ? (
@@ -381,32 +454,21 @@ export default function JobDetailPage() {
                     // here, never as unpaid or a problem on the customer's
                     // side (matches the artisan job-detail and earnings pages).
                     <div className="space-y-2">
-                      <p className="text-xl font-bold text-foreground">{formatCurrency(payment.amount)}</p>
+                      <p className="tnum text-xl font-bold tabular-nums text-foreground">{formatCurrency(payment.amount)}</p>
                       <Badge variant="outline" className={getPaymentStatusConfig("HELD").className}>
                         {getPaymentStatusConfig("HELD").label}
                       </Badge>
-                      <p className="text-xs text-muted-foreground">
-                        Released to the artisan once you confirm completion.
-                      </p>
-                    </div>
-                  ) : payment.status === "RELEASED" ? (
-                    <div className="space-y-2">
-                      <p className="text-xl font-bold text-foreground">{formatCurrency(payment.amount)}</p>
-                      <Badge variant="outline" className={getPaymentStatusConfig(payment.status).className}>
-                        {getPaymentStatusConfig(payment.status).label}
-                      </Badge>
-                      {payment.releasedAt && (
-                        <p className="text-xs text-muted-foreground">
-                          Paid on {new Date(payment.releasedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                        </p>
-                      )}
+                      <p className="text-xs text-muted-foreground">Released to the artisan once you confirm completion.</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-xl font-bold text-foreground">{formatCurrency(payment.amount)}</p>
+                      <p className="tnum text-xl font-bold tabular-nums text-foreground">{formatCurrency(payment.amount)}</p>
                       <Badge variant="outline" className={getPaymentStatusConfig(payment.status).className}>
                         {getPaymentStatusConfig(payment.status).label}
                       </Badge>
+                      {payment.status === "RELEASED" && payment.releasedAt && (
+                        <p className="text-xs text-muted-foreground">Paid on {formatDay(payment.releasedAt)}</p>
+                      )}
                       {payment.status === "REFUNDED" && (
                         <p className="text-xs text-muted-foreground">This payment was refunded.</p>
                       )}
@@ -418,95 +480,112 @@ export default function JobDetailPage() {
                       )}
                     </div>
                   )}
-                </CardContent>
+                  {refunds.map((r) => (
+                    <p
+                      key={r.reference}
+                      role="note"
+                      className="mt-4 flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-[13px] leading-relaxed text-foreground"
+                    >
+                      <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <span>{duplicateRefundNote(r)}</span>
+                    </p>
+                  ))}
+                </div>
               </Card>
             )}
 
-            <Card>
-              <CardContent className="space-y-2 p-5">
-                {awaitingArtisanFinish && (
-                  <p className="text-sm text-muted-foreground">
-                    Work is in progress. You can confirm completion once {artisanName} marks the job as finished.
-                  </p>
-                )}
-                {canConfirmCompletion && (
-                  <Button
-                    className="w-full bg-success text-success-foreground hover:bg-success/90"
-                    onClick={handleConfirmCompletion}
-                    disabled={isConfirming}
-                  >
-                    {isConfirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Confirm Completion
-                  </Button>
-                )}
-                {job.status === "COMPLETED" && (
-                  <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                    <Link href={`/dashboard/user/review/${job.id}`}>
-                      <Star className="mr-2 h-4 w-4" />
-                      Leave a Review
-                    </Link>
-                  </Button>
-                )}
-                {/* DP1: last in the constructive group. Disputes are
-                    booking-scoped on the backend, so this needs the job's
-                    linked booking — the component states plainly when a job
-                    doesn't have one rather than offering an action the server
-                    would reject. */}
-                <DisputeEntryPoint
-                  bookingId={job.bookingId}
-                  isEligible={(DISPUTABLE_BOOKING_STATUSES as readonly string[]).includes(job.status)}
-                  ineligibleReason="You can report a problem once the job is completed or cancelled."
-                  contextTitle={job.title}
-                  counterpartyName={artisanName}
-                  counterpartyRole="Artisan"
-                  counterpartyAvatar={job.acceptedArtisan?.profilePicture}
-                  amount={payment?.amount}
-                  paymentStatus={payment?.status}
-                  disputeHrefBase="/dashboard/user/disputes"
-                />
-                {(job.status === "OPEN" || job.status === "PENDING") && (
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                    onClick={() => setShowCancelDialog(true)}
-                  >
-                    Cancel Job
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+            <div className="space-y-3">
+              {/* DP1: disputes are booking-scoped on the backend, so this
+                  needs the job's linked booking — the component states
+                  plainly when a job doesn't have one rather than offering an
+                  action the server would reject. */}
+              <DisputeEntryPoint
+                bookingId={job.bookingId}
+                isEligible={(DISPUTABLE_BOOKING_STATUSES as readonly string[]).includes(job.status)}
+                ineligibleReason="You can report a problem once the job is completed or cancelled."
+                contextTitle={job.title}
+                counterpartyName={artisan ? artisanName : "Awaiting artisan"}
+                counterpartyRole="Artisan"
+                counterpartyAvatar={artisan?.profilePicture}
+                amount={payment?.amount}
+                paymentStatus={payment?.status}
+                disputeHrefBase="/dashboard/user/disputes"
+              />
+              {canCancel && (
+                <Button
+                  variant="outline"
+                  className="h-11 w-full border-destructive/30 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-9"
+                  onClick={() => setShowCancelDialog(true)}
+                >
+                  Cancel job
+                </Button>
+              )}
+            </div>
           </div>
+
+          {/* Phones: the timeline comes last, after the artisan and payment. */}
+          <div className="min-w-0 lg:hidden">{timeline}</div>
         </div>
       </div>
 
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Job</AlertDialogTitle>
+            <AlertDialogTitle>Cancel this job?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel &ldquo;{job.title}&rdquo;? This action cannot be undone.
+              &ldquo;{job.title}&rdquo; will be cancelled. This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isCancelling}>No, Keep Job</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 sm:h-9" disabled={isCancelling}>
+              Keep job
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancelJob}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="h-11 bg-destructive text-white hover:bg-destructive/90 sm:h-9"
               disabled={isCancelling}
             >
-              {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Yes, Cancel Job
+              {isCancelling && <Loader2 aria-hidden className="mr-2 h-4 w-4 motion-safe:animate-spin" />}
+              Cancel job
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <EditJobDialog
-        job={job}
-        open={isEditing}
-        onOpenChange={setIsEditing}
-        onSaved={() => setReloadKey((k) => k + 1)}
-      />
+      <EditJobDialog job={job} open={isEditing} onOpenChange={setIsEditing} onSaved={() => setReloadKey((k) => k + 1)} />
     </DashboardLayout>
+  )
+}
+
+function StepText({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
+  return (
+    <div className="flex min-w-0 items-start gap-3">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <div className="min-w-0">
+        <p className="font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 max-w-prose text-sm text-muted-foreground">{body}</p>
+      </div>
+    </div>
+  )
+}
+
+function Fact({
+  icon,
+  term,
+  wide = false,
+  children,
+}: {
+  icon: React.ReactNode
+  term: string
+  wide?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div className={cn("flex min-w-0 gap-3", wide && "sm:col-span-2")}>
+      <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
+      <div className="min-w-0">
+        <dt className="text-xs text-muted-foreground">{term}</dt>
+        <dd className="mt-0.5 flex flex-col items-start text-sm text-foreground">{children}</dd>
+      </div>
+    </div>
   )
 }

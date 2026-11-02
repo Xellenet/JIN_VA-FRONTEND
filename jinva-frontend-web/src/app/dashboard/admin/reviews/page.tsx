@@ -43,6 +43,7 @@ import { cn, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { toast } from "sonner"
 import type { AdminApiReview, ReviewModerationLogEntry, ReviewStatus } from "@/lib/types"
+import { threeLetterMonth } from "@/lib/spending"
 
 const PAGE_SIZE = 20
 
@@ -59,7 +60,7 @@ const actionCfg: Record<ReviewModerationLogEntry["action"], { label: string; cla
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  return threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 }
 
 function extractTotal(meta: Record<string, unknown> | undefined): number {

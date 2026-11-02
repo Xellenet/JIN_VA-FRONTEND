@@ -13,7 +13,7 @@ interface DashboardLayoutProps {
 
 function DashboardSkeleton() {
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="relative flex h-screen overflow-hidden bg-background">
       <aside className="hidden h-full w-56 flex-col border-r border-border bg-sidebar lg:flex">
         <div className="flex h-16 items-center border-b border-sidebar-border px-6">
           <Skeleton className="h-8 w-24" />
@@ -58,7 +58,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   if (!user) return null
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="relative flex h-screen overflow-hidden bg-background">
       {/* PN1 — keeps this device's push token registered for the signed-in user */}
       <PushSync />
       <Sidebar role={user.role} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -67,7 +67,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           overflow-hidden clipped it, instead of the table scrolling. */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <DashboardHeader onMenuToggle={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        {/* relative: Radix Select's hidden native <select> (and any other
+            absolutely positioned helper) is placed against this scroll area,
+            not the page, so it can't stretch the document and leave a blank
+            band below the dashboard after scrolling. */}
+        <main className="relative flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
     </div>
   )

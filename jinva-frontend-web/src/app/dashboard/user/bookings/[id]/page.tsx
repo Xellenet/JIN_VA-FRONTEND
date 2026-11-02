@@ -37,6 +37,7 @@ import { getBookingStatusConfig } from "@/lib/status-badges"
 import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
 import { DisputeEntryPoint } from "@/components/disputes/dispute-entry-point"
 import { AttachmentGallery } from "@/components/dashboard/attachment-gallery"
+import { threeLetterMonth } from "@/lib/spending"
 
 interface BackendBooking {
   id: number
@@ -175,7 +176,7 @@ export default function BookingDetailPage() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">{booking.service?.name ?? "Booking"}</h1>
             <p className="text-muted-foreground">
-              Booking #{booking.id} · Requested {new Date(booking.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              Booking #{booking.id} · Requested {threeLetterMonth(new Date(booking.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))}
             </p>
           </div>
           <Badge variant="outline" className={cfg.className}>
@@ -210,7 +211,7 @@ export default function BookingDetailPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-4">
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
                         <Calendar className="h-3.5 w-3.5 text-primary" />
-                        {new Date(booking.scheduledDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}
+                        {threeLetterMonth(new Date(booking.scheduledDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short", year: "numeric" }))}
                       </span>
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
                         <Clock className="h-3.5 w-3.5 text-primary" />

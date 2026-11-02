@@ -66,6 +66,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { KycMediaFull, KycMediaTile, useKycMedia } from "@/components/admin/kyc-media"
+import { threeLetterMonth } from "@/lib/spending"
 
 /**
  * AT1 / design-spec.md §9 — the artisan verification queue.
@@ -152,7 +153,7 @@ const STALE_AFTER_DAYS = 7
 
 function fmtDate(iso?: string): string {
   if (!iso) return "—"
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  return threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 }
 
 function daysSince(iso: string): number {

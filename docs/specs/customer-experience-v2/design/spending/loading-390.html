@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en-GB" class="">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spending, phone, loading</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: { extend: {
+    fontFamily: { sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+    colors: {
+      background: 'rgb(var(--background-rgb) / <alpha-value>)', foreground: 'rgb(var(--foreground-rgb) / <alpha-value>)', card: 'rgb(var(--card-rgb) / <alpha-value>)',
+      muted: { DEFAULT: 'rgb(var(--muted-rgb) / <alpha-value>)', foreground: 'rgb(var(--muted-foreground-rgb) / <alpha-value>)' },
+      border: 'rgb(var(--border-rgb) / <alpha-value>)', ring: 'rgb(var(--ring-rgb) / <alpha-value>)',
+      primary: { DEFAULT: 'rgb(var(--primary-rgb) / <alpha-value>)', foreground: 'rgb(var(--primary-foreground-rgb) / <alpha-value>)' },
+      brand: { DEFAULT: 'rgb(var(--brand-rgb) / <alpha-value>)', foreground: 'rgb(var(--brand-foreground-rgb) / <alpha-value>)' },
+      success: 'rgb(var(--success-rgb) / <alpha-value>)', warning: 'rgb(var(--warning-rgb) / <alpha-value>)',
+      info: 'rgb(var(--info-rgb) / <alpha-value>)', destructive: 'rgb(var(--destructive-rgb) / <alpha-value>)',
+      sidebar: { DEFAULT: 'var(--sidebar)', accent: 'var(--sidebar-accent)', border: 'var(--sidebar-border)', foreground: 'rgb(var(--sidebar-foreground-rgb) / <alpha-value>)' },
+      c1: 'var(--chart-1)', c3: 'var(--chart-3)', c4: 'var(--chart-4)',
+    },
+  } },
+}
+</script>
+<style>
+  /* JinVa tokens (src/app/globals.css), hex equivalents. */
+  :root {
+    --background: #ffffff; --foreground: #0a0a0a; --card: #ffffff;
+    --muted: #f5f5f5; --muted-foreground: #737373; --border: #e5e5e5; --ring: #a1a1a1;
+    --primary: #193b2a; --primary-foreground: #fafafa;
+    --brand: #193b2a; --brand-foreground: #fafafa;
+    --success-rgb: 1 102 48; --warning-rgb: 137 75 0; --info-rgb: 25 60 184; --destructive-rgb: 231 0 11;
+    --sidebar: #193b2a; --sidebar-accent: #162f22; --sidebar-border: #294b39; --sidebar-foreground: #eeeeee;
+    --background-rgb: 255 255 255; --foreground-rgb: 10 10 10; --card-rgb: 255 255 255; --muted-rgb: 245 245 245;
+    --muted-foreground-rgb: 115 115 115; --border-rgb: 229 229 229; --ring-rgb: 161 161 161; --primary-rgb: 25 59 42;
+    --primary-foreground-rgb: 250 250 250; --brand-rgb: 25 59 42; --brand-foreground-rgb: 250 250 250; --sidebar-foreground-rgb: 238 238 238;
+    /* Spending-page scoped chart palette (Designer note D1): green / amber / blue. */
+    --chart-1: #17895b; --chart-3: #be8700; --chart-4: #3d78b2;
+  }
+  .dark {
+    --background: #070707; --foreground: #f5f5f5; --card: #0e1311;
+    --muted: #191e1c; --muted-foreground: #8f8f8f; --border: rgb(255 255 255 / 0.08); --ring: #029e72;
+    --primary: #029e72; --primary-foreground: #f5f5f5;
+    --brand: #052015; --brand-foreground: #f5f5f5;
+    --success-rgb: 5 223 114; --warning-rgb: 255 185 0; --info-rgb: 80 162 255; --destructive-rgb: 249 63 78;
+    --sidebar: #020e09; --sidebar-accent: #0a1a13; --sidebar-border: #152920; --sidebar-foreground: #ededed;
+    --background-rgb: 7 7 7; --foreground-rgb: 245 245 245; --card-rgb: 14 19 17; --muted-rgb: 25 30 28;
+    --muted-foreground-rgb: 143 143 143; --border-rgb: 34 39 37; --ring-rgb: 2 158 114; --primary-rgb: 2 158 114;
+    --primary-foreground-rgb: 245 245 245; --brand-rgb: 5 32 21; --brand-foreground-rgb: 245 245 245; --sidebar-foreground-rgb: 237 237 237;
+    --chart-1: #029e72; --chart-3: #e58a00; --chart-4: #ad4aff;
+  }
+  html, body { background: var(--background); color: var(--foreground); }
+  body { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-feature-settings: "tnum" 0; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .focus-ring { outline: 2px solid var(--ring); outline-offset: 2px; }
+  /* The one orchestrated moment: the year fills in. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-rise] { transform-origin: bottom; animation: rise 640ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 0ms); }
+    [data-grow] { transform-origin: left; animation: grow 720ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 0ms); }
+    @keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  }
+  .shimmer { background: var(--muted); }
+  @media (prefers-reduced-motion: no-preference) { .shimmer { animation: pulse 1.6s ease-in-out infinite; } @keyframes pulse { 50% { opacity: .55; } } }
+</style>
+
+</head>
+<body class="min-h-screen">
+<header class="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background px-2">
+  <div class="flex items-center gap-1"><button class="relative grid h-10 w-10 place-items-center rounded-md text-muted-foreground" aria-label="menu"><svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><h1 class="text-base font-semibold">Spending</h1></div>
+  <div class="flex items-center gap-0.5"><button class="relative grid h-10 w-10 place-items-center rounded-md text-muted-foreground" aria-label="moon"><svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button><button class="relative grid h-10 w-10 place-items-center rounded-md text-muted-foreground" aria-label="mail"><svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg><span class="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-1 ring-background">2</span></button><button class="relative grid h-10 w-10 place-items-center rounded-md text-muted-foreground" aria-label="bell"><svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-1 ring-background">3</span></button>
+    <span class="ml-1 grid h-8 w-8 place-items-center rounded-full bg-primary text-xs font-medium text-primary-foreground">AO</span></div>
+</header><main class="px-4 pb-16 pt-5"><div class="space-y-5"><p class="sr-only" role="status">Loading your spending</p><div class="flex flex-col gap-4">
+  <div>
+    <h2 class="text-2xl font-semibold tracking-tight">Your spending</h2>
+    <p class="mt-1 text-sm  text-muted-foreground">What you have paid through JinVa, what it was for and who you paid.</p>
+  </div>
+  <div role="group" aria-label="Period" class="grid w-full grid-cols-4 rounded-lg border border-border bg-muted p-1">
+  <button aria-pressed="false" title="Last 30 days" class="h-10 px-1 text-[13px] rounded-md whitespace-nowrap text-muted-foreground">30 days</button><button aria-pressed="false" title="Last 90 days" class="h-10 px-1 text-[13px] rounded-md whitespace-nowrap text-muted-foreground">90 days</button><button aria-pressed="true" title="Last 12 months" class="h-10 px-1 text-[13px] rounded-md whitespace-nowrap bg-card font-semibold text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_rgb(var(--border-rgb))]">12 months</button><button aria-pressed="false" title="All time" class="h-10 px-1 text-[13px] rounded-md whitespace-nowrap text-muted-foreground">All time</button>
+</div>
+</div><div aria-hidden="true" class="rounded-2xl bg-brand p-5">
+    <div class="h-4 w-48 rounded bg-white/10"></div><div class="mt-4 h-11 w-60 rounded bg-white/10"></div><div class="mt-4 h-4 w-56 rounded bg-white/10"></div><div class="mt-5 flex justify-between"><div class="h-4 w-24 rounded bg-white/10"></div><div class="h-4 w-24 rounded bg-white/10"></div></div><div class="mt-5 flex justify-between"><div class="h-4 w-24 rounded bg-white/10"></div><div class="h-4 w-24 rounded bg-white/10"></div></div><div class="mt-5 flex justify-between"><div class="h-4 w-24 rounded bg-white/10"></div><div class="h-4 w-24 rounded bg-white/10"></div></div>
+  </div><div class="rounded-xl border border-border bg-card p-4 "><div class="shimmer rounded h-4 w-40"></div><div class="shimmer rounded mt-2 h-3.5 w-64 max-w-full"></div>
+    <div class="mt-6 flex h-[200px] items-end gap-2"><div class="shimmer flex-1 rounded-t" style="height:30%"></div><div class="shimmer flex-1 rounded-t" style="height:55%"></div><div class="shimmer flex-1 rounded-t" style="height:20%"></div><div class="shimmer flex-1 rounded-t" style="height:3%"></div><div class="shimmer flex-1 rounded-t" style="height:45%"></div><div class="shimmer flex-1 rounded-t" style="height:60%"></div><div class="shimmer flex-1 rounded-t" style="height:35%"></div><div class="shimmer flex-1 rounded-t" style="height:70%"></div><div class="shimmer flex-1 rounded-t" style="height:50%"></div><div class="shimmer flex-1 rounded-t" style="height:90%"></div><div class="shimmer flex-1 rounded-t" style="height:65%"></div><div class="shimmer flex-1 rounded-t" style="height:80%"></div></div></div><div class="rounded-xl border border-border bg-card p-4 "><div class="shimmer rounded h-4 w-36"></div><div class="shimmer rounded mt-2 h-3.5 w-48"></div><div class="mt-6 space-y-5"><div><div class="shimmer rounded h-3.5 w-full"></div><div class="mt-2 h-2 rounded-full bg-muted"><div class="shimmer h-2 rounded-full" style="width:100%;background:color-mix(in oklab,var(--muted-foreground) 18%,transparent)"></div></div></div><div><div class="shimmer rounded h-3.5 w-full"></div><div class="mt-2 h-2 rounded-full bg-muted"><div class="shimmer h-2 rounded-full" style="width:80%;background:color-mix(in oklab,var(--muted-foreground) 18%,transparent)"></div></div></div><div><div class="shimmer rounded h-3.5 w-full"></div><div class="mt-2 h-2 rounded-full bg-muted"><div class="shimmer h-2 rounded-full" style="width:40%;background:color-mix(in oklab,var(--muted-foreground) 18%,transparent)"></div></div></div><div><div class="shimmer rounded h-3.5 w-full"></div><div class="mt-2 h-2 rounded-full bg-muted"><div class="shimmer h-2 rounded-full" style="width:30%;background:color-mix(in oklab,var(--muted-foreground) 18%,transparent)"></div></div></div><div><div class="shimmer rounded h-3.5 w-full"></div><div class="mt-2 h-2 rounded-full bg-muted"><div class="shimmer h-2 rounded-full" style="width:18%;background:color-mix(in oklab,var(--muted-foreground) 18%,transparent)"></div></div></div><div><div class="shimmer rounded h-3.5 w-full"></div><div class="mt-2 h-2 rounded-full bg-muted"><div class="shimmer h-2 rounded-full" style="width:10%;background:color-mix(in oklab,var(--muted-foreground) 18%,transparent)"></div></div></div><div><div class="shimmer rounded h-3.5 w-full"></div><div class="mt-2 h-2 rounded-full bg-muted"><div class="shimmer h-2 rounded-full" style="width:14%;background:color-mix(in oklab,var(--muted-foreground) 18%,transparent)"></div></div></div></div></div><div class="rounded-xl border border-border bg-card"><div class="p-4"><div class="shimmer rounded h-4 w-36"></div><div class="shimmer rounded mt-2 h-3.5 w-64 max-w-full"></div><div class="mt-5 flex gap-2"><div class="shimmer rounded h-10 flex-1 max-w-[300px]"></div></div></div>
+    <div class="divide-y divide-border border-t border-border"><div class="space-y-2.5 p-4"><div class="shimmer rounded h-4 w-3/4"></div><div class="shimmer rounded h-3 w-1/2"></div><div class="flex justify-between"><div class="shimmer rounded h-5 w-20"></div><div class="shimmer rounded h-5 w-24"></div></div></div><div class="space-y-2.5 p-4"><div class="shimmer rounded h-4 w-3/4"></div><div class="shimmer rounded h-3 w-1/2"></div><div class="flex justify-between"><div class="shimmer rounded h-5 w-20"></div><div class="shimmer rounded h-5 w-24"></div></div></div><div class="space-y-2.5 p-4"><div class="shimmer rounded h-4 w-3/4"></div><div class="shimmer rounded h-3 w-1/2"></div><div class="flex justify-between"><div class="shimmer rounded h-5 w-20"></div><div class="shimmer rounded h-5 w-24"></div></div></div><div class="space-y-2.5 p-4"><div class="shimmer rounded h-4 w-3/4"></div><div class="shimmer rounded h-3 w-1/2"></div><div class="flex justify-between"><div class="shimmer rounded h-5 w-20"></div><div class="shimmer rounded h-5 w-24"></div></div></div></div></div></div></main>
+</body>
+</html>

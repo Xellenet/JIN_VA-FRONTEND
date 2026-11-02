@@ -33,7 +33,10 @@ import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { ApiError, apiFetch } from "@/lib/api"
 import { RatingStars } from "@/components/ui/rating-stars"
 import { toast } from "sonner"
-import { availabilityLabel } from "@/lib/availability"
+import { timeOffText, type AvailabilitySummary, type PublicTimeOff } from "@/lib/availability"
+import { AvailabilityBadge } from "@/components/dashboard/availability-badge"
+import { formatDayWithWeekday } from "@/lib/artisan-jobs"
+import { threeLetterMonth } from "@/lib/spending"
 
 interface BackendService {
   id: string
@@ -49,6 +52,9 @@ interface BackendArtisan {
   averageRating: number
   totalReviews: number
   availabilityStatus: string
+  /** Computed from the artisan's Calendar settings; absent on an older API. */
+  availability?: AvailabilitySummary
+  upcomingTimeOff?: PublicTimeOff[]
   services?: BackendService[]
   user: { id: string; firstname: string; lastname: string; profilePicture?: string }
 }
@@ -149,7 +155,8 @@ export default function BookArtisanPage() {
   const router = useRouter()
 
   const [artisan, setArtisan] = useState<{
-    name: string; specialization: string; avatar?: string; avgRating: number; reviews: number; availability: string; availabilityLabel: string
+    name: string; specialization: string; avatar?: string; avgRating: number; reviews: number; availability: string
+    availabilityStatus: string; availabilitySummary?: AvailabilitySummary; timeOff: PublicTimeOff[]
   } | null>(null)
   const [services, setServices] = useState<BackendService[]>([])
   const [selectedService, setSelectedService] = useState("")
@@ -194,7 +201,9 @@ export default function BookArtisanPage() {
           avgRating: Number(profile.averageRating ?? 0),
           reviews: Number(profile.totalReviews ?? 0),
           availability: profile.availabilityStatus === "AVAILABLE" ? "available" : "busy",
-          availabilityLabel: availabilityLabel(profile.availabilityStatus),
+          availabilityStatus: profile.availabilityStatus,
+          availabilitySummary: profile.availability,
+          timeOff: profile.upcomingTimeOff ?? [],
         })
       })
       .catch((err) => {
@@ -275,10 +284,22 @@ export default function BookArtisanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoadingAvailability, hasAnyActiveSlot, visibleMonth, weeklySlots])
 
+  // Time off the artisan set in their Calendar (dates only). Those days are
+  // already empty in the bookable-windows check; this names the reason.
+  const timeOff = useMemo(() => artisan?.timeOff ?? [], [artisan])
+  const isTimeOff = useCallback(
+    (date: Date) => {
+      const key = toDateKey(date)
+      return timeOff.some((t) => key >= t.startDate.slice(0, 10) && key <= t.endDate.slice(0, 10))
+    },
+    [timeOff],
+  )
+
   const isDateDisabled = useCallback(
     (date: Date) => {
       const key = toDateKey(date)
       if (key < todayKey) return true
+      if (isTimeOff(date)) return true
       const dow = date.getDay()
       const hasHours = weeklySlots.some((s) => s.isActive && s.dayOfWeek === dow)
       if (!hasHours) return true
@@ -286,15 +307,16 @@ export default function BookArtisanPage() {
       if (cached && cached.length === 0) return true
       return false
     },
-    [weeklySlots, bookabilityCache, todayKey],
+    [weeklySlots, bookabilityCache, todayKey, isTimeOff],
   )
 
   const dayLabel = useCallback(
     (date: Date, modifiers?: Record<string, boolean>) => {
-      const base = date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+      const base = date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
       if (modifiers?.pastDate) return `${base}, unavailable — date is in the past`
+      if (modifiers?.timeOff) return `${base}, unavailable — the artisan is on time off`
       if (modifiers?.noWorkingHours) return `${base}, unavailable — artisan has no working hours on this day`
-      if (modifiers?.unavailable) return `${base}, unavailable — fully booked or blocked`
+      if (modifiers?.unavailable) return `${base}, unavailable — fully booked`
       if (modifiers?.selected) return `${base}, selected`
       return base
     },
@@ -392,7 +414,7 @@ export default function BookArtisanPage() {
       // Surfaces backend messages verbatim, including the A4 "no longer
       // available" 409 and the A9 "too many pending requests" 409 — both are
       // already specific, human-readable strings, not generic failures.
-      toast.error(err instanceof Error ? err.message : "Failed to create booking.")
+      toast.error(err instanceof Error ? err.message : "Couldn't send the booking request. Try again.")
       invalidateDate(selectedDateKey)
       setSelectedStartTime(null)
     } finally {
@@ -404,17 +426,17 @@ export default function BookArtisanPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" asChild className="-ml-3 h-11 gap-2 text-muted-foreground hover:text-foreground sm:h-9">
             <Link href={`/dashboard/user/artisan/${id}`}>
-              <ArrowLeft className="h-4 w-4" />
-              Back to Profile
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back to profile
             </Link>
           </Button>
         </div>
 
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Book a Service</h1>
-          <p className="text-muted-foreground">Fill in the details below to book {artisan?.name ?? "this artisan"}</p>
+          <h1 className="text-2xl font-bold text-foreground">Book a service</h1>
+          <p className="mt-1 text-muted-foreground">Choose a service and a time to book {artisan?.name ?? "this artisan"}.</p>
         </div>
 
         {unavailable ? (
@@ -424,8 +446,8 @@ export default function BookArtisanPage() {
               <p className="text-sm text-muted-foreground">
                 Their profile may be paused or not finished yet. Find another artisan for this job.
               </p>
-              <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <Link href="/dashboard/user/search">Find Artisans</Link>
+              <Button asChild className="h-11 sm:h-9">
+                <Link href="/dashboard/user/search">Find artisans</Link>
               </Button>
             </CardContent>
           </Card>
@@ -433,13 +455,13 @@ export default function BookArtisanPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <form onSubmit={handleSubmit}>
-              <Card>
-                <div className="border-b border-border p-5">
-                  <h3 className="font-semibold text-foreground">Service Details</h3>
+              <Card className="gap-0 py-0">
+                <div className="border-b border-border px-4 py-4 sm:p-5">
+                  <h2 className="font-semibold text-foreground">Service details</h2>
                 </div>
-                <CardContent className="space-y-5 p-5">
+                <CardContent className="space-y-5 p-4 sm:p-5">
                   <div className="space-y-2">
-                    <Label htmlFor="service">Service Type <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="service">Service <span className="text-destructive" aria-hidden="true">*</span></Label>
                     <Select
                       value={selectedService}
                       onValueChange={(v) => {
@@ -451,7 +473,7 @@ export default function BookArtisanPage() {
                         setSelectedStartTime(null)
                       }}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="service" aria-required="true" className="w-full max-sm:data-[size=default]:h-11">
                         {/* Explicit children instead of relying on Radix's
                             SelectItem->ItemText portal, which is flaky when the
                             item content is a multi-element tree (name + price)
@@ -486,7 +508,7 @@ export default function BookArtisanPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="notes">Notes for the Artisan</Label>
+                    <Label htmlFor="notes">Notes for the artisan</Label>
                     <Textarea
                       id="notes"
                       placeholder="Describe the issue, or add any details the artisan should know before arriving…"
@@ -497,18 +519,18 @@ export default function BookArtisanPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Attach Photos (optional)</Label>
+                    <Label>Photos (optional)</Label>
                     <AttachmentUploader value={attachmentUrls} onChange={setAttachmentUrls} disabled={isSubmitting} />
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="mt-6">
-                <div className="border-b border-border p-5">
-                  <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                    <CalendarDays className="h-4 w-4 text-primary" />
-                    Choose Date &amp; Time
-                  </h3>
+              <Card className="mt-6 gap-0 py-0">
+                <div className="border-b border-border px-4 py-4 sm:p-5">
+                  <h2 className="flex items-center gap-2 font-semibold text-foreground">
+                    <CalendarDays className="h-4 w-4 text-primary" aria-hidden="true" />
+                    Choose a date and time
+                  </h2>
                 </div>
                 {/* overflow-anchor: none — this block's height changes
                     asynchronously (loading spinner -> full time-slot grid
@@ -516,19 +538,19 @@ export default function BookArtisanPage() {
                     nested scroll container (DashboardLayout's <main>), which
                     is exactly the case that trips up the browser's scroll
                     anchoring and produces a visible jump/blank-space flash. */}
-                <CardContent className="space-y-5 p-5" style={{ overflowAnchor: "none" }}>
+                <CardContent className="space-y-5 p-4 sm:p-5" style={{ overflowAnchor: "none" }}>
                   {isLoadingAvailability ? (
                     <div className="flex justify-center py-10">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Loading" />
                     </div>
                   ) : availabilityLoadFailed ? (
-                    <p className="text-sm text-destructive">Could not load this artisan&apos;s availability. Please try again later.</p>
+                    <p className="text-sm text-destructive">Couldn&apos;t load this artisan&apos;s availability. Refresh the page to try again.</p>
                   ) : !hasAnyActiveSlot ? (
                     <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-6 text-center">
-                      <AlertTriangle className="h-6 w-6 text-muted-foreground" />
+                      <AlertTriangle className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
                       <p className="text-sm font-medium text-foreground">This artisan hasn&apos;t set their availability yet</p>
                       <p className="text-xs text-muted-foreground">
-                        They need to configure their working hours before you can book a specific time. Please check back later or post an open job instead.
+                        You can book a time once they add their working hours. Check back later, or post a job instead.
                       </p>
                     </div>
                   ) : (
@@ -543,6 +565,7 @@ export default function BookArtisanPage() {
                           disabled={isDateDisabled}
                           modifiers={{
                             pastDate: (date: Date) => toDateKey(date) < todayKey,
+                            timeOff: (date: Date) => toDateKey(date) >= todayKey && isTimeOff(date),
                             noWorkingHours: (date: Date) =>
                               !weeklySlots.some((s) => s.isActive && s.dayOfWeek === date.getDay()),
                             unavailable: (date: Date) => {
@@ -558,15 +581,24 @@ export default function BookArtisanPage() {
                           className="rounded-lg border"
                         />
                       </div>
+                      <div className="space-y-1 text-sm text-muted-foreground">
+                        <p>Greyed-out days have no working hours, are time off or are fully booked.</p>
+                        {timeOff.length > 0 && (
+                          <p>
+                            <span className="font-medium text-foreground">Time off: </span>
+                            {timeOff.map((t) => timeOffText(t, todayKey)).join("; ")}.
+                          </p>
+                        )}
+                      </div>
 
                       {selectedDate && (
                         <div className="space-y-2">
                           <Label id="time-slot-label">
-                            Available Times — {selectedDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}
+                            Available times on {threeLetterMonth(selectedDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }))}
                           </Label>
                           {isLoadingSlotsForDate ? (
                             <div className="flex justify-center py-6">
-                              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Loading" />
                             </div>
                           ) : (
                             <TimeSlotSelector
@@ -590,72 +622,70 @@ export default function BookArtisanPage() {
               )}
 
               <div className="mt-6 flex gap-3">
-                <Button type="button" variant="outline" asChild className="flex-1 md:flex-none bg-transparent">
+                <Button type="button" variant="outline" asChild className="h-11 flex-1 bg-transparent sm:h-9 md:flex-none">
                   <Link href="/dashboard/user/search">Cancel</Link>
                 </Button>
                 <Button
                   type="submit"
-                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 md:flex-none md:px-8"
+                  className="h-11 flex-1 sm:h-9 md:flex-none md:px-8"
                   disabled={!isFormValid || isSubmitting || !hasAnyActiveSlot || artisan?.availability === "busy"}
                 >
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Confirm Booking
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
+                  Send booking request
                 </Button>
               </div>
             </form>
           </div>
 
           <div className="space-y-6">
-            <Card>
-              <div className="border-b border-border p-5">
-                <h3 className="font-semibold text-foreground">Selected Artisan</h3>
+            <Card className="gap-0 py-0">
+              <div className="border-b border-border px-4 py-4 sm:p-5">
+                <h2 className="font-semibold text-foreground">Artisan</h2>
               </div>
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 {artisan ? (
                   <>
                     <div className="flex items-center gap-4">
-                      <Avatar className="h-16 w-16">
-                        <AvatarImage src={resolveAvatarUrl(artisan.avatar)} />
-                        <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
+                      <Avatar className="h-16 w-16 shrink-0">
+                        <AvatarImage src={resolveAvatarUrl(artisan.avatar)} alt="" />
+                        <AvatarFallback><UserRound className="h-4 w-4" aria-hidden="true" /></AvatarFallback>
                       </Avatar>
-                      <div>
-                        <h4 className="font-semibold text-foreground">{artisan.name}</h4>
-                        <p className="text-sm text-muted-foreground">{artisan.specialization}</p>
+                      <div className="min-w-0">
+                        <p dir="auto" className="font-semibold text-foreground [overflow-wrap:anywhere]">{artisan.name}</p>
+                        <p dir="auto" className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{artisan.specialization}</p>
                         <div className="mt-1">
                           <RatingStars rating={artisan.avgRating} totalReviews={artisan.reviews} size="sm" />
                         </div>
                       </div>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={`mt-4 w-full justify-center ${artisan.availability === "available" ? "border-primary/20 bg-primary/5 text-primary" : "border-border bg-muted text-muted-foreground"}`}
-                    >
-                      <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-                      {artisan.availabilityLabel}
-                    </Badge>
+                    <AvailabilityBadge
+                      summary={artisan.availabilitySummary}
+                      status={artisan.availabilityStatus}
+                      className="mt-4 w-full justify-center"
+                    />
                   </>
                 ) : (
                   <div className="flex items-center justify-center py-6">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Loading" />
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card>
-              <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <CreditCard className="h-4 w-4" />
-                  Booking Summary
-                </h3>
+            <Card className="gap-0 py-0">
+              <div className="border-b border-border px-4 py-4 sm:p-5">
+                <h2 className="flex items-center gap-2 font-semibold text-foreground">
+                  <CreditCard className="h-4 w-4" aria-hidden="true" />
+                  Booking summary
+                </h2>
               </div>
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 {selectedServiceData ? (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">{selectedServiceData.name}</span>
                       {selectedServiceData.price != null && (
-                        <span className="font-medium text-foreground">{formatCurrency(selectedServiceData.price)}</span>
+                        <span className="font-medium tabular-nums text-foreground">{formatCurrency(selectedServiceData.price)}</span>
                       )}
                     </div>
                     <div className="flex items-center justify-between text-sm">
@@ -666,7 +696,7 @@ export default function BookArtisanPage() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Date</span>
                         <span className="font-medium text-foreground">
-                          {selectedDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                          {threeLetterMonth(selectedDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))}
                         </span>
                       </div>
                     )}
@@ -681,7 +711,7 @@ export default function BookArtisanPage() {
                   </div>
                 ) : (
                   <p className="text-center text-sm text-muted-foreground">
-                    Select a service to see pricing
+                    Choose a service to see its price.
                   </p>
                 )}
               </CardContent>
@@ -694,27 +724,27 @@ export default function BookArtisanPage() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader className="items-center text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                <CheckCircle className="h-8 w-8 text-primary" />
+                <CheckCircle className="h-8 w-8 text-primary" aria-hidden="true" />
               </div>
-              <DialogTitle>Booking Request Sent!</DialogTitle>
+              <DialogTitle>Booking request sent</DialogTitle>
               <DialogDescription>
-                Your request has been sent to the artisan and is awaiting their confirmation. You&apos;ll be notified as soon as they respond.
+                {artisan?.name ?? "The artisan"} needs to confirm it. We&apos;ll let you know when they reply.
               </DialogDescription>
             </DialogHeader>
             {createdBooking && (
               <div className="rounded-lg border border-border bg-muted/50 p-4">
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Booking ID</span>
+                    <span className="text-muted-foreground">Booking</span>
                     <span className="font-medium text-foreground">#{createdBooking.id}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Status</span>
-                    <Badge variant="outline" className="border-warning/20 bg-warning/10 text-warning">Pending</Badge>
+                    <Badge variant="outline" className="border-warning/20 bg-warning/10 text-warning">Waiting for the artisan</Badge>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Date</span>
-                    <span className="font-medium text-foreground">{createdBooking.scheduledDate}</span>
+                    <span className="font-medium text-foreground">{formatDayWithWeekday(createdBooking.scheduledDate) || createdBooking.scheduledDate}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Time</span>
@@ -727,17 +757,17 @@ export default function BookArtisanPage() {
             )}
             <DialogFooter className="flex-col gap-2 sm:flex-col">
               <Button
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                className="h-11 w-full sm:h-9"
                 onClick={() => router.push(createdBooking ? `/dashboard/user/bookings/${createdBooking.id}` : "/dashboard/user/bookings")}
               >
-                View My Bookings
+                {createdBooking ? "View booking" : "View my bookings"}
               </Button>
               <Button
                 variant="outline"
-                className="w-full bg-transparent"
+                className="h-11 w-full bg-transparent sm:h-9"
                 onClick={() => { setShowConfirmation(false); router.push("/dashboard/user") }}
               >
-                Back to Dashboard
+                Back to overview
               </Button>
             </DialogFooter>
           </DialogContent>

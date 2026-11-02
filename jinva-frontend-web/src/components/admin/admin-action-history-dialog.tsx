@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiFetchWithMeta } from "@/lib/api"
+import { threeLetterMonth } from "@/lib/spending"
 
 /**
  * The admin area's one "who did what to this thing" dialog —
@@ -80,7 +81,7 @@ export interface AdminActionHistoryDialogProps {
 const PAGE_SIZE = 50
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  return threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 }
 
 function extractTotalPages(meta: Record<string, unknown> | undefined): number {

@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bell and envelope: states</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: { extend: {
+    fontFamily: { sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'], mono: ['Geist Mono', 'ui-monospace', 'monospace'] },
+    colors: {"background":"rgb(var(--background) / <alpha-value>)","foreground":"rgb(var(--foreground) / <alpha-value>)","card":"rgb(var(--card) / <alpha-value>)","popover":"rgb(var(--popover) / <alpha-value>)","muted":"rgb(var(--muted) / <alpha-value>)","muted-foreground":"rgb(var(--muted-foreground) / <alpha-value>)","accent":"rgb(var(--accent) / <alpha-value>)","border":"rgb(var(--border) / <alpha-value>)","input":"rgb(var(--input) / <alpha-value>)","ring":"rgb(var(--ring) / <alpha-value>)","primary":"rgb(var(--primary) / <alpha-value>)","primary-foreground":"rgb(var(--primary-foreground) / <alpha-value>)","destructive":"rgb(var(--destructive) / <alpha-value>)","success":"rgb(var(--success) / <alpha-value>)","warning":"rgb(var(--warning) / <alpha-value>)","attention":"rgb(var(--attention) / <alpha-value>)","info":"rgb(var(--info) / <alpha-value>)","brand":"rgb(var(--brand) / <alpha-value>)","brand-accent":"rgb(var(--brand-accent) / <alpha-value>)","brand-foreground":"rgb(var(--brand-foreground) / <alpha-value>)","sidebar":"rgb(var(--sidebar) / <alpha-value>)","sidebar-accent":"rgb(var(--sidebar-accent) / <alpha-value>)","sidebar-border":"rgb(var(--sidebar-border) / <alpha-value>)","sidebar-foreground":"rgb(var(--sidebar-foreground) / <alpha-value>)"},
+    borderColor: { DEFAULT: 'rgb(var(--border) / 1)' },
+    borderRadius: { sm: '6px', md: '8px', lg: '10px', xl: '14px', '2xl': '18px' },
+  } },
+}
+</script>
+<style>
+  :root { --background:255 255 255;--foreground:10 10 10;--card:255 255 255;--popover:255 255 255;--muted:245 245 245;--muted-foreground:115 115 115;--accent:245 245 245;--border:229 229 229;--input:229 229 229;--ring:161 161 161;--primary:25 59 42;--primary-foreground:250 250 250;--destructive:231 0 11;--success:1 102 48;--warning:137 75 0;--attention:159 45 0;--info:25 60 184;--brand:25 59 42;--brand-accent:59 87 72;--brand-foreground:250 250 250;--sidebar:25 59 42;--sidebar-accent:22 47 34;--sidebar-border:41 75 57;--sidebar-foreground:238 238 238; color-scheme: light; }
+  :root.dark { --background:7 7 7;--foreground:245 245 245;--card:14 19 17;--popover:14 19 17;--muted:25 30 28;--muted-foreground:143 143 143;--accent:29 38 34;--border:34 38 36;--input:43 47 45;--ring:2 158 114;--primary:2 158 114;--primary-foreground:245 245 245;--destructive:249 63 78;--success:5 223 114;--warning:255 185 0;--attention:255 137 4;--info:80 162 255;--brand:5 32 21;--brand-accent:41 63 52;--brand-foreground:245 245 245;--sidebar:2 14 9;--sidebar-accent:10 26 19;--sidebar-border:21 41 32;--sidebar-foreground:239 239 239; color-scheme: dark; }
+  html, body { background: rgb(var(--background)); color: rgb(var(--foreground)); }
+  body { font-family: Geist, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-feature-settings: "ss01"; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
+  .user-text { unicode-bidi: isolate; overflow-wrap: anywhere; white-space: pre-wrap; }
+  /* The one orchestrated moment: the disclosure opening in place. */
+  .disclosure-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 200ms cubic-bezier(.2,.8,.2,1); }
+  .spine { transform-origin: top; animation: spine 240ms cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes spine { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  @media (prefers-reduced-motion: reduce) { .disclosure-body, .spine { transition: none; animation: none; } }
+  .scroll-fade { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
+</style>
+</head>
+<body class="min-h-screen bg-muted/60">
+<script></script>
+<div class="mx-auto max-w-[1360px] px-10 py-10">
+  <h1 class="text-2xl font-semibold tracking-tight">Bell and envelope: states</h1>
+  <p class="mt-1 max-w-[70ch] text-sm text-muted-foreground">Desktop popovers at 400px. On phones the same content sits in the bottom sheet. Badge counts in the header follow the same states.</p>
+  <div class="mt-8 grid gap-x-8 gap-y-10" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+    <section><h2 class="text-sm font-semibold">Notifications: loading</h2><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Notifications</h2></div>
+  <div class="flex items-center gap-1"></div>
+</div><div class="space-y-1 p-3" role="status" aria-label="Loading"><div class="flex items-center gap-3 px-1 py-2.5"><div class="h-8 w-8 shrink-0 animate-pulse rounded-full bg-foreground/[0.07]"></div><div class="min-w-0 flex-1 space-y-2"><div class="h-2.5 w-2/3 animate-pulse rounded bg-foreground/[0.07]"></div><div class="h-2.5 w-2/5 animate-pulse rounded bg-foreground/[0.07]"></div></div></div><div class="flex items-center gap-3 px-1 py-2.5"><div class="h-8 w-8 shrink-0 animate-pulse rounded-full bg-foreground/[0.07]"></div><div class="min-w-0 flex-1 space-y-2"><div class="h-2.5 w-2/3 animate-pulse rounded bg-foreground/[0.07]"></div><div class="h-2.5 w-2/5 animate-pulse rounded bg-foreground/[0.07]"></div></div></div><div class="flex items-center gap-3 px-1 py-2.5"><div class="h-8 w-8 shrink-0 animate-pulse rounded-full bg-foreground/[0.07]"></div><div class="min-w-0 flex-1 space-y-2"><div class="h-2.5 w-2/3 animate-pulse rounded bg-foreground/[0.07]"></div><div class="h-2.5 w-2/5 animate-pulse rounded bg-foreground/[0.07]"></div></div></div></div><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all notifications</a></div></div></div></section><section><h2 class="text-sm font-semibold">Notifications: empty</h2><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Notifications</h2></div>
+  <div class="flex items-center gap-1"></div>
+</div><div class="flex flex-col items-center px-6 py-9 text-center"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span><p class="mt-3 text-sm font-semibold">You’re all caught up</p><p class="mt-1 max-w-[34ch] text-[13px] text-muted-foreground">New notifications about your jobs and payments show up here.</p></div><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all notifications</a></div></div></div></section><section><h2 class="text-sm font-semibold">Notifications: error</h2><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Notifications</h2></div>
+  <div class="flex items-center gap-1"></div>
+</div><div class="flex flex-col items-center px-6 py-9 text-center"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></svg></span><p class="mt-3 text-sm font-semibold">Couldn’t load notifications</p><p class="mt-1 text-[13px] text-muted-foreground">Check your connection, then try again.</p><button class="mt-4 h-9 rounded-md border px-4 text-sm font-medium">Try again</button></div><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all notifications</a></div></div></div></section><section><h2 class="text-sm font-semibold">Messages: empty</h2><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Messages</h2></div>
+  <div class="flex items-center gap-1"></div>
+</div><div class="flex flex-col items-center px-6 py-9 text-center"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><p class="mt-3 text-sm font-semibold">No messages yet</p><p class="mt-1 max-w-[34ch] text-[13px] text-muted-foreground">When you message an artisan, the latest reply shows up here.</p></div><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all messages</a></div></div></div></section><section><h2 class="text-sm font-semibold">Messages: photo, expanded</h2><p class="mt-0.5 text-xs text-muted-foreground">FR-6.15. The photo is never loaded in the menu.</p><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Messages</h2><span class="text-xs text-muted-foreground tnum">2 unread</span></div>
+  <div class="flex items-center gap-1"></div>
+</div><ul class="divide-y"><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="c311-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[#d8e6dd] text-[#193b2a] text-[11px] font-semibold">KA</span><span class="absolute -bottom-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-popover tnum">1</span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c311-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold ">Kofi Asante</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 1:52 pm">1:52 pm</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Good afternoon Madam Ama, I checked the kitchen tap again this morning. The leak is from the cartridge inside the mixer, not the pipe under the sink, so tightening it will only hold for a few days. I can replace the cartridge tomorrow. A new one costs GH₵ 85.00 at the shop in Kaneshie and the work takes about an hour. The quote on the job already covers my labour, so the only extra is the part. I’ll come at 8:00 am. Please make sure someone is home to open the gate, and clear the cupboard under the sink so I can reach the valve. Thank you, Kofi</span>
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="c305-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[#efe1cf] text-[#5a3b14] text-[11px] font-semibold">AB</span><span class="absolute -bottom-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-popover tnum">3</span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c305-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold ">Abena Boateng</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 11:05 am">11:05 am</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Can you send me a photo of the oven before Saturday? I want to bring the right cleaner for it.</span>
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="c287-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[#dfe3ee] text-[#1f2c55] text-[11px] font-semibold">YD</span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c287-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium ">Yaw Darko</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Wed 29 Oct 2026, 7:31 pm">Yesterday</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">You: Thanks, see you on Monday then.</span>
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative bg-primary/[0.035]">
+  <span aria-hidden="true" class="spine absolute bottom-0 left-0 top-0 w-[3px] rounded-r bg-primary"></span>
+  <button type="button" aria-expanded="true" aria-controls="c270-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[#eddcdf] text-[#5c1e2a] text-[11px] font-semibold">EM</span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c270-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium ">Efua Mensah</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Tue 28 Oct 2026, 4:47 pm">Tue</time>
+    </span>
+    
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none rotate-180 text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  <div id="c270-panel" role="region" aria-labelledby="c270-t" class="disclosure-body"><div class="overflow-hidden"><div class="pb-4 pl-[60px] pr-4"><div class="flex items-center gap-3 rounded-lg border border-dashed bg-background px-3 py-3 text-[13px]"><svg class="h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><span><span class="font-medium">Photo</span><span class="block text-xs text-muted-foreground">Open conversation to view</span></span></div><p class="mt-3 text-xs text-muted-foreground">Latest message, <time>Tue 28 Oct 2026, 4:47 pm</time></p><div class="mt-3 flex gap-2"><a class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground">Open conversation</a><a class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border bg-background px-3 text-[13px] font-medium"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 17-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>Reply</a></div></div></div></div>
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="c241-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5M22 8l-5 5"/></svg></span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c241-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium italic text-muted-foreground">Deleted user</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Fri 24 Oct 2026, 10:02 am">24 Oct</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">The job has been cancelled. Sorry for any inconvenience.</span>
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li></ul><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all messages</a></div></div></div></section><section><h2 class="text-sm font-semibold">Messages: deleted contact, expanded</h2><p class="mt-0.5 text-xs text-muted-foreground">FR-6.18. No Reply button.</p><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Messages</h2><span class="text-xs text-muted-foreground tnum">2 unread</span></div>
+  <div class="flex items-center gap-1"></div>
+</div><ul class="divide-y"><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="c311-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[#d8e6dd] text-[#193b2a] text-[11px] font-semibold">KA</span><span class="absolute -bottom-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-popover tnum">1</span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c311-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold ">Kofi Asante</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 1:52 pm">1:52 pm</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Good afternoon Madam Ama, I checked the kitchen tap again this morning. The leak is from the cartridge inside the mixer, not the pipe under the sink, so tightening it will only hold for a few days. I can replace the cartridge tomorrow. A new one costs GH₵ 85.00 at the shop in Kaneshie and the work takes about an hour. The quote on the job already covers my labour, so the only extra is the part. I’ll come at 8:00 am. Please make sure someone is home to open the gate, and clear the cupboard under the sink so I can reach the valve. Thank you, Kofi</span>
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="c305-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[#efe1cf] text-[#5a3b14] text-[11px] font-semibold">AB</span><span class="absolute -bottom-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-popover tnum">3</span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c305-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold ">Abena Boateng</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 11:05 am">11:05 am</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Can you send me a photo of the oven before Saturday? I want to bring the right cleaner for it.</span>
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="c287-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[#dfe3ee] text-[#1f2c55] text-[11px] font-semibold">YD</span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c287-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium ">Yaw Darko</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Wed 29 Oct 2026, 7:31 pm">Yesterday</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">You: Thanks, see you on Monday then.</span>
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="c270-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[#eddcdf] text-[#5c1e2a] text-[11px] font-semibold">EM</span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c270-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium ">Efua Mensah</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Tue 28 Oct 2026, 4:47 pm">Tue</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground"><span class="inline-flex items-center gap-1"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>Photo</span></span>
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative bg-primary/[0.035]">
+  <span aria-hidden="true" class="spine absolute bottom-0 left-0 top-0 w-[3px] rounded-r bg-primary"></span>
+  <button type="button" aria-expanded="true" aria-controls="c241-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="relative mt-0.5 shrink-0"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5M22 8l-5 5"/></svg></span></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="c241-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium italic text-muted-foreground">Deleted user</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Fri 24 Oct 2026, 10:02 am">24 Oct</time>
+    </span>
+    
+  </span>
+  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none rotate-180 text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  <div id="c241-panel" role="region" aria-labelledby="c241-t" class="disclosure-body"><div class="overflow-hidden"><div class="pb-4 pl-[60px] pr-4"><div class="" >
+      <p dir="auto" class="user-text text-[13px] leading-[1.6] text-foreground/90">The job has been cancelled. Sorry for any inconvenience.</p>
+    </div><p class="mt-3 text-xs text-muted-foreground">Latest message, <time>Fri 24 Oct 2026, 10:02 am</time></p><div class="mt-3 flex gap-2"><a class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground">Open conversation</a></div></div></div></div>
+</li></ul><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all messages</a></div></div></div></section><section><h2 class="text-sm font-semibold">Notification: message excerpt, expanded</h2><p class="mt-0.5 text-xs text-muted-foreground">FR-6.11. Server sends 100 characters; we say so.</p><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Notifications</h2><span class="text-xs text-muted-foreground tnum">2 unread</span></div>
+  <div class="flex items-center gap-1"><button class="h-7 rounded-md px-2 text-xs font-medium text-primary">Mark all read</button></div>
+</div><ul class="divide-y"><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9021-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9021-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">Dispute resolved</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 2:14 pm">2 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Your dispute on ‘Fix leaking kitchen tap’ was resolved in your favour. A refund of GH₵ 150.00 has been sent to your original payment method and should arrive within 5 working days.</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative bg-primary/[0.035]">
+  <span aria-hidden="true" class="spine absolute bottom-0 left-0 top-0 w-[3px] rounded-r bg-primary"></span>
+  <button type="button" aria-expanded="true" aria-controls="n9020-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9020-t" dir="auto" class=" text-[13px] [unicode-bidi:isolate] font-medium">New message from Kofi Asante</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 1:52 pm">2 h ago</time>
+    </span>
+    
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none rotate-180 text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  <div id="n9020-panel" role="region" aria-labelledby="n9020-t" class="disclosure-body"><div class="overflow-hidden"><div class="pb-4 pl-[60px] pr-4"><p dir="auto" class="user-text text-[13px] leading-[1.6] text-foreground/90">Good afternoon Madam Ama, I checked the kitchen tap again this morning. The leak is from the cartri…</p>
+  <p class="mt-2 text-xs text-muted-foreground">This is the start of the message. Open the conversation to read the rest.</p>
+  <p class="mt-3 text-xs text-muted-foreground"><time>Thu 30 Oct 2026, 1:52 pm</time></p>
+  <div class="mt-3 flex gap-2"><a class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground">Open conversation</a></div></div></div></div>
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9017-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9017-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">Payment held safely</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 11:40 am">5 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Your payment of GH₵ 450.00 for ‘Rewire bedroom sockets’ is held by JinVa. Selorm Agbeko is paid once you confirm the job is done.</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9004-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9004-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium">Booking confirmed</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Wed 29 Oct 2026, 6:05 pm">Yesterday</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">Abena Boateng accepted your booking for ‘Deep clean, 3-bedroom flat’ on Sat 1 Nov 2026, 9:00 am.</span>
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n8990-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect x="2" y="6" width="20" height="14" rx="2"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n8990-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium">3 artisans applied</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Tue 28 Oct 2026, 9:12 am">2 d ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">Three artisans applied to ‘Install ceiling fan in living room’. Compare their quotes and choose one.</span>
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li></ul><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all notifications</a></div></div></div></section><section><h2 class="text-sm font-semibold">Hostile text renders as text</h2><p class="mt-0.5 text-xs text-muted-foreground">AC-6.6 / SEC-17. Literal markup, wrapped, isolated.</p><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Notifications</h2><span class="text-xs text-muted-foreground tnum">2 unread</span></div>
+  <div class="flex items-center gap-1"><button class="h-7 rounded-md px-2 text-xs font-medium text-primary">Mark all read</button></div>
+</div><ul class="divide-y"><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9021-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9021-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">Dispute resolved</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 2:14 pm">2 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Your dispute on ‘Fix leaking kitchen tap’ was resolved in your favour. A refund of GH₵ 150.00 has been sent to your original payment method and should arrive within 5 working days.</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9020-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9020-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">New message from Kofi Asante</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 1:52 pm">2 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Good afternoon Madam Ama, I checked the kitchen tap again this morning. The leak is from the cartri…</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative bg-primary/[0.035]">
+  <span aria-hidden="true" class="spine absolute bottom-0 left-0 top-0 w-[3px] rounded-r bg-primary"></span>
+  <button type="button" aria-expanded="true" aria-controls="n9017-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9017-t" dir="auto" class=" text-[13px] [unicode-bidi:isolate] font-medium">&lt;script&gt;alert(1)&lt;/script&gt;</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 11:40 am">5 h ago</time>
+    </span>
+    
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none rotate-180 text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  <div id="n9017-panel" role="region" aria-labelledby="n9017-t" class="disclosure-body"><div class="overflow-hidden"><div class="pb-4 pl-[60px] pr-4"><p dir="auto" class="user-text text-[13px] leading-[1.6] text-foreground/90">&lt;img src=x onerror=alert(1)&gt; javascript:alert(1) AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</p>
+  
+  <p class="mt-3 text-xs text-muted-foreground"><time>Thu 30 Oct 2026, 11:40 am</time></p>
+  <div class="mt-3 flex gap-2"><a class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground">View payment</a></div></div></div></div>
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9004-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9004-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium">Booking confirmed</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Wed 29 Oct 2026, 6:05 pm">Yesterday</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">Abena Boateng accepted your booking for ‘Deep clean, 3-bedroom flat’ on Sat 1 Nov 2026, 9:00 am.</span>
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n8990-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect x="2" y="6" width="20" height="14" rx="2"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n8990-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium">3 artisans applied</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Tue 28 Oct 2026, 9:12 am">2 d ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">Three artisans applied to ‘Install ceiling fan in living room’. Compare their quotes and choose one.</span>
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li></ul><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all notifications</a></div></div></div></section><section><h2 class="text-sm font-semibold">Notification with no valid id</h2><p class="mt-0.5 text-xs text-muted-foreground">SEC-18. notificationHref returns null, so no button.</p><div class="mt-3"><div class="w-[400px] overflow-hidden rounded-xl border bg-popover shadow-[0_12px_40px_-12px_rgb(0_0_0/0.25)]"><div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+  <div class="flex items-baseline gap-2"><h2 class="text-sm font-semibold">Notifications</h2><span class="text-xs text-muted-foreground tnum">2 unread</span></div>
+  <div class="flex items-center gap-1"><button class="h-7 rounded-md px-2 text-xs font-medium text-primary">Mark all read</button></div>
+</div><ul class="divide-y"><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9021-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9021-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">Dispute resolved</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 2:14 pm">2 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Your dispute on ‘Fix leaking kitchen tap’ was resolved in your favour. A refund of GH₵ 150.00 has been sent to your original payment method and should arrive within 5 working days.</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9020-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9020-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">New message from Kofi Asante</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 1:52 pm">2 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Good afternoon Madam Ama, I checked the kitchen tap again this morning. The leak is from the cartri…</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9017-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9017-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-semibold">Payment held safely</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Thu 30 Oct 2026, 11:40 am">5 h ago</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-foreground/80">Your payment of GH₵ 450.00 for ‘Rewire bedroom sockets’ is held by JinVa. Selorm Agbeko is paid once you confirm the job is done.</span>
+  </span>
+  <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-primary"><span class="sr-only">Unread</span></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative ">
+  
+  <button type="button" aria-expanded="false" aria-controls="n9004-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n9004-t" dir="auto" class="truncate text-[13px] [unicode-bidi:isolate] font-medium">Booking confirmed</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Wed 29 Oct 2026, 6:05 pm">Yesterday</time>
+    </span>
+    <span dir="auto" class="mt-0.5 line-clamp-1 text-[13px] [unicode-bidi:isolate] text-muted-foreground">Abena Boateng accepted your booking for ‘Deep clean, 3-bedroom flat’ on Sat 1 Nov 2026, 9:00 am.</span>
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none "><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  
+</li><li class="relative bg-primary/[0.035]">
+  <span aria-hidden="true" class="spine absolute bottom-0 left-0 top-0 w-[3px] rounded-r bg-primary"></span>
+  <button type="button" aria-expanded="true" aria-controls="n8990-panel" class="flex w-full items-start gap-3 px-4 py-3 text-left outline-none "><span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect x="2" y="6" width="20" height="14" rx="2"/></svg></span>
+  <span class="min-w-0 flex-1">
+    <span class="flex items-baseline justify-between gap-3">
+      <span id="n8990-t" dir="auto" class=" text-[13px] [unicode-bidi:isolate] font-medium">3 artisans applied</span>
+      <time class="shrink-0 text-[11px] text-muted-foreground" title="Tue 28 Oct 2026, 9:12 am">2 d ago</time>
+    </span>
+    
+  </span>
+  <span class="w-2 shrink-0"></span><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 motion-reduce:transition-none rotate-180 text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+  <div id="n8990-panel" role="region" aria-labelledby="n8990-t" class="disclosure-body"><div class="overflow-hidden"><div class="pb-4 pl-[60px] pr-4"><p dir="auto" class="user-text text-[13px] leading-[1.6] text-foreground/90">Three artisans applied to ‘Install ceiling fan in living room’. Compare their quotes and choose one.</p>
+  
+  <p class="mt-3 text-xs text-muted-foreground"><time>Tue 28 Oct 2026, 9:12 am</time></p>
+  </div></div></div>
+</li></ul><div class="border-t p-2 "><a class="flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium">View all notifications</a></div></div></div></section>
+  </div>
+</div>
+</body></html>

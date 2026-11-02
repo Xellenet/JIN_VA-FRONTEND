@@ -154,7 +154,7 @@ export const RETRYABLE_PAYOUT_STATUSES = ["PENDING_TRANSFER", "TRANSFER_FAILED"]
  */
 export const disputeStatusConfig: Record<string, StatusBadgeConfig & { icon: LucideIcon }> = {
   OPEN:         { label: "Open",         className: "bg-destructive/10 text-destructive border-destructive/20", icon: AlertTriangle },
-  UNDER_REVIEW: { label: "Under Review", className: "bg-warning/10 text-warning border-warning/20",             icon: Clock },
+  UNDER_REVIEW: { label: "Under review", className: "bg-warning/10 text-warning border-warning/20",             icon: Clock },
   RESOLVED:     { label: "Resolved",     className: "bg-primary/10 text-primary border-primary/20",             icon: CheckCircle2 },
   CLOSED:       { label: "Closed",       className: "bg-muted text-muted-foreground border-border",             icon: XCircle },
 }
@@ -224,7 +224,8 @@ export const notificationTypeConfig: Record<Notification["type"], NotificationTy
   // affected user (design-spec.md §2/§6.5).
   dispute:    { icon: Scale,         color: "text-primary",          bg: "bg-primary/10", label: "Dispute" },
   review:     { icon: Star,          color: "text-foreground",       bg: "bg-muted",      label: "Review" },
-  assignment: { icon: Briefcase,     color: "text-foreground",       bg: "bg-muted",      label: "Assignment" },
+  // The "assignment" bucket holds every JOB_* type (H5), so it reads "Job".
+  assignment: { icon: Briefcase,     color: "text-foreground",       bg: "bg-muted",      label: "Job" },
   message:    { icon: MessageSquare, color: "text-foreground",       bg: "bg-muted",      label: "Message" },
   system:     { icon: Settings,      color: "text-muted-foreground", bg: "bg-muted",      label: "System" },
 }

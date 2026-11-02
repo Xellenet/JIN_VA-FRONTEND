@@ -28,8 +28,8 @@ export function PublicFooter() {
           is 6.) At sm the brand block spans the full two-column row, which is the
           spec's intended "2 cols" shape at 768.
         */}
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-6">
-          <div className="sm:col-span-2">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:gap-8 lg:grid-cols-6">
+          <div className="col-span-2">
             <Logo />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
               An artisan services marketplace. Find verified artisans, book them, pay safely, and rate the
@@ -45,12 +45,13 @@ export function PublicFooter() {
               >
                 {column.heading}
               </h2>
-              <ul className="mt-4 space-y-3">
+              {/* Phones: each link is a 44px row (no gap) instead of an 18px line with 12px between. */}
+              <ul className="mt-2 sm:mt-4 sm:space-y-3">
                 {column.links.map((link) => (
                   <li key={`${column.heading}-${link.href}`}>
                     <PublicLink
                       href={link.href}
-                      className="rounded-md text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      className="rounded-md text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:flex max-sm:min-h-11 max-sm:items-center"
                     >
                       {link.label}
                     </PublicLink>
@@ -66,13 +67,13 @@ export function PublicFooter() {
           <div className="flex items-center gap-4">
             <Link
               href="/terms"
-              className="rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:-my-3.5 max-sm:inline-block max-sm:py-3.5"
             >
               Terms
             </Link>
             <Link
               href="/privacy"
-              className="rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:-my-3.5 max-sm:inline-block max-sm:py-3.5"
             >
               Privacy
             </Link>

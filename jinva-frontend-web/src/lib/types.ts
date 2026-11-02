@@ -5,6 +5,8 @@ export interface User {
   name: string
   /** The stored parts of `name`; splitting `name` breaks a two-word first name. */
   firstname?: string
+  /** Optional; null/absent when not given. `name` stays first + last (short display). */
+  middlename?: string | null
   lastname?: string
   email: string
   phone?: string
@@ -185,6 +187,12 @@ export interface Notification {
   isRead: boolean
   time: string
   link?: string
+  /** The raw backend type (e.g. `DISPUTE_RESOLVED`); `type` above is the UI bucket. */
+  rawType?: string
+  /** Server payload, kept untouched. Read only through `notificationAction()` (SEC-18). */
+  payload?: unknown
+  /** Original ISO timestamp, for the full date in the expanded row (FR-6.2). */
+  createdAt?: string
 }
 
 export interface ChatConversation {

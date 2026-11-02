@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, type ReactNode } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
+import { ProfilePreviewBanner } from "@/components/artisan/profile/preview-banner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -20,9 +21,6 @@ import {
 import {
   Star,
   MapPin,
-  Briefcase,
-  Award,
-  ImageIcon,
   ArrowLeft,
   MessageSquare,
   UserRound,
@@ -32,7 +30,8 @@ import {
   Flag,
   Pencil,
 } from "lucide-react"
-import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
+import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
+import { formatDay } from "@/lib/artisan-jobs"
 import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { useAuth } from "@/contexts/auth-context"
@@ -43,7 +42,8 @@ import { ReviewPhotoThumbnails } from "@/components/reviews/review-photo-thumbna
 import { ReviewReasonDialog } from "@/components/reviews/review-reason-dialog"
 import type { ApiPortfolioItem, ApiReview } from "@/lib/types"
 import { toast } from "sonner"
-import { availabilityLabel } from "@/lib/availability"
+import { notBookableReason, type AvailabilitySummary, type PublicTimeOff, type PublicWeeklyHours } from "@/lib/availability"
+import { AvailabilityBadge, WorkingHoursSection } from "@/components/dashboard/availability-badge"
 
 // RE1 — matches `REVIEW_EDIT_WINDOW_HOURS` in api-contract.md §1.
 const REVIEW_EDIT_WINDOW_HOURS = 48
@@ -58,6 +58,10 @@ interface BackendArtisan {
   totalReviews: number
   completedJobsCount?: number
   availabilityStatus: string
+  /** Computed from the artisan's Calendar settings; absent on an older API. */
+  availability?: AvailabilitySummary
+  weeklyHours?: PublicWeeklyHours[]
+  upcomingTimeOff?: PublicTimeOff[]
   isVerified: boolean
   location?: string
   cancellationPolicy?: string
@@ -73,9 +77,18 @@ interface BackendArtisan {
   createdAt: string
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+/** One figure in the hero's stat strip (the same strip as the artisan's own Profile). */
+function Stat({ value, label }: { value: ReactNode; label: string }) {
+  return (
+    <div className="min-w-0 px-2 py-3 text-center sm:px-4">
+      <p className="text-lg font-semibold tabular-nums text-foreground sm:text-xl">{value}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
+    </div>
+  )
 }
+
+/** Back link: a 44px target on phones, flush with the content edge. */
+const BACK_CLASS = "-ml-3 h-11 gap-2 text-muted-foreground hover:text-foreground sm:h-9"
 
 // RV2: reviews are paginated server-side (default limit 10, max 50) — always
 // send `page`/`limit` explicitly and surface `meta.pagination` rather than
@@ -111,7 +124,12 @@ export default function ArtisanPublicProfile() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [flagTarget, setFlagTarget] = useState<ApiReview | null>(null)
-  const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
+  // P1: an artisan reaches this page only through "Preview as a client" on
+  // their own Profile (middleware lets that one route through). They see what
+  // clients see, without the client actions — saving, messaging, booking and
+  // reporting are a client's to take.
+  const isPreview = user?.role === "artisan"
+  const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds({ enabled: user?.role === "user" })
 
   // P3/PF9: this artisan's public (APPROVED-only) portfolio items
   const [portfolioItems, setPortfolioItems] = useState<ApiPortfolioItem[]>([])
@@ -133,7 +151,7 @@ export default function ArtisanPublicProfile() {
           // QA SRCH-15: hidden artisans (suspended, banned, unfinished) answer 404.
           err instanceof ApiError && err.status === 404
             ? "This artisan isn't available right now."
-            : "Could not load artisan profile.",
+            : "Couldn't load this profile. Refresh the page to try again.",
         ),
       )
       .finally(() => setIsLoading(false))
@@ -166,7 +184,7 @@ export default function ArtisanPublicProfile() {
     // than guess which branch applies, so the list always matches what the
     // server would return.
     if (id) loadReviewsPage(id, reviewsPage)
-    toast.success("Reported — this review has been hidden pending review.")
+    toast.success("Review reported. It's hidden while our team checks it.")
   }
 
   useEffect(() => {
@@ -191,7 +209,7 @@ export default function ArtisanPublicProfile() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary motion-reduce:animate-none" aria-label="Loading profile" />
         </div>
       </DashboardLayout>
     )
@@ -201,12 +219,17 @@ export default function ArtisanPublicProfile() {
     return (
       <DashboardLayout>
         <div className="space-y-4">
-          <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
-            <Link href="/dashboard/user/search"><ArrowLeft className="h-4 w-4" />Back to Search</Link>
-          </Button>
+          {isPreview ? (
+            <ProfilePreviewBanner />
+          ) : (
+            <Button variant="ghost" asChild className={BACK_CLASS}>
+              <Link href="/dashboard/user/search"><ArrowLeft className="h-4 w-4" aria-hidden="true" />Back to search</Link>
+            </Button>
+          )}
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <p className="text-muted-foreground">{error || "Artisan not found."}</p>
+              <h1 className="text-lg font-semibold text-foreground">Profile unavailable</h1>
+              <p className="mt-1 text-muted-foreground">{error || "Artisan not found."}</p>
             </CardContent>
           </Card>
         </div>
@@ -215,141 +238,149 @@ export default function ArtisanPublicProfile() {
   }
 
   const name = `${artisan.user.firstname} ${artisan.user.lastname}`.trim()
-  const isAvailable = artisan.availabilityStatus === "AVAILABLE"
-  const specialization = artisan.businessName || artisan.services?.[0]?.name || "General Service"
+  // Why Book is off (no hours, time off for 2 weeks, busy or unavailable), or null.
+  const bookBlockedReason = notBookableReason(artisan.availability, artisan.availabilityStatus)
+  const firstName = artisan.user.firstname?.trim() || name
+  const specialization = artisan.businessName || artisan.services?.[0]?.name || "Artisan"
+  const rating = Number(artisan.averageRating ?? 0)
+  const totalReviews = Number(artisan.totalReviews ?? 0)
+  const experienceYears = artisan.experienceYears != null && artisan.experienceYears > 0 ? artisan.experienceYears : null
+  const hourlyRate = artisan.hourlyRate != null && Number(artisan.hourlyRate) > 0 ? artisan.hourlyRate : null
 
   return (
     <DashboardLayout>
       <div className="space-y-6 pb-24">
-        <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
-          <Link href="/dashboard/user/search">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Search
-          </Link>
-        </Button>
+        {/* P1: the artisan's own preview has one way back (the banner's
+            "Back to editing"); clients get the usual back link. */}
+        {isPreview ? (
+          <ProfilePreviewBanner />
+        ) : (
+          <Button variant="ghost" asChild className={BACK_CLASS}>
+            <Link href="/dashboard/user/search">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back to search
+            </Link>
+          </Button>
+        )}
 
-        {/* Profile Hero */}
-        <Card className="overflow-hidden">
-          <div className="h-32 bg-gradient-to-r from-primary to-primary/80" />
-          <CardContent className="relative px-6 pb-6">
-            <div className="flex flex-col items-start gap-6 md:flex-row md:items-end">
-              <div className="relative -mt-16">
-                <Avatar className="h-28 w-28 border-4 border-background shadow-lg">
-                  <AvatarImage src={resolveAvatarUrl(artisan.user.profilePicture)} />
-                  <AvatarFallback><UserRound className="h-8 w-8" /></AvatarFallback>
+        {/* Profile hero: the same hero and stat strip as the artisan's own Profile. */}
+        <Card className="gap-0 overflow-hidden py-0">
+          <div className="h-24 bg-gradient-to-r from-primary to-primary/80 sm:h-32" />
+          <CardContent className="relative px-4 pb-4 sm:px-6 sm:pb-6">
+            <div className="flex flex-col items-start gap-4 md:flex-row md:items-end md:gap-6">
+              <div className="relative -mt-12 sm:-mt-16">
+                <Avatar className="h-24 w-24 border-4 border-background shadow-lg sm:h-28 sm:w-28">
+                  <AvatarImage src={resolveAvatarUrl(artisan.user.profilePicture)} alt="" />
+                  <AvatarFallback><UserRound className="h-10 w-10" aria-hidden="true" /></AvatarFallback>
                 </Avatar>
-                {artisan.isVerified && (
-                  <span className="absolute -right-1 bottom-1 flex h-6 w-6 items-center justify-center rounded-full bg-background shadow">
-                    <ShieldCheck className="h-4 w-4 text-primary" />
-                  </span>
-                )}
               </div>
 
-              <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div>
+              <div className="flex w-full min-w-0 flex-1 flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-2xl font-bold text-foreground">{name}</h1>
-                    <Badge
-                      variant="outline"
-                      className={isAvailable
-                        ? "border-primary/20 bg-primary/5 text-primary"
-                        : "border-border bg-muted text-muted-foreground"}
-                    >
-                      <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current" />
-                      {availabilityLabel(artisan.availabilityStatus)}
-                    </Badge>
+                    <h1 dir="auto" className="text-2xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">{name}</h1>
+                    {artisan.isVerified && (
+                      <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
+                        <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                        Verified
+                      </Badge>
+                    )}
+                    <AvailabilityBadge summary={artisan.availability} status={artisan.availabilityStatus} />
                   </div>
-                  <p className="mt-1 text-muted-foreground">{specialization}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                  <p dir="auto" className="mt-1 text-muted-foreground [overflow-wrap:anywhere]">{specialization}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     {artisan.location && (
-                      <span className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {artisan.location}
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="[overflow-wrap:anywhere]">{artisan.location}</span>
                       </span>
                     )}
-                    {artisan.experienceYears && (
-                      <span>{artisan.experienceYears} years experience</span>
+                    {experienceYears && (
+                      <span>{experienceYears} {experienceYears === 1 ? "year" : "years"} of experience</span>
                     )}
-                    {artisan.hourlyRate && (
-                      <span>{formatCurrency(artisan.hourlyRate)}/hr</span>
+                    {hourlyRate && (
+                      <span className="tabular-nums">{formatCurrency(hourlyRate)} an hour</span>
                     )}
                   </div>
+                  {bookBlockedReason && (
+                    <p id="book-blocked-reason" className="mt-2 text-sm text-muted-foreground">
+                      {bookBlockedReason}
+                    </p>
+                  )}
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                {!isPreview && (
+                <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto md:shrink-0">
                   <Button
                     variant="outline"
-                    className="bg-transparent"
+                    className="h-11 bg-transparent sm:h-9"
                     disabled={pendingId === artisan.id}
+                    aria-pressed={favouriteIds.has(artisan.id)}
                     onClick={() => toggleFavourite(artisan.id)}
                   >
                     {pendingId === artisan.id
-                      ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      : <Heart className={`mr-2 h-4 w-4 ${favouriteIds.has(artisan.id) ? "fill-destructive text-destructive" : ""}`} />
+                      ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                      : <Heart aria-hidden="true" className={cn("h-4 w-4", favouriteIds.has(artisan.id) && "fill-destructive text-destructive")} />
                     }
                     {favouriteIds.has(artisan.id) ? "Saved" : "Save"}
                   </Button>
-                  <Button variant="outline" asChild className="bg-transparent">
+                  <Button variant="outline" asChild className="h-11 bg-transparent sm:h-9">
                     {/* The deep link takes the artisan's **user** id, not this
                         page's artisan-profile id — they are different sequences
                         and a profile id can collide with an unrelated user's id
                         (qa-report.md F4). */}
                     <Link href={`/dashboard/user/messages?artisan=${artisan.user.id}`}>
-                      <MessageSquare className="mr-2 h-4 w-4" />
+                      <MessageSquare className="h-4 w-4" aria-hidden="true" />
                       Message
                     </Link>
                   </Button>
-                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                    <Link href={`/dashboard/user/book/${artisan.id}`}>Book Now</Link>
-                  </Button>
+                  {bookBlockedReason ? (
+                    <Button className="col-span-2 h-11 sm:h-9" disabled aria-describedby="book-blocked-reason">
+                      Book now
+                    </Button>
+                  ) : (
+                    <Button className="col-span-2 h-11 sm:h-9" asChild>
+                      <Link href={`/dashboard/user/book/${artisan.id}`}>Book now</Link>
+                    </Button>
+                  )}
                 </div>
+                )}
               </div>
             </div>
 
-            {/* Stats */}
-            <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-              <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
-                <div className="flex items-center justify-center gap-1.5">
-                  <RatingStars
-                    rating={Number(artisan.averageRating)}
-                    totalReviews={Number(artisan.totalReviews ?? 0)}
-                    size="lg"
-                    showCount={false}
-                  />
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Avg. Rating</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
-                <div className="flex items-center justify-center gap-1.5">
-                  <Award className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">{artisan.completedJobsCount ?? 0}</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Jobs Completed</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
-                <div className="flex items-center justify-center gap-1.5">
-                  <Briefcase className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">{artisan.services?.length ?? 0}</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Services</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
-                <div className="flex items-center justify-center gap-1.5">
-                  <ImageIcon className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-foreground">{portfolioItems.length}</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Portfolio Items</p>
-              </div>
+            {/* Stat strip: one compact row on every width. */}
+            <div className="mt-5 grid grid-cols-3 divide-x rounded-lg border bg-muted/40">
+              <Stat
+                value={
+                  totalReviews > 0 ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Star className="h-4 w-4 fill-rating text-rating" aria-hidden="true" />
+                      {rating.toFixed(1)}
+                    </span>
+                  ) : (
+                    "–"
+                  )
+                }
+                label={totalReviews > 0 ? "Average rating" : "No ratings yet"}
+              />
+              <Stat value={artisan.completedJobsCount ?? 0} label="Jobs completed" />
+              <Stat value={totalReviews} label={totalReviews === 1 ? "Review" : "Reviews"} />
             </div>
           </CardContent>
         </Card>
 
         {/* Tabs */}
         <Tabs defaultValue="about" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex">
-            <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-            <TabsTrigger value="about">About</TabsTrigger>
-            <TabsTrigger value="reviews">Reviews ({Number(artisan.totalReviews ?? reviews.length)})</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-3 gap-1 sm:inline-flex sm:w-fit sm:gap-0">
+            <TabsTrigger value="about" className="min-h-11 sm:min-h-0">About</TabsTrigger>
+            <TabsTrigger value="portfolio" className="min-h-11 sm:min-h-0">
+              Portfolio
+              <span className="tabular-nums text-muted-foreground">{portfolioLoading ? "" : ` (${portfolioItems.length})`}</span>
+            </TabsTrigger>
+            <TabsTrigger value="reviews" className="min-h-11 sm:min-h-0">
+              Reviews
+              <span className="tabular-nums text-muted-foreground"> ({Number(artisan.totalReviews ?? reviews.length)})</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="portfolio">
@@ -357,31 +388,31 @@ export default function ArtisanPublicProfile() {
           </TabsContent>
 
           <TabsContent value="about">
-            <Card>
-              <CardContent className="p-6 space-y-6">
+            <Card className="gap-0 py-0">
+              <CardContent className="space-y-6 p-4 sm:p-6">
                 <div>
-                  <h3 className="mb-3 text-lg font-semibold text-foreground">About {name}</h3>
+                  <h2 className="mb-3 text-lg font-semibold text-foreground">About {firstName}</h2>
                   {/* B4: never a bio the artisan didn't write. Bio is optional
                       (B1), so an empty one gets an honest line instead. */}
                   {artisan.bio?.trim() ? (
-                    <p className="leading-relaxed text-muted-foreground">{artisan.bio}</p>
+                    <p dir="auto" className="whitespace-pre-line leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{artisan.bio}</p>
                   ) : (
-                    <p className="italic text-muted-foreground">
+                    <p className="text-muted-foreground">
                       {artisan.user.firstname?.trim() || "This artisan"} hasn&apos;t added a bio yet.
                     </p>
                   )}
                 </div>
                 {artisan.services && artisan.services.length > 0 && (
                   <div>
-                    <h4 className="mb-3 text-sm font-semibold text-foreground">Services &amp; Pricing</h4>
+                    <h3 className="mb-3 text-sm font-semibold text-foreground">Services and pricing</h3>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {artisan.services.map((s) => (
                         <div
                           key={s.id}
-                          className="flex items-center justify-between rounded-lg border border-border p-3"
+                          className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
                         >
-                          <span className="text-sm font-medium text-foreground">{s.name}</span>
-                          <span className={s.price != null ? "text-sm font-semibold text-primary" : "text-xs italic text-muted-foreground"}>
+                          <span className="min-w-0 text-sm font-medium text-foreground">{s.name}</span>
+                          <span className={s.price != null ? "shrink-0 text-sm font-semibold tabular-nums text-foreground" : "shrink-0 text-xs text-muted-foreground"}>
                             {s.price != null ? formatCurrency(s.price) : "Price on request"}
                           </span>
                         </div>
@@ -389,62 +420,71 @@ export default function ArtisanPublicProfile() {
                     </div>
                   </div>
                 )}
+                {artisan.weeklyHours && (
+                  <WorkingHoursSection
+                    hours={artisan.weeklyHours}
+                    timeOff={artisan.upcomingTimeOff ?? []}
+                    today={artisan.availability?.today}
+                    firstName={firstName}
+                  />
+                )}
                 <div>
-                  <h4 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                    <ShieldCheck className="h-4 w-4 text-primary" />
-                    Cancellation Policy
-                  </h4>
+                  <h3 className="mb-3 text-sm font-semibold text-foreground">Cancellation policy</h3>
                   <div className="rounded-lg border border-border bg-muted/30 p-4">
                     {artisan.cancellationPolicy ? (
-                      <p className="text-sm leading-relaxed text-muted-foreground">{artisan.cancellationPolicy}</p>
+                      <p dir="auto" className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{artisan.cancellationPolicy}</p>
                     ) : (
-                      <p className="text-sm italic text-muted-foreground">
-                        This artisan hasn&apos;t set a specific cancellation policy yet. Please confirm cancellation terms directly with them before booking.
+                      <p className="text-sm text-muted-foreground">
+                        No cancellation policy set yet. Agree cancellation terms with them in messages before you book.
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-sm font-medium text-foreground">Specialization</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{specialization}</p>
+                <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">Specialisation</dt>
+                    <dd dir="auto" className="mt-0.5 font-medium text-foreground [overflow-wrap:anywhere]">{specialization}</dd>
                   </div>
-                  {artisan.experienceYears && (
-                    <div className="rounded-lg border border-border p-4">
-                      <p className="text-sm font-medium text-foreground">Experience</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{artisan.experienceYears} years</p>
+                  {experienceYears && (
+                    <div className="min-w-0">
+                      <dt className="text-muted-foreground">Experience</dt>
+                      <dd className="mt-0.5 font-medium text-foreground">{experienceYears} {experienceYears === 1 ? "year" : "years"}</dd>
                     </div>
                   )}
                   {artisan.location && (
-                    <div className="rounded-lg border border-border p-4">
-                      <p className="text-sm font-medium text-foreground">Location</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{artisan.location}</p>
+                    <div className="min-w-0">
+                      <dt className="text-muted-foreground">Location</dt>
+                      <dd className="mt-0.5 font-medium text-foreground [overflow-wrap:anywhere]">{artisan.location}</dd>
                     </div>
                   )}
-                  {artisan.hourlyRate && (
-                    <div className="rounded-lg border border-border p-4">
-                      <p className="text-sm font-medium text-foreground">Hourly Rate</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{formatCurrency(artisan.hourlyRate)}/hr</p>
+                  {hourlyRate && (
+                    <div className="min-w-0">
+                      <dt className="text-muted-foreground">Hourly rate</dt>
+                      <dd className="mt-0.5 font-medium tabular-nums text-foreground">{formatCurrency(hourlyRate)}</dd>
                     </div>
                   )}
-                </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">On JinVa since</dt>
+                    <dd className="mt-0.5 font-medium text-foreground">{formatDay(artisan.createdAt) || "–"}</dd>
+                  </div>
+                </dl>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="reviews" className="space-y-4">
-            <Card>
-              <div className="border-b border-border p-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-foreground">Client Reviews</h3>
-                  <RatingStars rating={Number(artisan.averageRating)} totalReviews={Number(artisan.totalReviews ?? 0)} size="lg" />
+            <Card className="gap-0 py-0">
+              <div className="border-b border-border px-4 py-4 sm:px-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="font-semibold text-foreground">Client reviews</h2>
+                  <RatingStars rating={rating} totalReviews={totalReviews} size="lg" />
                 </div>
               </div>
               <CardContent className="divide-y divide-border p-0">
                 {reviews.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <Star className="mb-3 h-8 w-8 text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">No reviews yet.</p>
+                    <Star className="mb-3 h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+                    <p className="text-sm text-muted-foreground">No reviews yet. Reviews appear here after clients finish a job.</p>
                   </div>
                 ) : (
                   reviews.map((review) => {
@@ -459,14 +499,14 @@ export default function ArtisanPublicProfile() {
                     const isUnderReview = review.status === "FLAGGED" && isOwnReview
 
                     return (
-                      <div key={review.id} className="p-5">
+                      <div key={review.id} className="px-4 py-5 sm:px-5">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              <AvatarImage src={resolveAvatarUrl(avatar)} />
-                              <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Avatar className="h-10 w-10 shrink-0">
+                              <AvatarImage src={resolveAvatarUrl(avatar)} alt="" />
+                              <AvatarFallback><UserRound className="h-4 w-4" aria-hidden="true" /></AvatarFallback>
                             </Avatar>
-                            <div>
+                            <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <p className="text-sm font-medium text-foreground">{reviewerName}</p>
                                 {review.verifiedBooking && <VerifiedBookingBadge />}
@@ -479,46 +519,51 @@ export default function ArtisanPublicProfile() {
                                   <Badge variant="outline" className="text-muted-foreground">Edited</Badge>
                                 )}
                               </div>
-                              <p className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                <time dateTime={review.createdAt}>{formatDay(review.createdAt)}</time>
+                              </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-0.5">
+                          <div className="flex shrink-0 items-center gap-0.5" role="img" aria-label={`Rated ${Number(review.rating)} out of 5`}>
                             {Array.from({ length: 5 }).map((_, i) => (
                               <Star
                                 key={`${review.id}-star-${i}`}
+                                aria-hidden="true"
                                 className={`h-4 w-4 ${i < Number(review.rating) ? "fill-rating text-rating" : "text-muted-foreground/30"}`}
                               />
                             ))}
                           </div>
                         </div>
                         {review.review && (
-                          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{review.review}</p>
+                          <p dir="auto" className="mt-3 text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{review.review}</p>
                         )}
                         <ReviewPhotoThumbnails photos={review.photos} />
                         {review.artisanReply && (
                           <div className="mt-3 rounded-r-lg border-l-2 border-primary bg-primary/5 py-2 pl-3 pr-2">
                             <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-                              <MessageSquare className="h-3 w-3" />
-                              Response from {artisan.businessName || name}
+                              <MessageSquare className="h-3 w-3" aria-hidden="true" />
+                              Reply from {artisan.businessName || name}
                               {review.artisanRepliedAt && (
-                                <span className="font-normal text-muted-foreground">· {formatDate(review.artisanRepliedAt)}</span>
+                                <span className="font-normal text-muted-foreground">
+                                  , <time dateTime={review.artisanRepliedAt}>{formatDay(review.artisanRepliedAt)}</time>
+                                </span>
                               )}
                             </p>
                             <p className="mt-1 text-sm leading-relaxed text-foreground">{review.artisanReply}</p>
                           </div>
                         )}
                         {isUnderReview && (
-                          <p className="mt-2 text-xs italic text-muted-foreground">
-                            This review is under moderation review and is temporarily hidden from other users.
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Our team is checking this review. Other people can&apos;t see it until they finish.
                           </p>
                         )}
-                        {(canEdit || !isOwnReview) && (
+                        {!isPreview && (canEdit || !isOwnReview) && (
                           <div className="mt-2 flex items-center gap-3">
                             {canEdit && (
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary" asChild>
+                              <Button variant="ghost" size="sm" className="-ml-2 h-11 px-2 text-xs text-primary hover:text-primary sm:h-7" asChild>
                                 <Link href={`/dashboard/user/review/${review.job!.id}?editReviewId=${review.id}`}>
-                                  <Pencil className="mr-1 h-3 w-3" />
-                                  Edit ({hoursLeft}h left)
+                                  <Pencil className="h-3 w-3" aria-hidden="true" />
+                                  Edit ({hoursLeft} {hoursLeft === 1 ? "hour" : "hours"} left)
                                 </Link>
                               </Button>
                             )}
@@ -526,10 +571,10 @@ export default function ArtisanPublicProfile() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                className="-ml-2 h-11 px-2 text-xs text-muted-foreground hover:text-destructive sm:h-7"
                                 onClick={() => setFlagTarget(review)}
                               >
-                                <Flag className="mr-1 h-3 w-3" />
+                                <Flag className="h-3 w-3" aria-hidden="true" />
                                 Report
                               </Button>
                             )}
@@ -581,31 +626,48 @@ export default function ArtisanPublicProfile() {
       <ReviewReasonDialog
         open={!!flagTarget}
         onOpenChange={(o) => !o && setFlagTarget(null)}
-        title="Report Review"
+        title="Report review"
         subtitle={flagTarget ? `By ${flagTarget.reviewerUser ? `${flagTarget.reviewerUser.firstname} ${flagTarget.reviewerUser.lastname}`.trim() : flagTarget.reviewerName}` : undefined}
         reasonLabel="Why are you reporting this review?"
         reasonPlaceholder="Describe why this review looks fake, abusive, or off-topic…"
         minLength={10}
         maxLength={500}
-        confirmLabel="Submit Report"
+        confirmLabel="Send report"
         helperText="This hides the review from public view while our team investigates. Your reason is recorded for the moderation team."
         onConfirm={handleFlagSubmitted}
       />
 
-      {/* P4: "Book Now" stays anchored at every scroll position, on mobile
+      {/* P4: "Book now" stays anchored at every scroll position, on mobile
           and desktop, offset past the sidebar on large screens so it never
-          covers navigation. `pb-24` above keeps page content clear of it. */}
+          covers navigation. `pb-24` above keeps page content clear of it.
+          Not shown in the artisan's own preview (P1). */}
+      {!isPreview && (
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 p-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur supports-backdrop-blur:bg-background/80 lg:left-56">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <div className="hidden min-w-0 sm:block">
             <p className="truncate text-sm font-semibold text-foreground">{name}</p>
-            <p className="truncate text-xs text-muted-foreground">{formatCurrency(artisan.hourlyRate ?? 0)}/hr · {specialization}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {specialization}
+              {hourlyRate ? `, ${formatCurrency(hourlyRate)} an hour` : ""}
+            </p>
           </div>
-          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto" asChild>
-            <Link href={`/dashboard/user/book/${artisan.id}`}>Book Now</Link>
-          </Button>
+          {bookBlockedReason ? (
+            <div className="flex w-full flex-col gap-1 sm:w-auto sm:items-end">
+              <Button className="h-11 w-full sm:h-9 sm:w-auto" disabled aria-describedby="sticky-book-reason">
+                Book now
+              </Button>
+              <p id="sticky-book-reason" className="text-center text-xs text-muted-foreground sm:text-right">
+                {bookBlockedReason}
+              </p>
+            </div>
+          ) : (
+            <Button className="h-11 w-full sm:h-9 sm:w-auto" asChild>
+              <Link href={`/dashboard/user/book/${artisan.id}`}>Book now</Link>
+            </Button>
+          )}
         </div>
       </div>
+      )}
     </DashboardLayout>
   )
 }

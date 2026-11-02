@@ -55,7 +55,7 @@ interface FieldCopy {
 const FIELD_COPY: Record<KnownFieldKey, FieldCopy> = {
   hourlyRate: {
     label: "Hourly rate",
-    why: "Your starting rate in GH₵ — customers filter on price",
+    why: "Your starting rate in GH₵ — clients filter on price",
     actionLabel: "Add",
     href: "/dashboard/artisan/profile#hourlyRate",
     anchorId: "hourlyRate",
@@ -63,7 +63,7 @@ const FIELD_COPY: Record<KnownFieldKey, FieldCopy> = {
   },
   location: {
     label: "Service area",
-    why: "The town or area you work in, so nearby customers find you",
+    why: "The town or area you work in, so nearby clients find you",
     actionLabel: "Add",
     href: "/dashboard/artisan/profile#location",
     anchorId: "location",
@@ -73,7 +73,7 @@ const FIELD_COPY: Record<KnownFieldKey, FieldCopy> = {
     label: "At least one service",
     why: "The trades you offer, e.g. Plumbing or Electrical",
     actionLabel: "Choose services",
-    href: "/dashboard/artisan/services",
+    href: "/dashboard/artisan/profile?tab=services",
     phrase: "at least one service",
   },
 }
@@ -140,7 +140,7 @@ function compactProse(missing: string[]): string {
   if (phrases.length === 2) return `Two things are missing: ${phrases[0]} and ${phrases[1]}.`
 
   const count = NUMBER_WORDS[phrases.length] ?? String(phrases.length)
-  return `${count} things are missing before customers can find you.`
+  return `${count} things are missing before clients can find you.`
 }
 
 interface ProfileCompletenessProps {
@@ -218,7 +218,7 @@ export function ProfileCompleteness({
             </div>
             <div>
               <h3 className="font-semibold">Your profile isn&apos;t showing in search yet</h3>
-              <p className="text-sm text-muted-foreground">Customers can&apos;t find you until these are filled in.</p>
+              <p className="text-sm text-muted-foreground">Clients can&apos;t find you until these are filled in.</p>
             </div>
           </div>
           <Badge variant="outline" className="border-warning/20 bg-warning/10 text-warning">
@@ -319,7 +319,7 @@ export function BioNudge({ onAdd }: { onAdd: () => void }) {
           <Badge variant="outline">Recommended</Badge>
         </p>
         <p className="text-sm text-muted-foreground">
-          Optional. Artisans with a bio are easier for customers to choose.
+          Optional. Artisans with a bio are easier for clients to choose.
         </p>
       </div>
       <Button size="sm" variant="outline" className="shrink-0 bg-transparent" onClick={onAdd}>

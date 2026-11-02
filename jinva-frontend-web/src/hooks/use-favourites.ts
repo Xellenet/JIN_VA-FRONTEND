@@ -28,15 +28,21 @@ export async function fetchAllFavourites<T>(): Promise<T[]> {
   }
 }
 
-export function useFavouriteIds() {
+/**
+ * @param enabled false skips loading the saved set — for viewers who can't
+ * save artisans (an artisan previewing their own client-facing profile), so
+ * the page doesn't fire a request the API would refuse.
+ */
+export function useFavouriteIds({ enabled = true }: { enabled?: boolean } = {}) {
   const [favouriteIds, setFavouriteIds] = useState<Set<string>>(new Set())
   const [pendingId, setPendingId] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!enabled) return
     fetchAllFavourites<FavouriteArtisanRef>()
       .then((items) => setFavouriteIds(new Set(items.map((a) => a.id))))
       .catch(() => {})
-  }, [])
+  }, [enabled])
 
   const toggleFavourite = useCallback(
     async (artisanId: string) => {

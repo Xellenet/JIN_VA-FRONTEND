@@ -30,7 +30,7 @@ const MESSAGE_MAX = 1000
 /**
  * QA JOB-08: Apply used to send `quotePrice: 0` with a canned message, so an
  * accepted application created a GH₵ 0 payment Paystack rejects. The artisan
- * now states a price (prefilled with the customer's maximum budget) and can
+ * now states a price (prefilled with the client's maximum budget) and can
  * add a short cover note.
  */
 export function ApplyJobDialog({
@@ -82,7 +82,7 @@ export function ApplyJobDialog({
           ...(message.trim() ? { message: message.trim() } : {}),
         }),
       })
-      toast.success("Application sent. The customer will be notified.")
+      toast.success("Application sent. The client will be notified.")
       onApplied(job.id)
       onOpenChange(false)
     } catch (err) {
@@ -113,7 +113,7 @@ export function ApplyJobDialog({
           <DialogTitle>Apply for this job</DialogTitle>
           <DialogDescription>
             {job?.title}
-            {budget ? ` · Customer budget ${budget}` : ""}
+            {budget ? ` · Client budget ${budget}` : ""}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -127,7 +127,7 @@ export function ApplyJobDialog({
           <FormField
             id="apply-quote"
             label="Your price (GH₵)"
-            hint="What you'll charge for the whole job. The customer sees it when choosing."
+            hint="What you'll charge for the whole job. The client sees it when choosing."
             error={quoteError}
           >
             {(control) => (
@@ -145,7 +145,7 @@ export function ApplyJobDialog({
           </FormField>
           <FormField
             id="apply-message"
-            label="Message to the customer"
+            label="Message to the client"
             optional
             aside={
               <span className="text-xs text-muted-foreground">

@@ -118,11 +118,11 @@ export function AttachmentUploader({
         type="button"
         variant="outline"
         size="sm"
-        className="gap-2 bg-transparent"
+        className="h-11 gap-2 bg-transparent sm:h-8"
         onClick={() => inputRef.current?.click()}
         disabled={disabled || isUploading || value.length >= MAX_FILES}
       >
-        {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+        {isUploading ? <Loader2 aria-hidden className="h-3.5 w-3.5 motion-safe:animate-spin" /> : <Upload aria-hidden className="h-3.5 w-3.5" />}
         Attach photos
       </Button>
       <p className="text-xs text-muted-foreground">

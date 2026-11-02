@@ -27,6 +27,7 @@ import {
   type AdminDispute,
   type AdminDisputeStatus,
 } from "@/components/admin/resolve-dispute-dialog"
+import { threeLetterMonth } from "@/lib/spending"
 
 const PAGE_SIZE = 25
 
@@ -126,7 +127,7 @@ export default function DisputesPage() {
   }
 
   const fmtDate = (d: string) =>
-    new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    threeLetterMonth(new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 
   return (
     <DashboardLayout>

@@ -2,7 +2,7 @@
  * Shared Recharts theming — design-spec.md §0.4 and §0.5.
  *
  * Two problems this module fixes, both of which had been copy-pasted across
- * `admin/analytics/page.tsx`, `artisan/analytics/page.tsx` and
+ * `admin/analytics/page.tsx`, `components/earnings/analytics-page.tsx` and
  * `dashboard/admin/revenue-chart.tsx`:
  *
  * 1. **The colours were invalid CSS and silently discarded.** Every chart

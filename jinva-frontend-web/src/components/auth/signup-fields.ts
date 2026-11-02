@@ -1,5 +1,9 @@
 import { ApiError } from "@/lib/api"
 import { PHONE_MESSAGES, type SupportedPhoneCountry } from "@/lib/phone"
+import { PASSWORD_SYMBOLS_TEXT, isStrongPassword } from "@/lib/password-rules"
+import { USERNAME_MESSAGES } from "@/lib/username"
+
+export { isStrongPassword }
 
 /**
  * What `/signup` and "Complete your account" share so they stay identical
@@ -30,6 +34,11 @@ export function validateName(value: string, which: "first" | "last", requireValu
   return text.length > NAME_MAX_LENGTH ? `Shorten to ${NAME_MAX_LENGTH} characters or fewer` : null
 }
 
+/** Sign-up form v2: optional, same length rule as first and last name. */
+export function validateMiddleName(value: string): string | null {
+  return value.trim().length > NAME_MAX_LENGTH ? `Shorten to ${NAME_MAX_LENGTH} characters or fewer` : null
+}
+
 /** PH9: `meta.error` on the duplicate-phone 409. */
 export const PHONE_IN_USE_CODE = "PHONE_NUMBER_IN_USE"
 
@@ -49,12 +58,14 @@ export function isPhoneInUse(error: unknown): boolean {
 export function serverFieldMessages(
   message: string,
   country: SupportedPhoneCountry,
-): { phoneNumber?: string; gender?: string } {
-  const result: { phoneNumber?: string; gender?: string } = {}
+): { phoneNumber?: string; gender?: string; username?: string; middlename?: string } {
+  const result: { phoneNumber?: string; gender?: string; username?: string; middlename?: string } = {}
   if (/phone ?number/i.test(message)) {
     result.phoneNumber = /required/i.test(message) ? PHONE_MESSAGES.required : PHONE_MESSAGES.invalid(country)
   }
   if (/gender/i.test(message)) result.gender = GENDER_REQUIRED
+  if (/username/i.test(message)) result.username = USERNAME_MESSAGES.characters
+  if (/middle ?name/i.test(message)) result.middlename = `Shorten to ${NAME_MAX_LENGTH} characters or fewer`
   return result
 }
 
@@ -76,8 +87,6 @@ export function validateEmail(value: string, requireValue: boolean): string | nu
   return EMAIL_PATTERN.test(text) ? null : EMAIL_MESSAGES.invalid
 }
 
-export const PASSWORD_HINT = "8+ characters: upper and lower case, a number and one of ! @ # $ % ^ & *"
-
 /**
  * QA SEC-16: the address a new account must verify, handed from sign-up to
  * /verify-email through sessionStorage. It used to ride in the URL, which put
@@ -89,21 +98,16 @@ export const PASSWORD_MESSAGES = {
   /** Login: any non-empty password may be tried. */
   enter: "Enter your password",
   create: "Create a password",
-  rule: "Use 8 or more characters with an upper-case letter, a lower-case letter, a number and one of ! @ # $ % ^ & *",
+  rule: `Use 8 or more characters with an upper-case letter, a lower-case letter, a number and one of these symbols: ${PASSWORD_SYMBOLS_TEXT}`,
   reenter: "Re-enter your password",
   mismatch: "These passwords don't match",
 } as const
 
-/**
- * QA VAL-12: the exact rule the backend enforces (PASSWORD_REGEX), so nothing
- * the form accepts is refused after submit. Only the symbols ! @ # $ % ^ & *
- * are allowed, and nothing besides letters, numbers and those symbols.
+/*
+ * QA VAL-12: the exact rule the backend enforces (PASSWORD_REGEX) lives in
+ * `@/lib/password-rules`, shared with the live checklist and the generator, so
+ * nothing the form accepts is refused after submit.
  */
-const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,128}$/
-
-export function isStrongPassword(password: string): boolean {
-  return PASSWORD_PATTERN.test(password)
-}
 
 /** A new password (signup, reset): "Create a password", then the rule. */
 export function validateNewPassword(password: string, requireValue: boolean): string | null {

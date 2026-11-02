@@ -33,6 +33,7 @@ import {
   findMyDisputeForBooking,
 } from "@/lib/disputes"
 import { getPaymentStatusConfig } from "@/lib/status-badges"
+import { threeLetterMonth } from "@/lib/spending"
 
 /**
  * DP1 / design-spec.md §6 — "Report a problem".
@@ -77,7 +78,7 @@ export interface RaiseDisputeDialogProps {
 
 function fmtDate(iso?: string): string | undefined {
   if (!iso) return undefined
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  return threeLetterMonth(new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }))
 }
 
 export function RaiseDisputeDialog({

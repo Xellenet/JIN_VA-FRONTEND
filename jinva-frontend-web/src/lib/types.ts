@@ -5,6 +5,8 @@ export interface User {
   name: string
   /** The stored parts of `name`; splitting `name` breaks a two-word first name. */
   firstname?: string
+  /** Optional; null/absent when not given. `name` stays first + last (short display). */
+  middlename?: string | null
   lastname?: string
   email: string
   phone?: string

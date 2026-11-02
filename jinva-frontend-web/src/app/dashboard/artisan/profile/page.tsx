@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Star, Mail, Phone, MapPin, UserRound, ShieldCheck, Eye, Wrench, ImageIcon } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api"
-import { splitStoredPhone } from "@/lib/phone"
+import { formatStoredPhone } from "@/lib/phone"
 import { availabilityLabel } from "@/lib/availability"
 import { cn } from "@/lib/utils"
 import { useTabParam } from "@/lib/use-tab-param"
@@ -154,7 +154,7 @@ function ArtisanProfileContent() {
                   {user.phone && (
                     <span className="flex items-center gap-1.5">
                       <Phone className="h-3.5 w-3.5" aria-hidden="true" />
-                      {splitStoredPhone(user.phone).national}
+                      {formatStoredPhone(user.phone)}
                     </span>
                   )}
                   {profile?.location && (

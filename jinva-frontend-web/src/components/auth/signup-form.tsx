@@ -26,21 +26,28 @@ import {
   validatePhoneNumber,
   type SupportedPhoneCountry,
 } from "@/lib/phone"
+import { USERNAME_HINT, USERNAME_MESSAGES, sanitizeUsername, validateUsername } from "@/lib/username"
 import {
   AUTH_FORM_CONTAINER_CLASS,
   AUTH_HEADING_CLASS,
   GENDER_OPTIONS,
   GENDER_REQUIRED,
-  PASSWORD_HINT,
   PENDING_VERIFY_EMAIL_KEY,
   ROLE_REQUIRED,
   isPhoneInUse,
   serverFieldMessages,
   validateEmail,
+  validateMiddleName,
   validateName,
   validateNewPassword,
   validatePasswordConfirmation,
 } from "./signup-fields"
+import {
+  NEW_PASSWORD_INPUT_PROPS,
+  PasswordChecklist,
+  PasswordMatch,
+  SuggestPasswordButton,
+} from "./password-checklist"
 
 /**
  * The only two roles a visitor may self-select. ADMIN is deliberately absent:
@@ -75,6 +82,7 @@ function roleFromParam(requested: string | null): string {
 
 type Field =
   | "firstname"
+  | "middlename"
   | "lastname"
   | "username"
   | "email"
@@ -86,6 +94,7 @@ type Field =
 
 const FIELDS: readonly Field[] = [
   "firstname",
+  "middlename",
   "lastname",
   "username",
   "email",
@@ -98,6 +107,7 @@ const FIELDS: readonly Field[] = [
 
 const LABELS: Record<Field, string> = {
   firstname: "First name",
+  middlename: "Middle name",
   lastname: "Last name",
   username: "Username",
   email: "Email",
@@ -109,7 +119,7 @@ const LABELS: Record<Field, string> = {
 }
 
 const EMAIL_TAKEN = "This email already has an account."
-const USERNAME_TAKEN = "That username is taken. Try another."
+const USERNAME_TAKEN = USERNAME_MESSAGES.taken
 
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false)
@@ -131,6 +141,7 @@ export function SignupForm() {
   const searchParams = useSearchParams()
   const [formData, setFormData] = useState({
     firstname: "",
+    middlename: "",
     lastname: "",
     username: "",
     email: "",
@@ -149,10 +160,12 @@ export function SignupForm() {
     switch (field) {
       case "firstname":
         return validateName(formData.firstname, "first", submit)
+      case "middlename":
+        return validateMiddleName(formData.middlename)
       case "lastname":
         return validateName(formData.lastname, "last", submit)
       case "username":
-        return submit && !formData.username.trim() ? "Choose a username" : null
+        return validateUsername(formData.username, submit)
       case "email":
         return validateEmail(formData.email, submit)
       case "phoneNumber":
@@ -169,6 +182,25 @@ export function SignupForm() {
   }
 
   const values = useMemo(() => ({ ...formData, phoneCountry }), [formData, phoneCountry])
+
+  // Spaces never reach the username: removed as they're typed or pasted. The
+  // cleaned value is written to the input here, in the event, so React has
+  // nothing to reset afterwards and the caret stays where the person typed.
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target
+    const { value, caret } = sanitizeUsername(input.value, input.selectionStart)
+    if (value !== input.value) {
+      input.value = value
+      if (caret !== null) input.setSelectionRange(caret, caret)
+    }
+    update("username", value)
+  }
+
+  const handleSuggestPassword = (password: string) => {
+    setFormData((prev) => ({ ...prev, password, confirmPassword: password }))
+    setShowPassword(true)
+    setShowConfirmPassword(true)
+  }
   const v = useFormValidation<Field>({ fields: FIELDS, values, validate: validateField, labels: LABELS })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -186,6 +218,7 @@ export function SignupForm() {
         password: formData.password,
         username: formData.username.trim(),
         firstname: formData.firstname.trim(),
+        ...(formData.middlename.trim() ? { middlename: formData.middlename.trim() } : {}),
         lastname: formData.lastname.trim(),
         phoneNumber,
         gender: formData.gender,
@@ -231,6 +264,10 @@ export function SignupForm() {
         v.setServerError("email", EMAIL_TAKEN)
       } else if (fieldErrors.phoneNumber) {
         v.setServerError("phoneNumber", fieldErrors.phoneNumber)
+      } else if (fieldErrors.username) {
+        v.setServerError("username", fieldErrors.username)
+      } else if (fieldErrors.middlename) {
+        v.setServerError("middlename", fieldErrors.middlename)
       } else if (fieldErrors.gender) {
         v.setServerError("gender", fieldErrors.gender)
       } else {
@@ -287,7 +324,10 @@ export function SignupForm() {
         <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
           <FormAnnouncer message={v.announcement} />
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Sign-up form v2: First, Middle (optional), Last, in reading order.
+              Stacked: three across leaves ~140px per field at 448px and wraps
+              "Middle name (optional)" out of line with the others. */}
+          <div className="grid gap-6">
             <FormField id="firstname" label="First name" error={v.errors.firstname}>
               {(control) => (
                 <Input
@@ -300,6 +340,21 @@ export function SignupForm() {
                   onBlur={() => v.handleBlur("firstname")}
                   className={AUTH_INPUT_CLASS}
                   required
+                  disabled={isLoading}
+                />
+              )}
+            </FormField>
+            <FormField id="middlename" label="Middle name" optional error={v.errors.middlename}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="text"
+                  autoComplete="additional-name"
+                  enterKeyHint="next"
+                  value={formData.middlename}
+                  onChange={(e) => update("middlename", e.target.value)}
+                  onBlur={() => v.handleBlur("middlename")}
+                  className={AUTH_INPUT_CLASS}
                   disabled={isLoading}
                 />
               )}
@@ -322,16 +377,18 @@ export function SignupForm() {
             </FormField>
           </div>
 
-          <FormField id="username" label="Username" error={v.errors.username}>
+          <FormField id="username" label="Username" hint={USERNAME_HINT} error={v.errors.username}>
             {(control) => (
               <Input
                 {...control}
                 type="text"
                 autoComplete="username"
                 autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 enterKeyHint="next"
                 value={formData.username}
-                onChange={(e) => update("username", e.target.value)}
+                onChange={handleUsernameChange}
                 onBlur={() => v.handleBlur("username")}
                 className={AUTH_INPUT_CLASS}
                 required
@@ -417,70 +474,83 @@ export function SignupForm() {
             </FormField>
           </div>
 
-          <FormField
-            id="password"
-            label="Password"
-            hint={PASSWORD_HINT}
-            error={v.errors.password}
-          >
-            {(control) => (
-              <div className="relative">
-                <Input
-                  {...control}
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  enterKeyHint="next"
-                  value={formData.password}
-                  onChange={(e) => update("password", e.target.value)}
-                  onBlur={() => v.handleBlur("password")}
-                  className={`${AUTH_INPUT_CLASS} pr-10`}
-                  required
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            )}
-          </FormField>
+          <div className="space-y-3">
+            <FormField id="password" label="Password" error={v.errors.password} describedBy="password-rules">
+              {(control) => (
+                <div className="relative">
+                  <Input
+                    {...control}
+                    {...NEW_PASSWORD_INPUT_PROPS}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    enterKeyHint="next"
+                    value={formData.password}
+                    onChange={(e) => update("password", e.target.value)}
+                    onBlur={() => v.handleBlur("password")}
+                    className={`${AUTH_INPUT_CLASS} pr-11`}
+                    required
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              )}
+            </FormField>
+            <PasswordChecklist id="password-rules" password={formData.password} />
+            <SuggestPasswordButton onSuggest={handleSuggestPassword} disabled={isLoading} />
+          </div>
 
-          <FormField id="confirmPassword" label="Confirm password" error={v.errors.confirmPassword}>
-            {(control) => (
-              <div className="relative">
-                <Input
-                  {...control}
-                  type={showConfirmPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  enterKeyHint="done"
-                  value={formData.confirmPassword}
-                  onChange={(e) => update("confirmPassword", e.target.value)}
-                  onBlur={() => v.handleBlur("confirmPassword")}
-                  className={`${AUTH_INPUT_CLASS} pr-10`}
-                  required
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                >
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            )}
-          </FormField>
+          <div className="space-y-2">
+            <FormField
+              id="confirmPassword"
+              label="Confirm password"
+              error={v.errors.confirmPassword}
+              describedBy="confirmPassword-match"
+            >
+              {(control) => (
+                <div className="relative">
+                  <Input
+                    {...control}
+                    {...NEW_PASSWORD_INPUT_PROPS}
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    enterKeyHint="done"
+                    value={formData.confirmPassword}
+                    onChange={(e) => update("confirmPassword", e.target.value)}
+                    onBlur={() => v.handleBlur("confirmPassword")}
+                    className={`${AUTH_INPUT_CLASS} pr-11`}
+                    required
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              )}
+            </FormField>
+            <PasswordMatch
+              id="confirmPassword-match"
+              password={formData.password}
+              confirmation={formData.confirmPassword}
+            />
+          </div>
 
           <Button
             type="submit"
-            className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
+            className="w-full h-11 sm:h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
             disabled={isLoading}
           >
             {isLoading ? "Creating account…" : "Create account"}
@@ -500,7 +570,7 @@ export function SignupForm() {
               type="button"
               onClick={handleGoogleSignup}
               disabled={isLoading}
-              className="w-full h-10 border border-input bg-background hover:bg-accent font-normal text-foreground hover:text-accent-foreground transition-colors"
+              className="w-full h-11 sm:h-10 border border-input bg-background hover:bg-accent font-normal text-foreground hover:text-accent-foreground transition-colors"
             >
               <svg className="mr-3 h-5 w-5 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />

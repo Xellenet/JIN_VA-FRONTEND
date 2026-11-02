@@ -15,9 +15,10 @@
     "test:inbox": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-inbox.mjs",
     "test:payout": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-payout.mjs",
     "test:saved-methods": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-saved-methods.mjs",
+    "test:signup": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-signup.mjs",
     "test:csp": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-csp.mjs",
     "regions:generate": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-regions.mjs",
-    "verify": "npm run check:colors && npm run test:redirect && npm run test:phone && npm run test:overview && npm run test:spending && npm run test:inbox && npm run test:payout && npm run test:saved-methods && npm run test:csp && npm run lint && npm run build"
+    "verify": "npm run check:colors && npm run test:redirect && npm run test:phone && npm run test:overview && npm run test:spending && npm run test:inbox && npm run test:payout && npm run test:saved-methods && npm run test:signup && npm run test:csp && npm run lint && npm run build"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

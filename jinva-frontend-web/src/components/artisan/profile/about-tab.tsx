@@ -66,6 +66,7 @@ type ProfessionalField =
 
 type FieldErrorKey =
   | "firstname"
+  | "middlename"
   | "lastname"
   | "experience"
   | "hourlyRate"
@@ -132,6 +133,7 @@ export function AboutTab({
 
   // Personal info form
   const [firstname, setFirstname] = useState("")
+  const [middlename, setMiddlename] = useState("")
   const [lastname, setLastname] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
@@ -178,6 +180,7 @@ export function AboutTab({
     if (!user) return
     const parts = user.name.split(" ")
     setFirstname(user.firstname ?? parts[0] ?? "")
+    setMiddlename(user.middlename ?? "")
     setLastname(user.lastname ?? parts.slice(1).join(" "))
     setEmail(user.email ?? "")
     const storedPhone = splitStoredPhone(user.phone)
@@ -248,6 +251,7 @@ export function AboutTab({
     const errors: typeof fieldErrors = {}
     if (!firstname.trim()) errors.firstname = "Enter your first name."
     else if (firstname.trim().length > NAME_MAX) errors.firstname = `Use at most ${NAME_MAX} characters.`
+    if (middlename.trim().length > NAME_MAX) errors.middlename = `Use at most ${NAME_MAX} characters.`
     if (!lastname.trim()) errors.lastname = "Enter your last name."
     else if (lastname.trim().length > NAME_MAX) errors.lastname = `Use at most ${NAME_MAX} characters.`
     if (location.length > 150) errors.location = "Service area can be at most 150 characters."
@@ -296,6 +300,8 @@ export function AboutTab({
         // PH11: phone is E.164, and sent only when edited.
         body: JSON.stringify({
           firstname: firstname.trim(),
+          // Only when edited, so "" (clear) is never sent by accident.
+          ...(middlename.trim() !== (user?.middlename ?? "") ? { middlename: middlename.trim() } : {}),
           lastname: lastname.trim(),
           ...(phoneUpdate.phoneNumber ? { phoneNumber: phoneUpdate.phoneNumber } : {}),
         }),
@@ -420,6 +426,25 @@ export function AboutTab({
                       }}
                     />
                     <FieldMessage id="firstname" error={fieldErrors.firstname} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="middlename" className={fieldErrors.middlename ? "text-destructive" : undefined}>
+                      Middle name <span className="font-normal text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Input
+                      id="middlename"
+                      className="max-sm:h-11"
+                      autoComplete="additional-name"
+                      maxLength={NAME_MAX}
+                      value={middlename}
+                      aria-invalid={fieldErrors.middlename ? true : undefined}
+                      aria-describedby={describedBy(fieldErrors.middlename && "middlename-error")}
+                      onChange={(e) => {
+                        setMiddlename(e.target.value)
+                        clearFieldError("middlename")
+                      }}
+                    />
+                    <FieldMessage id="middlename" error={fieldErrors.middlename} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastname" className={fieldErrors.lastname ? "text-destructive" : undefined}>Last name</Label>

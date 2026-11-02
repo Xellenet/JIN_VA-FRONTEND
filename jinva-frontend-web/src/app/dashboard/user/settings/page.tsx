@@ -30,11 +30,19 @@ import {
   Loader2,
   Lock,
   CreditCard,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
 import { PhoneField } from "@/components/forms/phone-field"
 import { isStrongPassword, PASSWORD_MESSAGES, PHONE_IN_USE_CODE } from "@/components/auth/signup-fields"
+import {
+  NEW_PASSWORD_INPUT_PROPS,
+  PasswordChecklist,
+  PasswordMatch,
+  SuggestPasswordButton,
+} from "@/components/auth/password-checklist"
 import {
   DEFAULT_PHONE_COUNTRY,
   PHONE_MESSAGES,
@@ -62,6 +70,7 @@ function UserSettingsContent() {
   const activeTab = searchParams.get("tab") ?? "profile"
 
   const [firstname, setFirstname] = useState("")
+  const [middlename, setMiddlename] = useState("")
   const [lastname, setLastname] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
@@ -77,6 +86,7 @@ function UserSettingsContent() {
   const [currentPass, setCurrentPass] = useState("")
   const [newPass, setNewPass] = useState("")
   const [confirmPass, setConfirmPass] = useState("")
+  const [showNewPass, setShowNewPass] = useState(false)
   const [isUpdatingPass, setIsUpdatingPass] = useState(false)
 
   // ── Delete account (F4 / C1) ────────────────────────────────────────────
@@ -203,6 +213,7 @@ function UserSettingsContent() {
     if (!user) return
     const parts = user.name.split(" ")
     setFirstname(user.firstname ?? parts[0] ?? "")
+    setMiddlename(user.middlename ?? "")
     setLastname(user.lastname ?? parts.slice(1).join(" "))
     setEmail(user.email ?? "")
     const storedPhone = splitStoredPhone(user.phone)
@@ -232,8 +243,8 @@ function UserSettingsContent() {
       ? "Enter your first name."
       : !lastname.trim()
         ? "Enter your last name."
-        : firstname.trim().length > NAME_MAX || lastname.trim().length > NAME_MAX
-          ? `First and last name can each be at most ${NAME_MAX} characters.`
+        : firstname.trim().length > NAME_MAX || middlename.trim().length > NAME_MAX || lastname.trim().length > NAME_MAX
+          ? `First, middle and last name can each be at most ${NAME_MAX} characters.`
           : null
     if (nameError) {
       toast.error(nameError)
@@ -257,6 +268,9 @@ function UserSettingsContent() {
       return
     }
 
+    // Only sent when edited, so "" (clear) is never sent by accident.
+    const middlenameChanged = middlename.trim() !== (user.middlename ?? "")
+
     setIsSaving(true)
     let accountSaved = false
     try {
@@ -264,6 +278,7 @@ function UserSettingsContent() {
         method: "PATCH",
         body: JSON.stringify({
           firstname: firstname.trim(),
+          ...(middlenameChanged ? { middlename: middlename.trim() } : {}),
           lastname: lastname.trim(),
           // PH11: E.164, and only when edited (see phoneUpdateFor).
           ...(phoneUpdate.phoneNumber ? { phoneNumber: phoneUpdate.phoneNumber } : {}),
@@ -325,6 +340,7 @@ function UserSettingsContent() {
       setCurrentPass("")
       setNewPass("")
       setConfirmPass("")
+      setShowNewPass(false)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Couldn't update your password. Try again.")
     } finally {
@@ -389,6 +405,19 @@ function UserSettingsContent() {
                       value={firstname}
                       onChange={(e) => setFirstname(e.target.value)}
                       placeholder="First name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="middleName">
+                      Middle name <span className="font-normal text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Input
+                      id="middleName"
+                      className="max-sm:h-11"
+                      autoComplete="additional-name"
+                      maxLength={NAME_MAX}
+                      value={middlename}
+                      onChange={(e) => setMiddlename(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -671,32 +700,59 @@ function UserSettingsContent() {
                       id="currentPass"
                       className="max-sm:h-11"
                       type="password"
-                      placeholder="Enter current password"
+                      autoComplete="current-password"
                       value={currentPass}
                       onChange={(e) => setCurrentPass(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="newPass">New password</Label>
-                    <Input
-                      id="newPass"
-                      className="max-sm:h-11"
-                      type="password"
-                      placeholder="Enter new password"
-                      value={newPass}
-                      onChange={(e) => setNewPass(e.target.value)}
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="newPass">New password</Label>
+                      <div className="relative">
+                        <Input
+                          id="newPass"
+                          {...NEW_PASSWORD_INPUT_PROPS}
+                          className="pr-11 max-sm:h-11"
+                          type={showNewPass ? "text" : "password"}
+                          autoComplete="new-password"
+                          aria-describedby="newPass-rules"
+                          value={newPass}
+                          onChange={(e) => setNewPass(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPass((v) => !v)}
+                          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-foreground"
+                          aria-label={showNewPass ? "Hide new password" : "Show new password"}
+                          aria-pressed={showNewPass}
+                        >
+                          {showNewPass ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                        </button>
+                      </div>
+                    </div>
+                    <PasswordChecklist id="newPass-rules" password={newPass} />
+                    <SuggestPasswordButton
+                      disabled={isUpdatingPass}
+                      onSuggest={(suggested) => {
+                        setNewPass(suggested)
+                        setConfirmPass(suggested)
+                        setShowNewPass(true)
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirmPass">Confirm new password</Label>
                     <Input
                       id="confirmPass"
+                      {...NEW_PASSWORD_INPUT_PROPS}
                       className="max-sm:h-11"
-                      type="password"
-                      placeholder="Confirm new password"
+                      type={showNewPass ? "text" : "password"}
+                      autoComplete="new-password"
+                      aria-describedby="confirmPass-match"
                       value={confirmPass}
                       onChange={(e) => setConfirmPass(e.target.value)}
                     />
+                    <PasswordMatch id="confirmPass-match" password={newPass} confirmation={confirmPass} />
                   </div>
                   <Button
                     className="max-sm:h-11 max-sm:w-full"

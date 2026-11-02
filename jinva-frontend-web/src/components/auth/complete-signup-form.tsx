@@ -50,6 +50,7 @@ import {
   ROLE_REQUIRED,
   isPhoneInUse,
   serverFieldMessages,
+  validateMiddleName,
   validateName,
 } from "./signup-fields"
 
@@ -104,6 +105,7 @@ interface CompleteSignupResponse {
 
 type Field =
   | "firstname"
+  | "middlename"
   | "lastname"
   | "phoneNumber"
   | "gender"
@@ -119,6 +121,7 @@ type Field =
 /** DOM order = visual order (two-up rows read left, then right). */
 const FIELDS: readonly Field[] = [
   "firstname",
+  "middlename",
   "lastname",
   "phoneNumber",
   "gender",
@@ -134,6 +137,7 @@ const FIELDS: readonly Field[] = [
 
 const LABELS: Record<Field, string> = {
   firstname: "First name",
+  middlename: "Middle name",
   lastname: "Last name",
   phoneNumber: "Phone number",
   gender: "Gender",
@@ -187,6 +191,7 @@ export function CompleteSignupForm() {
   const [formData, setFormData] = useState({
     role: "" as SelfSelectableRole | "",
     firstname: "",
+    middlename: "",
     lastname: "",
     phoneNumber: "",
     gender: "",
@@ -252,6 +257,8 @@ export function CompleteSignupForm() {
     switch (field) {
       case "firstname":
         return validateName(formData.firstname, "first", submit)
+      case "middlename":
+        return validateMiddleName(formData.middlename)
       case "lastname":
         return validateName(formData.lastname, "last", submit)
       case "phoneNumber":
@@ -335,6 +342,7 @@ export function CompleteSignupForm() {
       const payload = {
         role: formData.role,
         firstname: formData.firstname.trim(),
+        ...(formData.middlename.trim() ? { middlename: formData.middlename.trim() } : {}),
         lastname: formData.lastname.trim(),
         phoneNumber,
         gender: formData.gender,
@@ -396,6 +404,10 @@ export function CompleteSignupForm() {
           v.setServerError("gender", fieldErrors.gender)
           return
         }
+        if (fieldErrors.middlename) {
+          v.setServerError("middlename", fieldErrors.middlename)
+          return
+        }
         if (/service/i.test(error.message) && isArtisan) {
           v.setServerError(
             "services",
@@ -455,7 +467,8 @@ export function CompleteSignupForm() {
         <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting} className="space-y-6">
           <FormAnnouncer message={v.announcement} />
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Sign-up form v2: First, Middle (optional), Last — stacked, as on /signup. */}
+          <div className="grid gap-6">
             <FormField id="firstname" label="First name" error={v.errors.firstname}>
               {(control) => (
                 <Input
@@ -468,6 +481,21 @@ export function CompleteSignupForm() {
                   onBlur={() => v.handleBlur("firstname")}
                   className={AUTH_INPUT_CLASS}
                   required
+                  disabled={isBusy}
+                />
+              )}
+            </FormField>
+            <FormField id="middlename" label="Middle name" optional error={v.errors.middlename}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="text"
+                  autoComplete="additional-name"
+                  enterKeyHint="next"
+                  value={formData.middlename}
+                  onChange={(e) => update("middlename", e.target.value)}
+                  onBlur={() => v.handleBlur("middlename")}
+                  className={AUTH_INPUT_CLASS}
                   disabled={isBusy}
                 />
               )}
@@ -750,7 +778,7 @@ export function CompleteSignupForm() {
           <div className="space-y-3">
             <Button
               type="submit"
-              className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
+              className="w-full h-11 sm:h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
               disabled={isBusy}
             >
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
@@ -760,7 +788,7 @@ export function CompleteSignupForm() {
               type="button"
               onClick={handleCancel}
               disabled={isBusy}
-              className="w-full h-10 border border-input bg-background hover:bg-accent font-normal text-foreground hover:text-accent-foreground transition-colors"
+              className="w-full h-11 sm:h-10 border border-input bg-background hover:bg-accent font-normal text-foreground hover:text-accent-foreground transition-colors"
             >
               {isCancelling ? "Cancelling…" : "Cancel"}
             </Button>

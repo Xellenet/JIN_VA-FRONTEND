@@ -32,10 +32,18 @@ import {
   UserCircle,
   ShieldCheck,
   KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { ApiError, apiFetch } from "@/lib/api"
 import { isStrongPassword, PASSWORD_MESSAGES } from "@/components/auth/signup-fields"
+import {
+  NEW_PASSWORD_INPUT_PROPS,
+  PasswordChecklist,
+  PasswordMatch,
+  SuggestPasswordButton,
+} from "@/components/auth/password-checklist"
 import { loginUrlAfterAccountDeletion } from "@/lib/auth"
 import { applyPushPreference } from "@/lib/push-notifications"
 import { stripPreferenceMetadata } from "@/lib/notifications"
@@ -198,6 +206,7 @@ function ArtisanSettingsContent() {
   const [currentPass, setCurrentPass] = useState("")
   const [newPass, setNewPass] = useState("")
   const [confirmPass, setConfirmPass] = useState("")
+  const [showNewPass, setShowNewPass] = useState(false)
   const [passErrors, setPassErrors] = useState<{ newPass?: string; confirmPass?: string; form?: string }>({})
   const [isUpdatingPass, setIsUpdatingPass] = useState(false)
 
@@ -228,6 +237,7 @@ function ArtisanSettingsContent() {
       setCurrentPass("")
       setNewPass("")
       setConfirmPass("")
+      setShowNewPass(false)
     } catch (err: unknown) {
       setPassErrors({ form: err instanceof Error ? err.message : "Couldn’t update your password. Try again." })
     } finally {
@@ -479,22 +489,46 @@ function ArtisanSettingsContent() {
                       }}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="newPass" className={passErrors.newPass ? "text-destructive" : undefined}>New password</Label>
-                    <Input
-                      id="newPass"
-                      type="password"
-                      autoComplete="new-password"
-                      className="max-sm:h-11"
-                      aria-invalid={passErrors.newPass ? true : undefined}
-                      aria-describedby={passErrors.newPass ? "newPass-error" : undefined}
-                      value={newPass}
-                      onChange={(e) => {
-                        setNewPass(e.target.value)
-                        setPassErrors((p) => ({ ...p, newPass: undefined, form: undefined }))
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="newPass" className={passErrors.newPass ? "text-destructive" : undefined}>New password</Label>
+                      <div className="relative">
+                        <Input
+                          id="newPass"
+                          {...NEW_PASSWORD_INPUT_PROPS}
+                          type={showNewPass ? "text" : "password"}
+                          autoComplete="new-password"
+                          className="pr-11 max-sm:h-11"
+                          aria-invalid={passErrors.newPass ? true : undefined}
+                          aria-describedby={passErrors.newPass ? "newPass-error newPass-rules" : "newPass-rules"}
+                          value={newPass}
+                          onChange={(e) => {
+                            setNewPass(e.target.value)
+                            setPassErrors((p) => ({ ...p, newPass: undefined, form: undefined }))
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPass((v) => !v)}
+                          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-foreground"
+                          aria-label={showNewPass ? "Hide new password" : "Show new password"}
+                          aria-pressed={showNewPass}
+                        >
+                          {showNewPass ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                        </button>
+                      </div>
+                      {passErrors.newPass && <p id="newPass-error" className="text-sm text-destructive">{passErrors.newPass}</p>}
+                    </div>
+                    <PasswordChecklist id="newPass-rules" password={newPass} />
+                    <SuggestPasswordButton
+                      disabled={isUpdatingPass}
+                      onSuggest={(suggested) => {
+                        setNewPass(suggested)
+                        setConfirmPass(suggested)
+                        setShowNewPass(true)
+                        setPassErrors((p) => ({ ...p, newPass: undefined, confirmPass: undefined, form: undefined }))
                       }}
                     />
-                    {passErrors.newPass && <p id="newPass-error" className="text-sm text-destructive">{passErrors.newPass}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirmPass" className={passErrors.confirmPass ? "text-destructive" : undefined}>
@@ -502,11 +536,12 @@ function ArtisanSettingsContent() {
                     </Label>
                     <Input
                       id="confirmPass"
-                      type="password"
+                      {...NEW_PASSWORD_INPUT_PROPS}
+                      type={showNewPass ? "text" : "password"}
                       autoComplete="new-password"
                       className="max-sm:h-11"
                       aria-invalid={passErrors.confirmPass ? true : undefined}
-                      aria-describedby={passErrors.confirmPass ? "confirmPass-error" : undefined}
+                      aria-describedby={passErrors.confirmPass ? "confirmPass-error confirmPass-match" : "confirmPass-match"}
                       value={confirmPass}
                       onChange={(e) => {
                         setConfirmPass(e.target.value)
@@ -516,6 +551,7 @@ function ArtisanSettingsContent() {
                     {passErrors.confirmPass && (
                       <p id="confirmPass-error" className="text-sm text-destructive">{passErrors.confirmPass}</p>
                     )}
+                    <PasswordMatch id="confirmPass-match" password={newPass} confirmation={confirmPass} />
                   </div>
                   {passErrors.form && (
                     <p role="alert" className="flex items-start gap-2 text-sm text-destructive">

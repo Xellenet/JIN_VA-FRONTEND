@@ -13,6 +13,7 @@ interface BackendUser {
   email: string
   username: string
   firstname: string
+  middlename?: string | null
   lastname: string
   phoneNumber?: string
   addresses?: Array<{ id: number; street: string; city: string; country: string; zipCode: string }>
@@ -37,6 +38,7 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
     id: data.id,
     name: `${data.firstname} ${data.lastname}`.trim(),
     firstname: data.firstname,
+    middlename: data.middlename ?? null,
     lastname: data.lastname,
     email: data.email,
     phone: data.phoneNumber,
@@ -62,7 +64,9 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
 // `resolveAvatarUrl()`. A cached v3 user carries the old unresolved relative
 // path, which would keep 404ing for the rest of the browser session.
 // v5: v4 entries may hold a third-party avatar URL built from the email.
-const CACHE_KEY = "jinva:user:v5"
+// v6: `middlename` added. A v5 entry has none, and a Settings save from it
+// would look like clearing a middle name the account actually has.
+const CACHE_KEY = "jinva:user:v6"
 
 function readCache(): User | null {
   if (typeof window === "undefined") return null

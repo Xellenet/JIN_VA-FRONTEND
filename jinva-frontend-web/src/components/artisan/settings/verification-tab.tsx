@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FormField } from "@/components/forms/form-field"
 import { ApiError, apiFetch } from "@/lib/api"
+import { useAuth } from "@/contexts/auth-context"
+import { legalName } from "@/lib/names"
 import { cn } from "@/lib/utils"
 import { threeLetterMonth } from "@/lib/spending"
 
@@ -64,6 +66,7 @@ type Slot = "front" | "back" | "selfie"
  * /uploads/selfie), then submits them for an admin to review.
  */
 export function VerificationTab() {
+  const { user } = useAuth()
   const [latest, setLatest] = useState<Verification | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -108,6 +111,18 @@ export function VerificationTab() {
       .then((p) => setProfileId(p.id))
       .catch(() => {})
   }, [])
+
+  // A first submission starts from the account's full name, middle name
+  // included (sign-up form v2): it's the legal-name context. Still editable,
+  // because it has to match the document exactly. A rejected submission keeps
+  // what was sent before (P4).
+  const prefilledName = useRef(false)
+  useEffect(() => {
+    if (isLoading || prefilledName.current || !user) return
+    prefilledName.current = true
+    if (latest?.status === "REJECTED") return
+    setFullLegalName((current) => current || legalName(user))
+  }, [isLoading, latest, user])
 
   // Object URLs for the previews are released when replaced and on unmount.
   const filesRef = useRef(files)

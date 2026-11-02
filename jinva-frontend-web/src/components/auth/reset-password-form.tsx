@@ -12,11 +12,16 @@ import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/f
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { AuthSplitLayout } from "./auth-split-layout"
 import {
-  PASSWORD_HINT,
   PASSWORD_MESSAGES,
   validateNewPassword,
   validatePasswordConfirmation,
 } from "./signup-fields"
+import {
+  NEW_PASSWORD_INPUT_PROPS,
+  PasswordChecklist,
+  PasswordMatch,
+  SuggestPasswordButton,
+} from "./password-checklist"
 
 /*
  * google-signup-prefill V1–V8 (design-spec §1, §6.3): the same new-password
@@ -54,12 +59,18 @@ export function ResetPasswordForm() {
 
   const v = useFormValidation<Field>({ fields: FIELDS, values: formData, validate: validateField, labels: LABELS })
 
+  const handleSuggestPassword = (password: string) => {
+    setFormData({ password, confirmPassword: password })
+    setShowPassword(true)
+    setShowConfirmPassword(true)
+  }
+
   useEffect(() => {
     if (!token) {
       toast.error("Invalid or missing reset token")
 
     }
-  }, [token, toast])
+  }, [token])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -158,61 +169,79 @@ export function ResetPasswordForm() {
         <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
           <FormAnnouncer message={v.announcement} />
 
-          <FormField id="password" label="New password" hint={PASSWORD_HINT} error={v.errors.password}>
-            {(control) => (
-              <div className="relative">
-                <Input
-                  {...control}
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  enterKeyHint="next"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  onBlur={() => v.handleBlur("password")}
-                  className={`${AUTH_INPUT_CLASS} h-12 pr-10`}
-                  required
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            )}
-          </FormField>
+          <div className="space-y-3">
+            <FormField id="password" label="New password" error={v.errors.password} describedBy="password-rules">
+              {(control) => (
+                <div className="relative">
+                  <Input
+                    {...control}
+                    {...NEW_PASSWORD_INPUT_PROPS}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    enterKeyHint="next"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onBlur={() => v.handleBlur("password")}
+                    className={`${AUTH_INPUT_CLASS} h-12 sm:h-12 pr-11`}
+                    required
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              )}
+            </FormField>
+            <PasswordChecklist id="password-rules" password={formData.password} />
+            <SuggestPasswordButton onSuggest={handleSuggestPassword} disabled={isLoading} />
+          </div>
 
-          <FormField id="confirmPassword" label="Confirm password" error={v.errors.confirmPassword}>
-            {(control) => (
-              <div className="relative">
-                <Input
-                  {...control}
-                  type={showConfirmPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  enterKeyHint="done"
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  onBlur={() => v.handleBlur("confirmPassword")}
-                  className={`${AUTH_INPUT_CLASS} h-12 pr-10`}
-                  required
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                >
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            )}
-          </FormField>
+          <div className="space-y-2">
+            <FormField
+              id="confirmPassword"
+              label="Confirm password"
+              error={v.errors.confirmPassword}
+              describedBy="confirmPassword-match"
+            >
+              {(control) => (
+                <div className="relative">
+                  <Input
+                    {...control}
+                    {...NEW_PASSWORD_INPUT_PROPS}
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    enterKeyHint="done"
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    onBlur={() => v.handleBlur("confirmPassword")}
+                    className={`${AUTH_INPUT_CLASS} h-12 sm:h-12 pr-11`}
+                    required
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              )}
+            </FormField>
+            <PasswordMatch
+              id="confirmPassword-match"
+              password={formData.password}
+              confirmation={formData.confirmPassword}
+            />
+          </div>
 
           {/* Submit Button */}
           <Button

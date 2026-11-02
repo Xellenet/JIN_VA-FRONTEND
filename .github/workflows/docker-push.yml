@@ -66,7 +66,7 @@ jobs:
         id: image-tags
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/xellent_jinva_frontend_web
+          images: ${{ secrets.DOCKER_USERNAME }}/xellenet_jinva_frontend_web
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}

@@ -1,0 +1,95 @@
+name: Build Docker Image and Publish To Docker Hub
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  # Lets you run it by hand from the Actions tab (e.g. after changing a value in Doppler).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      # NEXT_PUBLIC_* values are inlined into the JS bundle at build time, so
+      # they come from Doppler here and go in as build args. DOPPLER_TOKEN is a
+      # read-only service token for the frontend project's production config.
+      # Runtime secrets (SESSION_COOKIE_SECRET) are NOT fetched: they never
+      # belong in the image and are injected where the container runs.
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Fetch build-time values from Doppler
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          set -euo pipefail
+          for name in \
+            NEXT_PUBLIC_API_URL \
+            NEXT_PUBLIC_SITE_URL \
+            NEXT_PUBLIC_FIREBASE_API_KEY \
+            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN \
+            NEXT_PUBLIC_FIREBASE_PROJECT_ID \
+            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET \
+            NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID \
+            NEXT_PUBLIC_FIREBASE_APP_ID \
+            NEXT_PUBLIC_FIREBASE_VAPID_KEY
+          do
+            value="$(doppler secrets get "$name" --plain 2>/dev/null || true)"
+            if [ -z "$value" ]; then
+              echo "::error::$name is missing in Doppler (frontend project, this token's config)."
+              exit 1
+            fi
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Image tags
+        id: image-tags
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ secrets.DOCKER_USERNAME }}/xellenet_jinva_frontend_web
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v7
+        with:
+          # The app (Dockerfile, package.json) lives in this sub-folder of the repo.
+          context: ./jinva-frontend-web
+          push: true
+          tags: ${{ steps.image-tags.outputs.tags }}
+          labels: ${{ steps.image-tags.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }}
+            NEXT_PUBLIC_FIREBASE_API_KEY=${{ env.NEXT_PUBLIC_FIREBASE_API_KEY }}
+            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+            NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ env.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+            NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+            NEXT_PUBLIC_FIREBASE_APP_ID=${{ env.NEXT_PUBLIC_FIREBASE_APP_ID }}
+            NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ env.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

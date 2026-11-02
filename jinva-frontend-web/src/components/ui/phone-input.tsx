@@ -20,7 +20,9 @@ import {
   formatPhoneNational,
   getPhoneCountryOptions,
   isSupportedPhoneCountry,
+  nationalFromBareCallingCode,
   readInternationalInput,
+  stripTrunkZero,
   type PhoneCountryOption,
   type SupportedPhoneCountry,
 } from "@/lib/phone"
@@ -39,8 +41,11 @@ import {
  *   leaves only the national part in the field (PH3), so `+233 +233…` can't
  *   happen. An unsupported code leaves the picker alone; the form's validator
  *   shows the "can't take" message.
- * - No reformatting while typing; a valid number is shown in national format
- *   on blur (PH5). No `maxLength` and no placeholder.
+ * - No reformatting while typing; a valid number is shown on blur as written
+ *   after the calling code (PH5). No `maxLength` and no placeholder.
+ * - Sign-up form v2: where the country dials a trunk 0 (GH, LR, NG, SL), a
+ *   typed or pasted leading 0 is dropped as it arrives (`0241…` → `241…`) and
+ *   the caret stays where it was. In BJ and CI the 0 is part of the number.
  *
  * Every other prop (`id`, `aria-*`, `required`, `onBlur`, …) goes to the
  * number input, which is what `<Label htmlFor>` and focus-first-error target.
@@ -104,14 +109,28 @@ export function PhoneInput({
     onAnnounce?.(`Country set to ${option.name} +${option.callingCode}.`)
   }
 
-  const handleChange = (raw: string) => {
+  const handleChange = (input: HTMLInputElement) => {
+    const raw = input.value
     const international = readInternationalInput(raw)
     if (international.kind === "supported") {
       switchCountry(international.country)
       onChange(international.national)
       return
     }
-    onChange(raw)
+    // `2330241234567` (the code typed without `+`), once complete.
+    const bare = nationalFromBareCallingCode(raw, selected.country)
+    if (bare !== null) {
+      onChange(bare)
+      return
+    }
+    // The trunk 0 is removed in the input itself, inside the event, so React
+    // has nothing to reset and the caret stays where the person was typing.
+    const stripped = stripTrunkZero(raw, selected.country, input.selectionStart)
+    if (stripped.value !== raw) {
+      input.value = stripped.value
+      if (stripped.caret !== null) input.setSelectionRange(stripped.caret, stripped.caret)
+    }
+    onChange(stripped.value)
   }
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -131,6 +150,9 @@ export function PhoneInput({
       value={itemValue(option)}
       onSelect={() => {
         switchCountry(option.country)
+        // A 0 typed before the country was chosen is a trunk 0 now.
+        const stripped = stripTrunkZero(value, option.country)
+        if (stripped.value !== value) onChange(stripped.value)
         focusNumberOnClose.current = true
         setOpen(false)
       }}
@@ -155,7 +177,7 @@ export function PhoneInput({
             variant="outline"
             aria-label={`Country code: ${selected.name} +${selected.callingCode}`}
             disabled={disabled}
-            className="h-10 w-[120px] shrink-0 justify-between bg-background border-input text-foreground shadow-none"
+            className="h-11 sm:h-10 w-[120px] shrink-0 justify-between bg-background border-input text-foreground shadow-none"
           >
             <span className="flex items-center gap-2" aria-hidden="true">
               <span>{selected.flag}</span>
@@ -195,10 +217,10 @@ export function PhoneInput({
         autoComplete={autoComplete}
         enterKeyHint={enterKeyHint}
         value={value}
-        onChange={(e) => handleChange(e.target.value)}
+        onChange={(e) => handleChange(e.target)}
         onBlur={handleBlur}
         disabled={disabled}
-        className={cn("h-10 flex-1 bg-background border-input text-foreground shadow-none", inputClassName)}
+        className={cn("h-11 sm:h-10 flex-1 bg-background border-input text-foreground shadow-none", inputClassName)}
       />
     </div>
   )

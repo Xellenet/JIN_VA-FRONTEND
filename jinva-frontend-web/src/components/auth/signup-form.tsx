@@ -4,9 +4,10 @@ import type React from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Plus } from "lucide-react"
+import { Mail, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { AUTH_INPUT_CLASS, FormAnnouncer, FormField, fieldErrorId } from "@/components/forms/form-field"
+import { passwordRuleStates } from "@/lib/password-rules"
 import { PhoneField } from "@/components/forms/phone-field"
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { ApiError } from "@/lib/api"
@@ -39,8 +40,11 @@ import {
 } from "@/lib/signup-flow"
 import { AuthSplitLayout } from "./auth-split-layout"
 import {
+  AUTH_FIELD_CLASS,
   AUTH_LINK_CLASS,
+  AUTH_PHONE_FIELD_CLASS,
   AuthHeading,
+  AuthIcon,
   AuthNotice,
   GoogleButton,
   OrDivider,
@@ -82,6 +86,11 @@ import { NEW_PASSWORD_INPUT_PROPS, PasswordChecklist, SuggestPasswordButton } fr
  * `?role=` prefill, LP13), so Back and refresh behave. Typed fields survive a
  * refresh through sessionStorage (`SIGNUP_DRAFT_KEY`), except the password,
  * which only ever lives in this component's memory.
+ *
+ * Auth redesign: on phones each step fits one screen. The details step drops
+ * the brand strip, tightens, shows "Back" as the arrow in the step bar, and
+ * shows the password rules only while the password (or "Suggest") has focus,
+ * or while rules are unmet after leaving the field or submitting.
  */
 
 type Field = "firstname" | "middlename" | "lastname" | "email" | "phoneNumber" | "password"
@@ -138,6 +147,25 @@ export function SignupForm() {
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [signedIn, setSignedIn] = useState<SelfSignupRole | null>(null)
+  // Phones: when the password rules are shown (see the comment above).
+  const [passwordFocused, setPasswordFocused] = useState(false)
+  const [passwordLeft, setPasswordLeft] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  // Whether a pointer is pressed, so the rules don't collapse (and move the
+  // button up) between pressing "Create account" and releasing it.
+  const pointerDown = useRef(false)
+  useEffect(() => {
+    const down = () => (pointerDown.current = true)
+    const up = () => (pointerDown.current = false)
+    document.addEventListener("pointerdown", down, true)
+    document.addEventListener("pointerup", up, true)
+    document.addEventListener("pointercancel", up, true)
+    return () => {
+      document.removeEventListener("pointerdown", down, true)
+      document.removeEventListener("pointerup", up, true)
+      document.removeEventListener("pointercancel", up, true)
+    }
+  }, [])
   const turnstileRef = useRef<TurnstileHandle>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const formErrorRef = useRef<HTMLDivElement>(null)
@@ -244,6 +272,7 @@ export function SignupForm() {
   const handleDetailsSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
+    setSubmitted(true)
     if (!v.validateAll()) return
     const role = draft.role
     const phoneNumber = phoneToE164(draft.phoneNumber, phoneCountry)
@@ -352,7 +381,7 @@ export function SignupForm() {
   // ── Render ────────────────────────────────────────────────────────────────
   if (!hydrated) {
     return (
-      <AuthSplitLayout>
+      <AuthSplitLayout role={draft.role}>
         <div className="min-h-[28rem]" aria-busy="true" />
       </AuthSplitLayout>
     )
@@ -360,10 +389,11 @@ export function SignupForm() {
 
   if (signedIn) {
     return (
-      <AuthSplitLayout>
-        <div className="space-y-6" data-auth-step="none" role="status" aria-live="polite">
+      <AuthSplitLayout role={signedIn}>
+        <div className="space-y-6 text-center" data-auth-step="none" role="status" aria-live="polite">
           <SuccessCheck />
           <AuthHeading
+            align="center"
             title="You're in"
             description={
               signedIn === "ARTISAN"
@@ -377,11 +407,21 @@ export function SignupForm() {
   }
 
   const stepNumber = signupStepNumber(step)
+  const rulesUnmet = passwordRuleStates(password).some((rule) => (rule.id === "allowed" ? true : !rule.met))
+  const showRules = passwordFocused || (rulesUnmet && ((passwordLeft && password !== "") || submitted))
 
   return (
-    <AuthSplitLayout>
-      <div key={step} data-auth-step={direction.current} className="space-y-8">
-        <StepIndicator steps={STEP_LABELS} current={stepNumber} />
+    <AuthSplitLayout role={draft.role} strip={step !== "details"}>
+      <div
+        key={step}
+        data-auth-step={direction.current}
+        className={step === "details" ? "space-y-4 min-[980px]:space-y-7" : "space-y-5 min-[980px]:space-y-7"}
+      >
+        <StepIndicator
+          steps={STEP_LABELS}
+          current={stepNumber}
+          onBack={step === "details" ? () => goTo("role") : undefined}
+        />
 
         {step === "role" && (
           <>
@@ -408,7 +448,7 @@ export function SignupForm() {
                 </p>
               ) : null}
             </div>
-            <div className="space-y-5">
+            <div className="space-y-3 min-[980px]:space-y-5">
               <SubmitButton busyLabel="" type="button" onClick={continueFromRole}>
                 Continue
               </SubmitButton>
@@ -430,10 +470,11 @@ export function SignupForm() {
               description={
                 <p>
                   Signing up as {ROLE_WORDS[draft.role]}.{" "}
+                  {/* Phones use the arrow in the step bar; the line stays one row. */}
                   <button
                     type="button"
                     onClick={() => goTo("role")}
-                    className={`${AUTH_LINK_CLASS} inline-flex min-h-11 items-center sm:min-h-0`}
+                    className="hidden font-medium text-foreground underline decoration-foreground/30 underline-offset-4 transition-colors hover:decoration-foreground min-[980px]:inline"
                   >
                     Change
                   </button>
@@ -441,17 +482,22 @@ export function SignupForm() {
               }
             />
 
-            <div className="space-y-5">
+            <div className="space-y-2.5 min-[980px]:space-y-5">
               <GoogleButton onClick={handleGoogle} disabled={isSubmitting} />
               <OrDivider>or with email</OrDivider>
             </div>
 
-            <form onSubmit={handleDetailsSubmit} noValidate aria-busy={isSubmitting} className="space-y-5">
+            <form
+              onSubmit={handleDetailsSubmit}
+              noValidate
+              aria-busy={isSubmitting}
+              className="space-y-2 min-[980px]:space-y-5"
+            >
               <FormAnnouncer message={v.announcement} />
 
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-3">
-                  <FormField id="firstname" label="First name" error={v.errors.firstname}>
+              <div className="space-y-0 min-[980px]:space-y-2">
+                <div className="grid grid-cols-2 gap-2.5 min-[980px]:gap-3">
+                  <FormField id="firstname" label="First name" error={v.errors.firstname} className={AUTH_FIELD_CLASS}>
                     {(control) => (
                       <Input
                         {...control}
@@ -467,7 +513,7 @@ export function SignupForm() {
                       />
                     )}
                   </FormField>
-                  <FormField id="lastname" label="Last name" error={v.errors.lastname}>
+                  <FormField id="lastname" label="Last name" error={v.errors.lastname} className={AUTH_FIELD_CLASS}>
                     {(control) => (
                       <Input
                         {...control}
@@ -485,8 +531,14 @@ export function SignupForm() {
                   </FormField>
                 </div>
                 {draft.showMiddlename ? (
-                  <div data-auth-expand className="pt-3">
-                    <FormField id="middlename" label="Middle name" optional error={v.errors.middlename}>
+                  <div data-auth-expand className="pt-2 min-[980px]:pt-3">
+                    <FormField
+                      id="middlename"
+                      label="Middle name"
+                      optional
+                      error={v.errors.middlename}
+                      className={AUTH_FIELD_CLASS}
+                    >
                       {(control) => (
                         <Input
                           {...control}
@@ -516,7 +568,7 @@ export function SignupForm() {
                 )}
               </div>
 
-              <FormField id="email" label="Email" error={v.errors.email}>
+              <FormField id="email" label="Email" error={v.errors.email} className={AUTH_FIELD_CLASS}>
                 {(control) => (
                   <Input
                     {...control}
@@ -544,11 +596,40 @@ export function SignupForm() {
                 onAnnounce={v.announce}
                 error={v.errors.phoneNumber}
                 disabled={isSubmitting}
-                className="[&_button]:h-11 [&_button]:rounded-lg [&_input]:h-11 [&_input]:rounded-lg"
+                className={AUTH_PHONE_FIELD_CLASS}
               />
 
-              <div className="space-y-3">
-                <FormField id="password" label="Password" error={v.errors.password} describedBy="password-rules">
+              <div
+                className="space-y-2 min-[980px]:space-y-3"
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={(e) => {
+                  if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+                  let done = false
+                  const collapse = () => {
+                    if (done) return
+                    done = true
+                    setPasswordFocused(false)
+                    setPasswordLeft(true)
+                  }
+                  // Never move the layout under a press: with a mouse the blur comes
+                  // while the button is held (wait for the release), with touch it
+                  // comes just before the click (wait for the click). A keyboard
+                  // blur has neither, so a short fallback collapses it.
+                  if (pointerDown.current) {
+                    document.addEventListener("pointerup", () => setTimeout(collapse, 0), { once: true })
+                  } else {
+                    document.addEventListener("click", () => setTimeout(collapse, 0), { once: true, capture: true })
+                    setTimeout(collapse, 350)
+                  }
+                }}
+              >
+                <FormField
+                  id="password"
+                  label="Password"
+                  error={v.errors.password}
+                  describedBy="password-rules"
+                  className={AUTH_FIELD_CLASS}
+                >
                   {(control) => (
                     <PasswordInput
                       control={control}
@@ -564,7 +645,9 @@ export function SignupForm() {
                     />
                   )}
                 </FormField>
-                <PasswordChecklist id="password-rules" password={password} />
+                <div data-auth-expand={showRules ? "" : undefined} className={showRules ? undefined : "max-[979.98px]:hidden"}>
+                  <PasswordChecklist id="password-rules" password={password} />
+                </div>
                 <SuggestPasswordButton
                   onSuggest={(suggested) => {
                     setPassword(suggested)
@@ -582,11 +665,11 @@ export function SignupForm() {
 
               <Turnstile ref={turnstileRef} action="register" />
 
-              <div className="space-y-4 pt-1">
+              <div className="space-y-2 pt-1.5 min-[980px]:space-y-4 min-[980px]:pt-1">
                 <SubmitButton busy={isSubmitting} busyLabel="Creating your account…">
                   Create account
                 </SubmitButton>
-                <p className="text-center text-sm leading-relaxed text-muted-foreground">
+                <p className="text-center text-xs leading-relaxed text-muted-foreground min-[980px]:text-sm">
                   By continuing you agree to the{" "}
                   <Link href="/terms" className={AUTH_LINK_CLASS}>
                     Terms
@@ -611,6 +694,9 @@ export function SignupForm() {
 
         {step === "code" && (
           <>
+            <AuthIcon>
+              <Mail aria-hidden="true" />
+            </AuthIcon>
             <AuthHeading
               headingRef={headingRef}
               title="Check your email"

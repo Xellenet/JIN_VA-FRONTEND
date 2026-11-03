@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Mail } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
@@ -14,9 +14,11 @@ import { AUTH_COPY, authErrorCopy, authErrorKind, readSession } from "@/lib/auth
 import { clearCachedUser } from "@/contexts/auth-context"
 import { AuthSplitLayout } from "./auth-split-layout"
 import {
+  AUTH_FIELD_CLASS,
   AUTH_LINK_CLASS,
   AUTH_PRIMARY_BUTTON_CLASS,
   AuthHeading,
+  AuthIcon,
   AuthNotice,
   PasswordInput,
   StepIndicator,
@@ -178,11 +180,12 @@ export function ForgotPasswordForm() {
 
   return (
     <AuthSplitLayout>
-      <div key={step} data-auth-step={direction} className="space-y-8">
+      <div key={step} data-auth-step={direction} className="space-y-5 min-[980px]:space-y-7">
         {step === "done" ? (
-          <div className="space-y-6" role="status" aria-live="polite">
+          <div className="space-y-6 text-center" role="status" aria-live="polite">
             <SuccessCheck />
             <AuthHeading
+              align="center"
               headingRef={headingRef}
               title="Password changed"
               description={
@@ -200,7 +203,7 @@ export function ForgotPasswordForm() {
           <>
             <Link
               href="/login"
-              className="-mt-2 inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+              className="-my-2 inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back to log in
@@ -215,9 +218,9 @@ export function ForgotPasswordForm() {
                   title="Forgot your password?"
                   description={<p>Enter your email and we&apos;ll send you a 6-digit code to set a new one.</p>}
                 />
-                <form onSubmit={handleEmailSubmit} noValidate aria-busy={busy} className="space-y-5">
+                <form onSubmit={handleEmailSubmit} noValidate aria-busy={busy} className="space-y-4 min-[980px]:space-y-5">
                   <FormAnnouncer message={emailV.announcement} />
-                  <FormField id="email" label="Email" error={emailV.errors.email}>
+                  <FormField id="email" label="Email" error={emailV.errors.email} className={AUTH_FIELD_CLASS}>
                     {(control) => (
                       <Input
                         {...control}
@@ -250,6 +253,9 @@ export function ForgotPasswordForm() {
 
             {step === "code" && (
               <>
+                <AuthIcon>
+                  <Mail aria-hidden="true" />
+                </AuthIcon>
                 <AuthHeading
                   headingRef={headingRef}
                   title="Check your email"
@@ -288,7 +294,7 @@ export function ForgotPasswordForm() {
                   title="Choose a new password"
                   description={<p>You&apos;ll use it to log in from now on.</p>}
                 />
-                <form onSubmit={handlePasswordSubmit} noValidate aria-busy={busy} className="space-y-5">
+                <form onSubmit={handlePasswordSubmit} noValidate aria-busy={busy} className="space-y-4 min-[980px]:space-y-5">
                   <FormAnnouncer message={passwordV.announcement} />
                   <div className="space-y-3">
                     <FormField
@@ -296,6 +302,7 @@ export function ForgotPasswordForm() {
                       label="New password"
                       error={passwordV.errors.password}
                       describedBy="password-rules"
+                      className={AUTH_FIELD_CLASS}
                     >
                       {(control) => (
                         <PasswordInput

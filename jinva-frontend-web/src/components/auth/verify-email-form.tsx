@@ -4,7 +4,7 @@ import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Loader2 } from "lucide-react"
+import { Loader2, Mail } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
@@ -15,7 +15,16 @@ import { AUTH_COPY, authErrorCopy, authErrorKind, readSession } from "@/lib/auth
 import { SIGNUP_DRAFT_KEY, homeAfterSignup, parseSignupDraft } from "@/lib/signup-flow"
 import { clearCachedUser } from "@/contexts/auth-context"
 import { AuthSplitLayout } from "./auth-split-layout"
-import { AUTH_LINK_CLASS, AUTH_PRIMARY_BUTTON_CLASS, AuthHeading, AuthNotice, SubmitButton, SuccessCheck } from "./auth-ui"
+import {
+  AUTH_FIELD_CLASS,
+  AUTH_LINK_CLASS,
+  AUTH_PRIMARY_BUTTON_CLASS,
+  AuthHeading,
+  AuthIcon,
+  AuthNotice,
+  SubmitButton,
+  SuccessCheck,
+} from "./auth-ui"
 import { CodeEntry, CodeStepError } from "./code-entry"
 import { Turnstile, type TurnstileHandle } from "./turnstile"
 import { PENDING_VERIFY_EMAIL_KEY, validateEmail } from "./signup-fields"
@@ -162,9 +171,9 @@ export function VerifyEmailForm() {
             <AuthHeading title="Confirming your email…" description={<p>This takes a moment.</p>} />
           </div>
         ) : (
-          <div className="space-y-6" data-auth-step="none" role="status" aria-live="polite">
+          <div className="space-y-6 text-center" data-auth-step="none" role="status" aria-live="polite">
             <SuccessCheck />
-            <AuthHeading title="Email confirmed" description={<p>You can log in to your account now.</p>} />
+            <AuthHeading align="center" title="Email confirmed" description={<p>You can log in to your account now.</p>} />
             <Link href="/login" className={`${AUTH_PRIMARY_BUTTON_CLASS} inline-flex items-center justify-center`}>
               Go to log in
             </Link>
@@ -177,9 +186,9 @@ export function VerifyEmailForm() {
   if (signedIn) {
     return (
       <AuthSplitLayout>
-        <div className="space-y-6" data-auth-step="none" role="status" aria-live="polite">
+        <div className="space-y-6 text-center" data-auth-step="none" role="status" aria-live="polite">
           <SuccessCheck />
-          <AuthHeading title="You're in" description={<p>Your email is confirmed. Taking you to JinVa…</p>} />
+          <AuthHeading align="center" title="You're in" description={<p>Your email is confirmed. Taking you to JinVa…</p>} />
         </div>
       </AuthSplitLayout>
     )
@@ -196,7 +205,7 @@ export function VerifyEmailForm() {
   // ── Code ──────────────────────────────────────────────────────────────────
   return (
     <AuthSplitLayout>
-      <div key={codeEmail ? "code" : "email"} data-auth-step={codeEmail ? "forward" : "none"} className="space-y-8">
+      <div key={codeEmail ? "code" : "email"} data-auth-step={codeEmail ? "forward" : "none"} className="space-y-5 min-[980px]:space-y-7">
         {token && linkState === "failed" && (
           <AuthNotice tone="warning" title="This link has expired or was already used">
             We&apos;ll send you a 6-digit code instead.
@@ -204,6 +213,9 @@ export function VerifyEmailForm() {
         )}
         {codeEmail ? (
           <>
+            <AuthIcon>
+              <Mail aria-hidden="true" />
+            </AuthIcon>
             <AuthHeading
               title="Check your email"
               description={
@@ -230,9 +242,9 @@ export function VerifyEmailForm() {
               title="Confirm your email"
               description={<p>Enter the email you signed up with and we&apos;ll send you a 6-digit code.</p>}
             />
-            <form onSubmit={handleSend} noValidate aria-busy={sending} className="space-y-5">
+            <form onSubmit={handleSend} noValidate aria-busy={sending} className="space-y-4 min-[980px]:space-y-5">
               <FormAnnouncer message={v.announcement} />
-              <FormField id="email" label="Email" error={v.errors.email}>
+              <FormField id="email" label="Email" error={v.errors.email} className={AUTH_FIELD_CLASS}>
                 {(control) => (
                   <Input
                     {...control}

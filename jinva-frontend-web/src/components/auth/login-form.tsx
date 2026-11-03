@@ -25,6 +25,7 @@ import { AUTH_COPY, AUTH_ERROR_CODES, authErrorCopy, authErrorKind, readSession 
 import { clearCachedUser } from "@/contexts/auth-context"
 import { AuthSplitLayout } from "./auth-split-layout"
 import {
+  AUTH_FIELD_CLASS,
   AUTH_LINK_CLASS,
   AuthHeading,
   AuthNotice,
@@ -388,7 +389,7 @@ export function LoginForm() {
   }
 
   const emailField = (
-    <FormField id="email" label="Email" error={v.errors.email}>
+    <FormField id="email" label="Email" error={v.errors.email} className={AUTH_FIELD_CLASS}>
       {(control) => (
         <Input
           {...control}
@@ -416,7 +417,7 @@ export function LoginForm() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8" data-auth-step="none">
+      <div className="space-y-5 min-[980px]:space-y-7" data-auth-step="none">
         <AuthHeading
           title="Welcome back"
           description={
@@ -443,7 +444,7 @@ export function LoginForm() {
           </AuthNotice>
         )}
 
-        <div className="space-y-6">
+        <div className="space-y-4 min-[980px]:space-y-6">
           <SegmentedControl
             label="How do you want to log in?"
             options={MODES}
@@ -459,12 +460,12 @@ export function LoginForm() {
               onSubmit={handlePasswordSubmit}
               noValidate
               aria-busy={isLoading}
-              className="space-y-5"
+              className="space-y-3 min-[980px]:space-y-5"
             >
               <FormAnnouncer message={v.announcement} />
               {emailField}
 
-              <FormField id="password" label="Password" error={v.errors.password}>
+              <FormField id="password" label="Password" error={v.errors.password} className={AUTH_FIELD_CLASS}>
                 {(control) => (
                   <PasswordInput
                     control={control}
@@ -573,7 +574,7 @@ export function LoginForm() {
               onSubmit={handleSendCode}
               noValidate
               aria-busy={isLoading}
-              className="space-y-5"
+              className="space-y-3 min-[980px]:space-y-5"
             >
               <FormAnnouncer message={v.announcement} />
               {emailField}
@@ -589,7 +590,7 @@ export function LoginForm() {
           )}
 
           {mode === "code" && codeEmail && (
-            <div key="code-entry" data-auth-step="forward" className="space-y-6">
+            <div key="code-entry" data-auth-step="forward" className="space-y-4 min-[980px]:space-y-6">
               <AuthNotice tone="info" role="status" title="Check your email">
                 If an account uses <span className="font-medium">{codeEmail}</span>, a code is on its way.{" "}
                 {AUTH_COPY.codeExpiry}
@@ -614,7 +615,7 @@ export function LoginForm() {
           )}
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-3 min-[980px]:space-y-5">
           <OrDivider />
           <GoogleButton onClick={handleGoogleLogin} disabled={isLoading} />
         </div>

@@ -9,6 +9,7 @@ import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validat
 import { AUTH_COPY } from "@/lib/auth-v2-errors"
 import { AuthSplitLayout } from "./auth-split-layout"
 import {
+  AUTH_FIELD_CLASS,
   AUTH_LINK_CLASS,
   AUTH_PRIMARY_BUTTON_CLASS,
   AuthHeading,
@@ -92,9 +93,9 @@ export function ResetPasswordForm() {
   if (isSuccess) {
     return (
       <AuthSplitLayout>
-        <div className="space-y-6" data-auth-step="none" role="status" aria-live="polite">
+        <div className="space-y-6 text-center" data-auth-step="none" role="status" aria-live="polite">
           <SuccessCheck />
-          <AuthHeading title="Password changed" description={<p>Log in with your new password.</p>} />
+          <AuthHeading align="center" title="Password changed" description={<p>Log in with your new password.</p>} />
           <Link href="/login" className={`${AUTH_PRIMARY_BUTTON_CLASS} inline-flex items-center justify-center`}>
             Go to log in
           </Link>
@@ -131,12 +132,18 @@ export function ResetPasswordForm() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8" data-auth-step="none">
+      <div className="space-y-5 min-[980px]:space-y-7" data-auth-step="none">
         <AuthHeading title="Choose a new password" description={<p>You&apos;ll use it to log in from now on.</p>} />
-        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-5">
+        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-4 min-[980px]:space-y-5">
           <FormAnnouncer message={v.announcement} />
           <div className="space-y-3">
-            <FormField id="password" label="New password" error={v.errors.password} describedBy="password-rules">
+            <FormField
+              id="password"
+              label="New password"
+              error={v.errors.password}
+              describedBy="password-rules"
+              className={AUTH_FIELD_CLASS}
+            >
               {(control) => (
                 <PasswordInput
                   control={control}

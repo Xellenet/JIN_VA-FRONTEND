@@ -312,6 +312,25 @@
     [data-swap] {
       animation: jinva-swap 220ms ease-out both;
     }
+
+    /*
+     * A check mark that draws itself once, in answer to finishing something
+     * (the setup checklist). The path sets `pathLength="1"`. Under reduced
+     * motion this block is skipped and the check is simply there.
+     */
+    @keyframes jinva-check {
+      from {
+        stroke-dashoffset: 1;
+      }
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+    [data-check-draw] {
+      stroke-dasharray: 1;
+      animation: jinva-check 560ms cubic-bezier(0.65, 0, 0.35, 1) both;
+      animation-delay: var(--reveal-delay, 0ms);
+    }
   }
 
   /* Thin, theme-aware scrollbar */

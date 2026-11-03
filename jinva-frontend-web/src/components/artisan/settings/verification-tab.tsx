@@ -65,7 +65,9 @@ type Slot = "front" | "back" | "selfie"
  * and a selfie, uploaded to private storage (POST /uploads/document and
  * /uploads/selfie), then submits them for an admin to review.
  */
-export function VerificationTab() {
+export function VerificationTab({
+  onSubmitted,
+}: Readonly<{ onSubmitted?: (status: VerificationStatus) => void }> = {}) {
   const { user } = useAuth()
   const [latest, setLatest] = useState<Verification | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -204,6 +206,7 @@ export function VerificationTab() {
       })
       setLatest(created)
       toast.success("Submitted for review")
+      onSubmitted?.(created?.status ?? "PENDING")
     } catch (err) {
       setSubmitError(err instanceof Error && err.message ? err.message : "Couldn’t submit your documents. Try again.")
     } finally {

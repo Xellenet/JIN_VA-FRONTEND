@@ -207,6 +207,9 @@ for (const f of files) {
   check("A get verified (never sent)", a.artisanActionRows({ requests: 0, disputes: 0, earnings: null, verification: "none" }).map((r) => [r.kind, r.href, r.label, r.count]), [["verification", "/dashboard/artisan/settings?tab=verification", "Get verified", 0]])
   check("A get verified (rejected)", a.artisanActionRows({ requests: 0, disputes: 0, earnings: null, verification: "rejected" })[0]?.detail, "Your last submission wasn't approved")
   check("A no verify row when verified, in review or unknown", a.artisanActionRows({ requests: 0, disputes: 0, earnings: null, verification: null }), [])
+  // The setup card asks for the payout method and the documents, so the rail doesn't ask again.
+  check("A setup card folds payout method and verify rows", a.artisanActionRows({ requests: 1, disputes: 0, earnings: { needsAction: "80.00", needsActionCount: 1, hasPayoutMethod: false }, verification: "none", setupCard: true }).map((r) => r.kind), ["bookingRequests"])
+  check("A setup card keeps a failed payout row", a.artisanActionRows({ requests: 0, disputes: 0, earnings: { needsAction: "80.00", needsActionCount: 1, hasPayoutMethod: true }, verification: "rejected", setupCard: true }).map((r) => r.kind), ["payoutsNeedAction"])
   check("A money", a.formatGhs("1840"), "GH₵ 1,840.00")
 }
 

@@ -9,6 +9,10 @@ export interface User {
   middlename?: string | null
   lastname?: string
   email: string
+  /** Generated at sign-up (auth v2), editable in Settings. */
+  username?: string | null
+  /** MALE | FEMALE, an older OTHER, or null ("Prefer not to say"). Optional; never asked at sign-up. */
+  gender?: string | null
   phone?: string
   address?: { id?: number; street?: string; city?: string; country?: string; zipCode?: string }
   nationalId?: string

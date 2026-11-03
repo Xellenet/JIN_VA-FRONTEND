@@ -144,10 +144,12 @@ export function FormAnnouncer({ message }: { message: string }) {
 }
 
 /**
- * Input classes shared by `/signup` and "Complete your account" (LY1).
- * Sign-up form v2: 44px on phones (tap target), 40px from `sm` up as before.
+ * Input classes shared by every auth screen (LY1).
+ * Auth v2: 44px at every width (one rhythm with the 44px buttons), a softer
+ * radius, and a primary-green focus ring instead of the neutral one.
  */
-export const AUTH_INPUT_CLASS = "h-11 sm:h-10 bg-background border-input text-foreground"
+export const AUTH_INPUT_CLASS =
+  "h-11 rounded-lg bg-background border-input text-foreground text-base md:text-[0.9375rem] focus-visible:border-primary focus-visible:ring-primary/20"
 
 /**
  * §3.9 fix 3: Radix `SelectTrigger`'s own `data-[size=default]:h-9` and `w-fit`

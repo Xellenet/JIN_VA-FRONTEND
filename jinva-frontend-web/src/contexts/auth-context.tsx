@@ -18,7 +18,7 @@ interface BackendUser {
   phoneNumber?: string
   addresses?: Array<{ id: number; street: string; city: string; country: string; zipCode: string }>
   nationalId?: string
-  gender: string
+  gender?: string | null
   role: "CUSTOMER" | "ARTISAN" | "ADMIN"
   profilePicture?: string
   accountVerified: boolean
@@ -41,6 +41,8 @@ function buildUser(data: BackendUser, artisanProfile?: BackendArtisanProfile): U
     middlename: data.middlename ?? null,
     lastname: data.lastname,
     email: data.email,
+    username: data.username ?? null,
+    gender: data.gender ?? null,
     phone: data.phoneNumber,
     address: data.addresses?.[0],
     nationalId: data.nationalId,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { Fragment, useState, useEffect, useCallback, useMemo, type ReactNode } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -110,6 +110,12 @@ function describedBy(...ids: (string | false | undefined)[]): string | undefined
 export type ProfileLoadState = "loading" | "error" | "ready"
 
 /**
+ * The work-detail fields a setup step can embed on its own (see `fields`).
+ * `photo` is the profile photo card.
+ */
+export type AboutField = "photo" | "bio" | "experience" | "hourlyRate" | "businessName"
+
+/**
  * Profile → About: the photo and the details clients read (name, phone,
  * service area, bio, rate, policy), with the completeness checklist. The
  * profile itself is loaded by the page, which also shows it in the header;
@@ -122,14 +128,28 @@ export function AboutTab({
   loadedAt,
   onReload,
   onSaved,
+  fields,
+  formId,
+  onSavingChange,
 }: Readonly<{
   profile: BackendArtisanProfile | null
   loadState: ProfileLoadState
   loadedAt: number
   onReload: () => void
   onSaved: (saved: BackendArtisanProfile) => void
+  /**
+   * Setup checklist: show only these fields, in this order, with no cards, no
+   * completeness checklist and no Save button of its own (the step submits the
+   * form through `formId`). Only the work profile is saved then; the name and
+   * phone, which aren't on screen, are left alone.
+   */
+  fields?: readonly AboutField[]
+  /** The form's `id`, for a submit button outside it (`<button form=…>`). */
+  formId?: string
+  onSavingChange?: (saving: boolean) => void
 }>) {
   const { user, refreshUser } = useAuth()
+  const focused = fields != null
 
   // Personal info form
   const [firstname, setFirstname] = useState("")
@@ -150,6 +170,9 @@ export function AboutTab({
   const [cancellationPolicy, setCancellationPolicy] = useState("")
 
   const [isSaving, setIsSaving] = useState(false)
+  useEffect(() => {
+    onSavingChange?.(isSaving)
+  }, [isSaving, onSavingChange])
 
   // FE-2: set when the contact half of a save committed and the professional
   // half was rejected — the only outcome where the page shows a mix of stored
@@ -249,11 +272,13 @@ export function AboutTab({
 
   const validate = () => {
     const errors: typeof fieldErrors = {}
-    if (!firstname.trim()) errors.firstname = "Enter your first name."
-    else if (firstname.trim().length > NAME_MAX) errors.firstname = `Use at most ${NAME_MAX} characters.`
-    if (middlename.trim().length > NAME_MAX) errors.middlename = `Use at most ${NAME_MAX} characters.`
-    if (!lastname.trim()) errors.lastname = "Enter your last name."
-    else if (lastname.trim().length > NAME_MAX) errors.lastname = `Use at most ${NAME_MAX} characters.`
+    if (!focused) {
+      if (!firstname.trim()) errors.firstname = "Enter your first name."
+      else if (firstname.trim().length > NAME_MAX) errors.firstname = `Use at most ${NAME_MAX} characters.`
+      if (middlename.trim().length > NAME_MAX) errors.middlename = `Use at most ${NAME_MAX} characters.`
+      if (!lastname.trim()) errors.lastname = "Enter your last name."
+      else if (lastname.trim().length > NAME_MAX) errors.lastname = `Use at most ${NAME_MAX} characters.`
+    }
     if (location.length > 150) errors.location = "Service area can be at most 150 characters."
     if (serviceRadiusKm.trim()) {
       const n = Number(serviceRadiusKm)
@@ -279,7 +304,39 @@ export function AboutTab({
     return !first
   }
 
+  /** The `PATCH /users/me/artisan-profile` body: every work field, as stored or as typed. */
+  const professionalBody = () =>
+    JSON.stringify({
+      // B5: a blank bio is sent as null so clearing it sticks.
+      bio: bio.trim() ? bio : null,
+      experienceYears: experienceYears ? Number(experienceYears) : undefined,
+      businessName: businessName || undefined,
+      hourlyRate: hourlyRate ? Number(hourlyRate) : undefined,
+      location: location || undefined,
+      ...(serviceRadiusKm.trim() ? { serviceRadiusKm: Number(serviceRadiusKm) } : {}),
+      cancellationPolicy: cancellationPolicy || undefined,
+    })
+
+  /** Setup step: only the work profile is on screen, so only it is saved. */
+  const handleSaveFocused = async () => {
+    if (!validate()) return
+    setIsSaving(true)
+    try {
+      const saved = await apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
+        method: "PATCH",
+        body: professionalBody(),
+      })
+      // No toast: the setup step moves on, and its list shows the step done.
+      onSaved(saved)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error && err.message ? err.message : "Couldn’t save. Try again.")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const handleSaveProfile = async () => {
+    if (focused) return handleSaveFocused()
     const wasIncomplete = readProfileCompleteness(artisanProfile).state === "incomplete"
     const phoneUpdate = phoneUpdateFor(user?.phone, phone, phoneCountry)
     if (!validate()) return
@@ -311,16 +368,7 @@ export function AboutTab({
       try {
         savedProfile = await apiFetch<BackendArtisanProfile>("/users/me/artisan-profile", {
           method: "PATCH",
-          body: JSON.stringify({
-            // B5: a blank bio is sent as null so clearing it sticks.
-            bio: bio.trim() ? bio : null,
-            experienceYears: experienceYears ? Number(experienceYears) : undefined,
-            businessName: businessName || undefined,
-            hourlyRate: hourlyRate ? Number(hourlyRate) : undefined,
-            location: location || undefined,
-            ...(serviceRadiusKm.trim() ? { serviceRadiusKm: Number(serviceRadiusKm) } : {}),
-            cancellationPolicy: cancellationPolicy || undefined,
-          }),
+          body: professionalBody(),
         })
       } catch (profileErr: unknown) {
         // Half-saved: contact details landed, professional ones didn't. Say so
@@ -356,7 +404,150 @@ export function AboutTab({
     }
   }
 
+  // The work-detail fields, built once: laid out in cards here, or one by one
+  // when a setup step embeds just the ones it needs (`fields`).
+  const bioField = (
+    <div className="space-y-2">
+      <Label htmlFor="bio" className={fieldErrors.bio ? "text-destructive" : undefined}>
+        Bio {!focused && <span className="font-normal">(optional)</span>}
+      </Label>
+      <Textarea
+        id="bio"
+        className={unsavedFields.has("bio") ? UNSAVED_FIELD_CLASS : undefined}
+        value={bio}
+        onChange={(e) => {
+          setBio(e.target.value)
+          clearFieldError("bio")
+        }}
+        placeholder="Your experience, what you specialise in and what clients can expect."
+        rows={4}
+        maxLength={1000}
+        aria-invalid={fieldErrors.bio ? true : undefined}
+        aria-describedby={describedBy(fieldErrors.bio && "bio-error", unsavedFields.has("bio") && "bio-unsaved")}
+      />
+      {unsavedFields.has("bio") && <UnsavedFieldNote id="bio-unsaved" />}
+      <FieldMessage id="bio" error={fieldErrors.bio} />
+    </div>
+  )
+  const experienceField = (
+    <div className="space-y-2">
+      <Label htmlFor="experience" className={fieldErrors.experience ? "text-destructive" : undefined}>Years of experience</Label>
+      <Input
+        id="experience"
+        type="number"
+        inputMode="numeric"
+        min="1"
+        max="80"
+        step="1"
+        className={cn("max-sm:h-11", unsavedFields.has("experienceYears") && UNSAVED_FIELD_CLASS)}
+        value={experienceYears}
+        onChange={(e) => {
+          setExperienceYears(e.target.value)
+          clearFieldError("experience")
+        }}
+        placeholder="e.g. 5"
+        aria-invalid={fieldErrors.experience ? true : undefined}
+        aria-describedby={describedBy(
+          fieldErrors.experience && "experience-error",
+          unsavedFields.has("experienceYears") && "experience-unsaved",
+        )}
+      />
+      {unsavedFields.has("experienceYears") && <UnsavedFieldNote id="experience-unsaved" />}
+      <FieldMessage id="experience" error={fieldErrors.experience} />
+    </div>
+  )
+  const hourlyRateField = (
+    <div className="space-y-2">
+      <Label htmlFor="hourlyRate" className={fieldErrors.hourlyRate ? "text-destructive" : undefined}>Hourly rate (GH₵)</Label>
+      {/* No currency icon: lucide's DollarSign is a "$". The label carries the unit. */}
+      <Input
+        id="hourlyRate"
+        type="number"
+        inputMode="decimal"
+        min="0.01"
+        step="0.01"
+        className={cn("max-sm:h-11", unsavedFields.has("hourlyRate") && UNSAVED_FIELD_CLASS)}
+        value={hourlyRate}
+        onChange={(e) => {
+          setHourlyRate(e.target.value)
+          clearFieldError("hourlyRate")
+        }}
+        placeholder="e.g. 50"
+        aria-invalid={fieldErrors.hourlyRate ? true : undefined}
+        aria-describedby={describedBy(
+          fieldErrors.hourlyRate && "hourlyRate-error",
+          unsavedFields.has("hourlyRate") && "hourlyRate-unsaved",
+        )}
+      />
+      {unsavedFields.has("hourlyRate") && <UnsavedFieldNote id="hourlyRate-unsaved" />}
+      <FieldMessage id="hourlyRate" error={fieldErrors.hourlyRate} />
+    </div>
+  )
+  const businessNameField = (
+    <div className="space-y-2 md:col-span-2">
+      <Label htmlFor="businessName" className={fieldErrors.businessName ? "text-destructive" : undefined}>
+        Business name <span className="font-normal">(optional)</span>
+      </Label>
+      <Input
+        id="businessName"
+        maxLength={150}
+        className={cn("max-sm:h-11", unsavedFields.has("businessName") && UNSAVED_FIELD_CLASS)}
+        value={businessName}
+        onChange={(e) => {
+          setBusinessName(e.target.value)
+          clearFieldError("businessName")
+        }}
+        placeholder="e.g. Osei Plumbing"
+        aria-invalid={fieldErrors.businessName ? true : undefined}
+        aria-describedby={describedBy(
+          fieldErrors.businessName && "businessName-error",
+          unsavedFields.has("businessName") && "businessName-unsaved",
+        )}
+      />
+      {unsavedFields.has("businessName") && <UnsavedFieldNote id="businessName-unsaved" />}
+      <FieldMessage id="businessName" error={fieldErrors.businessName} />
+    </div>
+  )
+
   if (!user) return null
+
+  if (focused) {
+    const blocks: Record<Exclude<AboutField, "photo">, ReactNode> = {
+      bio: bioField,
+      experience: experienceField,
+      hourlyRate: hourlyRateField,
+      businessName: businessNameField,
+    }
+    return (
+      <div className="space-y-6">
+        {fields.includes("photo") && <ProfilePhotoCard user={user} refreshUser={refreshUser} />}
+        {loadState === "loading" ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-primary motion-reduce:animate-none" aria-label="Loading your profile" />
+          </div>
+        ) : loadState === "error" ? (
+          <div className="flex flex-col items-start gap-3 rounded-xl border p-4 sm:p-6">
+            <p className="text-sm font-semibold text-foreground">Couldn&apos;t load your profile</p>
+            <Button variant="outline" className="max-sm:h-11" onClick={onReload}>
+              Try again
+            </Button>
+          </div>
+        ) : (
+          <form
+            id={formId}
+            noValidate
+            className="space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void handleSaveProfile()
+            }}
+          >
+            {fields.map((f) => (f === "photo" ? null : <Fragment key={f}>{blocks[f]}</Fragment>))}
+          </form>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -599,101 +790,11 @@ export function AboutTab({
               </div>
               <CardContent className="p-4 sm:p-6">
                 <div className="space-y-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="bio" className={fieldErrors.bio ? "text-destructive" : undefined}>
-                      Bio <span className="font-normal">(optional)</span>
-                    </Label>
-                    <Textarea
-                      id="bio"
-                      className={unsavedFields.has("bio") ? UNSAVED_FIELD_CLASS : undefined}
-                      value={bio}
-                      onChange={(e) => {
-                        setBio(e.target.value)
-                        clearFieldError("bio")
-                      }}
-                      placeholder="Your experience, what you specialise in and what clients can expect."
-                      rows={4}
-                      maxLength={1000}
-                      aria-invalid={fieldErrors.bio ? true : undefined}
-                      aria-describedby={describedBy(fieldErrors.bio && "bio-error", unsavedFields.has("bio") && "bio-unsaved")}
-                    />
-                    {unsavedFields.has("bio") && <UnsavedFieldNote id="bio-unsaved" />}
-                    <FieldMessage id="bio" error={fieldErrors.bio} />
-                  </div>
+                  {bioField}
                   <div className="grid gap-5 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="experience" className={fieldErrors.experience ? "text-destructive" : undefined}>Years of experience</Label>
-                      <Input
-                        id="experience"
-                        type="number"
-                        inputMode="numeric"
-                        min="1"
-                        max="80"
-                        step="1"
-                        className={cn("max-sm:h-11", unsavedFields.has("experienceYears") && UNSAVED_FIELD_CLASS)}
-                        value={experienceYears}
-                        onChange={(e) => {
-                          setExperienceYears(e.target.value)
-                          clearFieldError("experience")
-                        }}
-                        placeholder="e.g. 5"
-                        aria-invalid={fieldErrors.experience ? true : undefined}
-                        aria-describedby={describedBy(
-                          fieldErrors.experience && "experience-error",
-                          unsavedFields.has("experienceYears") && "experience-unsaved",
-                        )}
-                      />
-                      {unsavedFields.has("experienceYears") && <UnsavedFieldNote id="experience-unsaved" />}
-                      <FieldMessage id="experience" error={fieldErrors.experience} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="hourlyRate" className={fieldErrors.hourlyRate ? "text-destructive" : undefined}>Hourly rate (GH₵)</Label>
-                      {/* No currency icon: lucide's DollarSign is a "$". The label carries the unit. */}
-                      <Input
-                        id="hourlyRate"
-                        type="number"
-                        inputMode="decimal"
-                        min="0.01"
-                        step="0.01"
-                        className={cn("max-sm:h-11", unsavedFields.has("hourlyRate") && UNSAVED_FIELD_CLASS)}
-                        value={hourlyRate}
-                        onChange={(e) => {
-                          setHourlyRate(e.target.value)
-                          clearFieldError("hourlyRate")
-                        }}
-                        placeholder="e.g. 50"
-                        aria-invalid={fieldErrors.hourlyRate ? true : undefined}
-                        aria-describedby={describedBy(
-                          fieldErrors.hourlyRate && "hourlyRate-error",
-                          unsavedFields.has("hourlyRate") && "hourlyRate-unsaved",
-                        )}
-                      />
-                      {unsavedFields.has("hourlyRate") && <UnsavedFieldNote id="hourlyRate-unsaved" />}
-                      <FieldMessage id="hourlyRate" error={fieldErrors.hourlyRate} />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="businessName" className={fieldErrors.businessName ? "text-destructive" : undefined}>
-                        Business name <span className="font-normal">(optional)</span>
-                      </Label>
-                      <Input
-                        id="businessName"
-                        maxLength={150}
-                        className={cn("max-sm:h-11", unsavedFields.has("businessName") && UNSAVED_FIELD_CLASS)}
-                        value={businessName}
-                        onChange={(e) => {
-                          setBusinessName(e.target.value)
-                          clearFieldError("businessName")
-                        }}
-                        placeholder="e.g. Osei Plumbing"
-                        aria-invalid={fieldErrors.businessName ? true : undefined}
-                        aria-describedby={describedBy(
-                          fieldErrors.businessName && "businessName-error",
-                          unsavedFields.has("businessName") && "businessName-unsaved",
-                        )}
-                      />
-                      {unsavedFields.has("businessName") && <UnsavedFieldNote id="businessName-unsaved" />}
-                      <FieldMessage id="businessName" error={fieldErrors.businessName} />
-                    </div>
+                    {experienceField}
+                    {hourlyRateField}
+                    {businessNameField}
                   </div>
                 </div>
               </CardContent>

@@ -3,8 +3,8 @@ import { VerifyEmailForm } from "@/components/auth/verify-email-form"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Verify Email",
-  description: "Verify your JinVa account email",
+  title: "Confirm your email",
+  description: "Confirm the email for your JinVa account",
 }
 
 export default function VerifyEmailPage() {

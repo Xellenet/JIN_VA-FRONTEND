@@ -28,6 +28,8 @@ export interface ArtisanRailStates {
     disputes: number | null
     earnings: ArtisanEarningsSnapshot | null
     verification?: ArtisanVerificationNeed
+    /** The Overview's "Finish setting up" card is showing (see `artisanActionRows`). */
+    setupCard?: boolean
     partial: boolean
   }>
   appointments: RailSectionState<{ today: ArtisanBooking[]; next: ArtisanBooking | null }>

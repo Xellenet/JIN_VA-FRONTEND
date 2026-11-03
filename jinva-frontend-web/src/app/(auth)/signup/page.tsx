@@ -3,7 +3,7 @@ import { SignupForm } from "@/components/auth/signup-form"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Create Account",
+  title: "Create your account",
   description: "Create your JinVa account",
 }
 

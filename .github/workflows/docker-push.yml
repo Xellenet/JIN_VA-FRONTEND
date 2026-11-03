@@ -52,6 +52,18 @@ jobs:
             fi
             echo "$name=$value" >> "$GITHUB_ENV"
           done
+          # Optional values: warn, don't fail, when missing. Without the
+          # Turnstile site key the auth pages simply render no bot check.
+          for name in \
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY
+          do
+            value="$(doppler secrets get "$name" --plain 2>/dev/null || true)"
+            if [ -z "$value" ]; then
+              echo "::warning::$name is not set in Doppler; the image will be built without it."
+              continue
+            fi
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -91,5 +103,6 @@ jobs:
             NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
             NEXT_PUBLIC_FIREBASE_APP_ID=${{ env.NEXT_PUBLIC_FIREBASE_APP_ID }}
             NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ env.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ env.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

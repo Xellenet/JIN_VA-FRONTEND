@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AccountIdentityCard } from "@/components/settings/account-identity-card"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -542,6 +543,8 @@ function UserSettingsContent() {
                 Save changes
               </Button>
             </div>
+
+            <AccountIdentityCard user={user} refreshUser={refreshUser} headingLevel="h3" />
           </TabsContent>
 
           {/* Notifications */}

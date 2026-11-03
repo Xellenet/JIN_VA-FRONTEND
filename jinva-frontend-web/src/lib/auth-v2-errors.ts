@@ -11,6 +11,8 @@ export const AUTH_ERROR_CODES = {
   codeAttemptsExceeded: "CODE_ATTEMPTS_EXCEEDED",
   turnstileFailed: "TURNSTILE_FAILED",
   turnstileRequired: "TURNSTILE_REQUIRED",
+  /** 503 when the backend can't reach Cloudflare (it fails closed). */
+  turnstileUnavailable: "TURNSTILE_UNAVAILABLE",
 } as const
 
 export const AUTH_COPY = {
@@ -20,6 +22,8 @@ export const AUTH_COPY = {
   turnstileFailed: "The security check didn't go through. Try again.",
   turnstileRequired: "For your security, confirm you're not a robot, then log in again.",
   turnstileUnavailable: "We couldn't load the security check. Check your connection and try again.",
+  /** The backend couldn't reach Cloudflare to check the request. */
+  securityCheckDown: "Our security check isn't responding right now. Try again in a moment.",
   rateLimited: "Too many tries for now. Wait a little, then try again.",
   network: "We couldn't reach JinVa. Check your connection and try again.",
   /** Login and forgot password answer the same way whether or not the email has an account. */
@@ -33,6 +37,7 @@ export type AuthErrorKind =
   | "code-locked"
   | "turnstile-failed"
   | "turnstile-required"
+  | "turnstile-unavailable"
   | "rate-limited"
   | "network"
   | "other"
@@ -43,6 +48,7 @@ export function authErrorKind(status: number | null | undefined, code: string | 
   if (code === AUTH_ERROR_CODES.codeAttemptsExceeded) return "code-locked"
   if (code === AUTH_ERROR_CODES.turnstileFailed) return "turnstile-failed"
   if (code === AUTH_ERROR_CODES.turnstileRequired) return "turnstile-required"
+  if (code === AUTH_ERROR_CODES.turnstileUnavailable) return "turnstile-unavailable"
   if (status === 429) return "rate-limited"
   if (!status) return "network"
   return "other"
@@ -59,6 +65,8 @@ export function authErrorCopy(kind: AuthErrorKind): string | null {
       return AUTH_COPY.turnstileFailed
     case "turnstile-required":
       return AUTH_COPY.turnstileRequired
+    case "turnstile-unavailable":
+      return AUTH_COPY.securityCheckDown
     case "rate-limited":
       return AUTH_COPY.rateLimited
     case "network":

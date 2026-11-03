@@ -21,8 +21,17 @@ export default function PublicLayout({
 }>) {
   return (
     <div className="flex min-h-screen flex-col">
+      {/* First focusable thing on every public page; visible only on focus. */}
+      <a
+        href="#public-content"
+        className="sr-only z-[60] rounded-md bg-background px-4 py-3 font-semibold text-foreground shadow-lg outline-none focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus-visible:ring-[3px] focus-visible:ring-ring"
+      >
+        Skip to content
+      </a>
       <PublicHeader />
-      <div className="flex-1">{children}</div>
+      <div id="public-content" tabIndex={-1} className="flex-1 outline-none">
+        {children}
+      </div>
       <PublicFooter />
     </div>
   )

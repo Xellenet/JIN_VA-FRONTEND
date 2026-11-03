@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
+import { Bricolage_Grotesque } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { Toaster } from "sonner"
@@ -28,6 +29,18 @@ import { FlashToast } from "@/components/flash-toast"
  * variable is set anywhere. It is not a production default — 4200 is this
  * repo's `next dev` port.
  */
+/**
+ * Display face for the landing page's headings only (`font-display`); body
+ * text stays Geist. next/font downloads it at build time and serves it from
+ * this origin, so the CSP's `font-src 'self'` needs no new host.
+ */
+const displayFont = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-bricolage",
+  display: "swap",
+  axes: ["opsz"],
+})
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:4200"
 
 /**
@@ -71,7 +84,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} ${displayFont.variable}`}>
       <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}

@@ -1,17 +1,13 @@
 import type { Metadata } from "next"
-import { Hero } from "@/components/public/landing/hero"
-import { TrustStrip } from "@/components/public/landing/trust-strip"
-import { ServiceCategories } from "@/components/public/landing/service-categories"
-import { HowItWorks } from "@/components/public/landing/how-it-works"
-import {
-  ArtisansSection,
-  ClientsSection,
-  GovernanceSection,
-} from "@/components/public/landing/role-sections"
-import { FeatureHighlights } from "@/components/public/landing/feature-highlights"
-import { Testimonials } from "@/components/public/landing/testimonials"
-import { FaqSection } from "@/components/public/landing/faq-section"
-import { FinalCta } from "@/components/public/landing/final-cta"
+import "@/components/public/landing/landing.css"
+import { LandingHero } from "@/components/public/landing/landing-hero"
+import { TradesMarquee } from "@/components/public/landing/trades-marquee"
+import { SeeTheWork } from "@/components/public/landing/see-the-work"
+import { HowAJobRuns } from "@/components/public/landing/how-a-job-runs"
+import { Protections } from "@/components/public/landing/protections"
+import { ForArtisans } from "@/components/public/landing/for-artisans"
+import { Questions } from "@/components/public/landing/questions"
+import { PhotoDoors } from "@/components/public/landing/photo-doors"
 
 /**
  * The marketing landing page at `/` — LP1–LP14.
@@ -26,12 +22,16 @@ import { FinalCta } from "@/components/public/landing/final-cta"
  * `/privacy`. The old `src/app/page.tsx` is deleted in the same commit — two
  * files resolving to `/` is a duplicate-route conflict.
  *
- * ZERO DATA DEPENDENCIES, on purpose (LP2). No fetch, no auth, no session check,
- * so the page renders identically with the backend stopped and stays outside
- * `src/middleware.ts`'s matcher. That is also why it has no loading state and no
- * empty state: there is nothing that could be absent. The only client islands
- * are the theme toggle, the mobile sheet, the how-it-works tabs, the FAQ
- * accordion, and the scroll-reveal wrappers.
+ * NO RENDER-TIME DATA DEPENDENCIES, on purpose (LP2). No server fetch, no auth,
+ * no session check, so the page renders identically with the backend stopped
+ * and stays outside `src/middleware.ts`'s matcher. The one live call is the
+ * hero search's service list (`GET /services`, client-side, public); if it
+ * fails the form still offers "Any service".
+ *
+ * Sections (2026 redesign): hero with search, trades strip, see the work,
+ * how a job runs, protections, for artisans, questions, two signup doors.
+ * Every sample (activity, job, portfolio, earnings) is labelled as sample.
+ * Motion lives in landing/landing.css and stops entirely under reduced motion.
  */
 /**
  * NO `openGraph` / `twitter` BLOCK HERE — ON PURPOSE. Both fields are set once
@@ -54,18 +54,15 @@ export const metadata: Metadata = {
 
 export default function LandingPage() {
   return (
-    <main className="flex flex-col">
-      <Hero />
-      <TrustStrip />
-      <ServiceCategories />
-      <HowItWorks />
-      <ClientsSection />
-      <ArtisansSection />
-      <GovernanceSection />
-      <FeatureHighlights />
-      <Testimonials />
-      <FaqSection />
-      <FinalCta />
+    <main className="flex flex-col overflow-x-clip">
+      <LandingHero />
+      <TradesMarquee />
+      <SeeTheWork />
+      <HowAJobRuns />
+      <Protections />
+      <ForArtisans />
+      <Questions />
+      <PhotoDoors />
     </main>
   )
 }

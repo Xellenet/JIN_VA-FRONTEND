@@ -20,8 +20,9 @@
     "test:admin-insights": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-admin-insights.mjs",
     "test:auth-v2": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-auth-v2.mjs",
     "regions:generate": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-regions.mjs",
-    "verify": "npm run check:colors && npm run test:redirect && npm run test:phone && npm run test:overview && npm run test:spending && npm run test:inbox && npm run test:payout && npm run test:saved-methods && npm run test:signup && npm run test:csp && npm run test:admin-insights && npm run test:auth-v2 && npm run test:artisan-setup && npm run lint && npm run build",
-    "test:artisan-setup": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-artisan-setup.mjs"
+    "verify": "npm run check:colors && npm run test:redirect && npm run test:phone && npm run test:overview && npm run test:spending && npm run test:inbox && npm run test:payout && npm run test:saved-methods && npm run test:signup && npm run test:csp && npm run test:admin-insights && npm run test:auth-v2 && npm run test:artisan-setup && npm run test:landing && npm run lint && npm run build",
+    "test:artisan-setup": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-artisan-setup.mjs",
+    "test:landing": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-landing-search.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -42,6 +42,7 @@ import {
 } from "lucide-react"
 import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { apiFetchWithMeta } from "@/lib/api"
+import { readCustomerSearchSeed } from "@/lib/landing-search"
 import { useFavouriteIds } from "@/hooks/use-favourites"
 import { RatingStars } from "@/components/ui/rating-stars"
 import type { AvailabilitySummary } from "@/lib/availability"
@@ -140,6 +141,22 @@ export default function SearchArtisansPage() {
   const { favouriteIds, pendingId, toggleFavourite } = useFavouriteIds()
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  // The landing page's search form arrives as `?serviceId=…&location=…`
+  // (src/lib/landing-search.ts). Read once after mount, sanitised; the 300ms
+  // debounce below absorbs the first, unfiltered run.
+  useEffect(() => {
+    const seed = readCustomerSearchSeed(window.location.search)
+    if (seed.location) setLocation(seed.location)
+    if (seed.serviceId) setSelectedServiceId(seed.serviceId)
+  }, [])
+
+  // Name the seeded service in the filter button once the catalogue is in.
+  useEffect(() => {
+    if (!selectedServiceId || selectedServiceName !== "All services") return
+    const match = services.find((s) => String(s.id) === selectedServiceId)
+    if (match) setSelectedServiceName(match.name)
+  }, [services, selectedServiceId, selectedServiceName])
 
   useEffect(() => {
     apiFetchWithMeta<BackendService[] | { items: BackendService[] }>("/services")
@@ -311,8 +328,8 @@ export default function SearchArtisansPage() {
                   {services.map((s) => (
                     <DropdownMenuItem
                       key={s.id}
-                      onClick={() => { setSelectedServiceId(s.id); setSelectedServiceName(s.name) }}
-                      className={selectedServiceId === s.id ? "bg-accent text-accent-foreground" : ""}
+                      onClick={() => { setSelectedServiceId(String(s.id)); setSelectedServiceName(s.name) }}
+                      className={selectedServiceId === String(s.id) ? "bg-accent text-accent-foreground" : ""}
                     >
                       {s.name}
                     </DropdownMenuItem>

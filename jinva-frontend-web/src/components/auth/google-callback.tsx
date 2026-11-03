@@ -4,10 +4,11 @@ import { useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, XCircle } from "lucide-react"
 import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
+import Link from "next/link"
 import { AuthProvider, useAuth } from "@/contexts/auth-context"
 import { dashboardPathForFrontendRole } from "@/lib/auth"
 import { AuthSplitLayout } from "./auth-split-layout"
+import { AUTH_PRIMARY_BUTTON_CLASS, AuthHeading } from "./auth-ui"
 
 // G4/G7: the backend redirects here with either no `error` param (success)
 // or exactly one of these two codes (api-contract.md). Any other/unknown
@@ -30,24 +31,14 @@ function ErrorState({ error }: { error: string }) {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
-            <XCircle className="w-8 h-8 text-destructive" />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">Sign-in interrupted</h1>
-          <p className="text-muted-foreground leading-relaxed">{message}</p>
-        </div>
-
-        <Button
-          onClick={() => (window.location.href = "/login")}
-          className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
-        >
-          Back to Sign In
-        </Button>
+      <div className="space-y-6" data-auth-step="none">
+        <span className="inline-flex rounded-full bg-destructive/10 p-3 text-destructive">
+          <XCircle className="h-8 w-8" aria-hidden="true" />
+        </span>
+        <AuthHeading title="Sign-in interrupted" description={<p>{message}</p>} />
+        <Link href="/login" className={`${AUTH_PRIMARY_BUTTON_CLASS} inline-flex items-center justify-center`}>
+          Back to log in
+        </Link>
       </div>
     </AuthSplitLayout>
   )
@@ -85,17 +76,11 @@ function PendingState() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">Signing you in&hellip;</h1>
-          <p className="text-muted-foreground">Please wait while we finish setting up your session.</p>
-        </div>
+      <div className="space-y-6" role="status" aria-live="polite">
+        <span className="inline-flex rounded-full bg-primary/10 p-3 text-primary">
+          <Loader2 className="h-8 w-8 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        </span>
+        <AuthHeading title="Signing you in…" description={<p>Finishing your session. This takes a moment.</p>} />
       </div>
     </AuthSplitLayout>
   )

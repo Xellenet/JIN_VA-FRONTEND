@@ -11,7 +11,8 @@ import { passwordRuleStates } from "@/lib/password-rules"
 import { PhoneField } from "@/components/forms/phone-field"
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { ApiError } from "@/lib/api"
-import { persistAuthTokens } from "@/lib/auth"
+import { persistAuthTokens, safeInternalRedirect } from "@/lib/auth"
+import { belongsToRole, rememberAfterAuth } from "@/lib/after-auth"
 import { clearCachedUser } from "@/contexts/auth-context"
 import {
   DEFAULT_PHONE_COUNTRY,
@@ -136,6 +137,9 @@ function clearDraft() {
 export function SignupForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  // Where they were heading before an account was needed (e.g. the landing
+  // search via /login?redirect=…). Kept on every step; checked before use.
+  const redirectTarget = searchParams.get("redirect")
   const stepParam = searchParams.get("step")
   const roleParam = roleFromParam(searchParams.get("role"))
 
@@ -210,6 +214,7 @@ export function SignupForm() {
     const params = new URLSearchParams()
     params.set("step", next)
     if (role) params.set("role", role)
+    if (redirectTarget) params.set("redirect", redirectTarget)
     return `/signup?${params.toString()}`
   }
   const goTo = (next: SignupStep, role?: SelfSignupRole | null) =>
@@ -263,6 +268,7 @@ export function SignupForm() {
 
   // ── Google (role chosen first, passed through the existing flow, G9) ─────
   const handleGoogle = () => {
+    rememberAfterAuth(redirectTarget)
     const role = draft.role?.toLowerCase()
     const query = role ? `?role=${encodeURIComponent(role)}` : ""
     window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google${query}`
@@ -340,7 +346,10 @@ export function SignupForm() {
       // Long enough to see the check draw; no wait at all with reduced motion.
       const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
       setTimeout(() => {
-        window.location.href = homeAfterSignup(finalRole)
+        // Back to where they were heading, if it is a safe path for this role.
+        const home = homeAfterSignup(finalRole)
+        const target = safeInternalRedirect(redirectTarget, home)
+        window.location.href = belongsToRole(target, finalRole) ? target : home
       }, reduce ? 150 : 1100)
     } catch (error) {
       const kind = error instanceof ApiError ? authErrorKind(error.status, error.code) : "network"
@@ -454,7 +463,7 @@ export function SignupForm() {
               </SubmitButton>
               <p className="text-center text-sm text-muted-foreground">
                 Already have an account?{" "}
-                <Link href="/login" className={AUTH_LINK_CLASS}>
+                <Link href={redirectTarget ? `/login?redirect=${encodeURIComponent(redirectTarget)}` : "/login"} className={AUTH_LINK_CLASS}>
                   Log in
                 </Link>
               </p>
@@ -685,7 +694,7 @@ export function SignupForm() {
 
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/login" className={AUTH_LINK_CLASS}>
+              <Link href={redirectTarget ? `/login?redirect=${encodeURIComponent(redirectTarget)}` : "/login"} className={AUTH_LINK_CLASS}>
                 Log in
               </Link>
             </p>

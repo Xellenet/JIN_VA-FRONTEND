@@ -4,6 +4,7 @@ import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { rememberAfterAuth } from "@/lib/after-auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -95,6 +96,9 @@ interface PendingDeletion {
 
 export function LoginForm() {
   const searchParams = useSearchParams()
+  // "Create an account" keeps where they were heading (e.g. the landing search).
+  const loginRedirect = searchParams.get("redirect")
+  const signupHref = loginRedirect ? `/signup?redirect=${encodeURIComponent(loginRedirect)}` : "/signup"
   const [mode, setMode] = useState<Mode>("password")
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -385,6 +389,7 @@ export function LoginForm() {
 
   const handleGoogleLogin = () => {
     // G1/G8: a real backend route that 302s to Google. No role from login (G9 is sign-up only).
+    rememberAfterAuth(searchParams.get("redirect"))
     globalThis.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`
   }
 
@@ -423,7 +428,7 @@ export function LoginForm() {
           description={
             <p>
               Log in to JinVa. New here?{" "}
-              <Link href="/signup" className={AUTH_LINK_CLASS}>
+              <Link href={signupHref} className={AUTH_LINK_CLASS}>
                 Create an account
               </Link>
             </p>
@@ -533,7 +538,7 @@ export function LoginForm() {
                   {restoreWindowClosed ? (
                     <>
                       <p>{restoreWindowClosed}</p>
-                      <Link href="/signup" className="mt-1 inline-flex min-h-11 items-center font-medium underline underline-offset-4 sm:min-h-0">
+                      <Link href={signupHref} className="mt-1 inline-flex min-h-11 items-center font-medium underline underline-offset-4 sm:min-h-0">
                         Create an account
                       </Link>
                     </>

@@ -6,7 +6,8 @@ import { Loader2, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { AuthProvider, useAuth } from "@/contexts/auth-context"
-import { dashboardPathForFrontendRole } from "@/lib/auth"
+import { dashboardPathForFrontendRole, safeInternalRedirect } from "@/lib/auth"
+import { belongsToRole, takeAfterAuth } from "@/lib/after-auth"
 import { AuthSplitLayout } from "./auth-split-layout"
 import { AUTH_PRIMARY_BUTTON_CLASS, AuthHeading } from "./auth-ui"
 
@@ -62,7 +63,10 @@ function PendingState() {
     if (isLoading) return
 
     if (user) {
-      router.replace(dashboardPathForFrontendRole(user.role))
+      const home = dashboardPathForFrontendRole(user.role)
+      const target = safeInternalRedirect(takeAfterAuth(), home)
+      const role = user.role === "artisan" ? "ARTISAN" : user.role === "user" ? "CUSTOMER" : ""
+      router.replace(belongsToRole(target, role) ? target : home)
       return
     }
 

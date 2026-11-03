@@ -10,7 +10,8 @@ import { AUTH_INPUT_CLASS, FormAnnouncer, FormField, fieldErrorId } from "@/comp
 import { PhoneField } from "@/components/forms/phone-field"
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { ApiError, apiFetch, apiFetchBody } from "@/lib/api"
-import { persistAuthTokens } from "@/lib/auth"
+import { persistAuthTokens, safeInternalRedirect } from "@/lib/auth"
+import { belongsToRole, takeAfterAuth } from "@/lib/after-auth"
 import { DEFAULT_PHONE_COUNTRY, PHONE_MESSAGES, phoneToE164, validatePhoneNumber, type SupportedPhoneCountry } from "@/lib/phone"
 import { homeAfterSignup, type SelfSignupRole } from "@/lib/signup-flow"
 import { clearCachedUser } from "@/contexts/auth-context"
@@ -179,7 +180,10 @@ export function CompleteSignupForm() {
       clearCachedUser()
       // A full navigation, as after login and code sign-up: the dashboard
       // boots with the new session cookies and a fresh AuthProvider.
-      window.location.replace(homeAfterSignup(data.data?.role ?? formData.role))
+      const finalRole = data.data?.role ?? formData.role
+      const home = homeAfterSignup(finalRole)
+      const target = safeInternalRedirect(takeAfterAuth(), home)
+      window.location.replace(belongsToRole(target, finalRole) ? target : home)
     } catch (error) {
       if (isSignupExpired(error)) {
         router.replace(EXPIRED_REDIRECT)

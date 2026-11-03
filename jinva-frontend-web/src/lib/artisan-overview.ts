@@ -236,6 +236,12 @@ export function artisanActionRows(input: {
   disputes: number | null
   earnings: Pick<ArtisanEarningsSnapshot, "needsAction" | "needsActionCount" | "hasPayoutMethod"> | null
   verification?: ArtisanVerificationNeed
+  /**
+   * The "Finish setting up" card is on the page. It already asks for the
+   * payout method and the documents, so those two rows are left out rather
+   * than asking twice.
+   */
+  setupCard?: boolean
 }): ArtisanActionRow[] {
   const rows: ArtisanActionRow[] = []
   if (input.requests && input.requests > 0) {
@@ -261,14 +267,17 @@ export function artisanActionRows(input: {
   const e = input.earnings
   if (e && e.needsActionCount > 0) {
     if (!e.hasPayoutMethod) {
-      rows.push({
-        kind: "payoutMethod",
-        count: e.needsActionCount,
-        label: "Add a payout method",
-        detail: `${formatGhs(e.needsAction)} is waiting for it`,
-        href: ARTISAN_PAYOUT_SETTINGS_HREF,
-        ariaLabel: `Add a payout method: ${formatGhs(e.needsAction)} waiting. Opens Settings, Payments`,
-      })
+      // The setup card's payout step says the same, with the amount.
+      if (!input.setupCard) {
+        rows.push({
+          kind: "payoutMethod",
+          count: e.needsActionCount,
+          label: "Add a payout method",
+          detail: `${formatGhs(e.needsAction)} is waiting for it`,
+          href: ARTISAN_PAYOUT_SETTINGS_HREF,
+          ariaLabel: `Add a payout method: ${formatGhs(e.needsAction)} waiting. Opens Settings, Payments`,
+        })
+      }
     } else {
       rows.push({
         kind: "payoutsNeedAction",
@@ -280,7 +289,7 @@ export function artisanActionRows(input: {
       })
     }
   }
-  if (input.verification === "none" || input.verification === "rejected") {
+  if (!input.setupCard && (input.verification === "none" || input.verification === "rejected")) {
     const rejected = input.verification === "rejected"
     rows.push({
       kind: "verification",

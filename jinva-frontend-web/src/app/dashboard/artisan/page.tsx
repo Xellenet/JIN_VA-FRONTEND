@@ -19,13 +19,14 @@ import {
 import type { RailSectionState } from "@/components/dashboard/overview/rail-section"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
-import { ApiError, apiFetch } from "@/lib/api"
+import { apiFetch } from "@/lib/api"
 import {
   ARTISAN_STAGES,
   artisanActionRows,
   artisanJobsHref,
   artisanStopLabel,
   artisanSummary,
+  formatGhs,
   type ArtisanOverview,
   type ArtisanOverviewSection,
   type BookingRequest,
@@ -34,6 +35,9 @@ import {
 import { getArtisanBookings, getArtisanOverview, getOpenJobs, type OpenJob } from "@/lib/artisan-overview-api"
 import { isAbortError, isRateLimited, retryAfter } from "@/lib/customer-api"
 import { ProfileCompleteness, type ProfileCompletenessSource } from "@/components/artisan/profile-completeness"
+import { SetupCard } from "@/components/dashboard/overview/setup-card"
+import { SETUP_CARD_HIDDEN_KEY, deriveSetup, type VerificationFact } from "@/lib/artisan-setup"
+import { loadVerificationFact, type SetupProfile, type SetupSlot } from "@/lib/artisan-setup-api"
 
 /** The overview refetches on focus at most this often (same as the customer rail). */
 const REFRESH_MS = 30_000
@@ -120,20 +124,48 @@ function OverviewContent() {
   // the last ones were turned down. In review, verified or unknown → no row.
   const [verificationNeed, setVerificationNeed] = useState<ArtisanVerificationNeed>(null)
 
+  // "Finish setting up": the same facts the setup checklist is derived from.
+  // Stays null if any of them didn't load, so the card never nags on a guess.
+  const [setupFacts, setSetupFacts] = useState<{
+    profile: SetupProfile
+    slots: SetupSlot[]
+    verification: VerificationFact
+  } | null>(null)
+  // "Hide" lasts for this browser session; the card is back next time while steps remain.
+  const [setupHidden, setSetupHidden] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.sessionStorage.getItem(SETUP_CARD_HIDDEN_KEY) === "1"
+    } catch {
+      return false
+    }
+  })
+  const hideSetup = useCallback(() => {
+    setSetupHidden(true)
+    try {
+      window.sessionStorage.setItem(SETUP_CARD_HIDDEN_KEY, "1")
+    } catch {
+      // Storage blocked: hidden until the page is reloaded.
+    }
+    document.getElementById("overview-title")?.focus()
+  }, [])
+
   useEffect(() => {
     load(true)
     loadPrices()
     loadOpenJobs()
-    apiFetch<ProfileCompletenessSource & { isVerified?: boolean }>("/users/me/artisan-profile")
-      .then((profile) => {
+    apiFetch<SetupProfile>("/users/me/artisan-profile")
+      .then(async (profile) => {
         setCompleteness(profile)
-        if (profile.isVerified !== false) return
         // `ifNone=null`: nothing ever sent comes back as 200 with `data: null`
         // rather than a 404 the browser would log as an error. A 404 (an
         // older backend) is still read the same way.
-        apiFetch<{ status?: string } | null>("/verification/me?ifNone=null")
-          .then((v) => setVerificationNeed(!v ? "none" : v.status === "REJECTED" ? "rejected" : null))
-          .catch((err) => setVerificationNeed(err instanceof ApiError && err.status === 404 ? "none" : null))
+        const verification: VerificationFact | null =
+          profile.isVerified !== false ? "APPROVED" : await loadVerificationFact().catch(() => null)
+        setVerificationNeed(verification === "none" ? "none" : verification === "REJECTED" ? "rejected" : null)
+        const slots = await apiFetch<{ slots?: SetupSlot[] }>("/availability/my")
+          .then((a) => (Array.isArray(a?.slots) ? a.slots : []))
+          .catch(() => null)
+        if (verification && slots) setSetupFacts({ profile, slots, verification })
       })
       .catch(() => {})
     const refresh = () => {
@@ -185,6 +217,13 @@ function OverviewContent() {
     agreedPrice: prices.has(r.bookingId) ? prices.get(r.bookingId) : undefined,
   })
 
+  // ── Setup card ─────────────────────────────────────────────────────────────
+  const setupState = useMemo(
+    () => (setupFacts ? deriveSetup({ ...setupFacts, hasPhoto: Boolean(user?.avatar) }) : null),
+    [setupFacts, user?.avatar],
+  )
+  const showSetupCard = setupState != null && !setupState.allDone && !setupHidden
+
   // ── Section states ─────────────────────────────────────────────────────────
   const sections = useMemo(() => {
     type S<T> = RailSectionState<T>
@@ -218,6 +257,7 @@ function OverviewContent() {
                   disputes: disputesOk ? d.disputesNeedingResponse : null,
                   earnings: earningsOk ? d.earnings : null,
                   verification: verificationNeed,
+                  setupCard: showSetupCard,
                   partial,
                 },
               },
@@ -227,7 +267,7 @@ function OverviewContent() {
         earnings: earningsOk ? { kind: "ready", data: d.earnings! } : err,
       } satisfies ArtisanRailStates,
     }
-  }, [overview, verificationNeed])
+  }, [overview, verificationNeed, showSetupCard])
 
   if (!user) return null
 
@@ -257,7 +297,11 @@ function OverviewContent() {
         <div className="min-w-0 space-y-5 sm:space-y-6">
           <header data-enter className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">
+              <h1
+                id="overview-title"
+                tabIndex={-1}
+                className="text-2xl font-semibold tracking-tight text-foreground outline-none sm:text-[1.75rem]"
+              >
                 Welcome back, {user.name.split(" ")[0]}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -280,7 +324,23 @@ function OverviewContent() {
             </div>
           </header>
 
-          <ProfileCompleteness variant="compact" profile={completeness} actionLabel="Finish my profile" />
+          {showSetupCard ? (
+            <SetupCard
+              state={setupState}
+              payoutWaiting={
+                overview.kind === "ready" &&
+                overview.data.earnings &&
+                !overview.data.earnings.hasPayoutMethod &&
+                overview.data.earnings.needsActionCount > 0
+                  ? formatGhs(overview.data.earnings.needsAction)
+                  : null
+              }
+              onHide={hideSetup}
+            />
+          ) : (
+            // The setup card already says when they're not in search.
+            <ProfileCompleteness variant="compact" profile={completeness} actionLabel="Finish my profile" />
+          )}
 
           {showActionsCard && (
             <div className="xl:hidden">

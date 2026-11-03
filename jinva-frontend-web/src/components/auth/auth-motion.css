@@ -1,0 +1,175 @@
+/*
+ * Auth v2 motion. Every effect answers something the person did — a step
+ * changing, a role chosen, a digit typed, a code refused, a sign-in confirmed
+ * — and all of it sits inside `prefers-reduced-motion: no-preference`, so with
+ * reduced motion the same states simply appear. No colour lives here: the
+ * colours are the Tailwind tokens on the elements themselves.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A step rising in from the direction of travel (Continue → from the right, Back → from the left). */
+  @keyframes auth-step-in {
+    from {
+      opacity: 0;
+      transform: translate3d(var(--auth-step-x, 0.75rem), 0.25rem, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  [data-auth-step] {
+    animation: auth-step-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  [data-auth-step="back"] {
+    --auth-step-x: -0.75rem;
+  }
+  [data-auth-step="none"] {
+    animation-name: auth-fade-in;
+  }
+  @keyframes auth-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* The step indicator's bar filling to the current step. */
+  [data-step-bar] {
+    transition: transform 520ms cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  /* The chosen role card settles: a small press, then its tick pops in. */
+  [data-role-card] {
+    transition:
+      border-color 180ms ease,
+      box-shadow 220ms ease,
+      background-color 180ms ease,
+      transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-role-card]:active {
+    transform: scale(0.985);
+  }
+  @keyframes auth-tick-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(1.12);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  [data-role-card][aria-checked="true"] [data-role-tick] {
+    animation: auth-tick-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* A digit landing in its box. */
+  @keyframes auth-digit-in {
+    0% {
+      transform: scale(0.92);
+    }
+    55% {
+      transform: scale(1.05);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .auth-code-box[data-filled="true"] {
+    animation: auth-digit-in 180ms ease-out;
+  }
+
+  /* A refused code: one short shake of the row, never repeated on its own. */
+  @keyframes auth-shake {
+    0%,
+    100% {
+      transform: none;
+    }
+    20% {
+      transform: translateX(-6px);
+    }
+    40% {
+      transform: translateX(5px);
+    }
+    60% {
+      transform: translateX(-3px);
+    }
+    80% {
+      transform: translateX(2px);
+    }
+  }
+  [data-code-shake="true"] {
+    animation: auth-shake 360ms ease-in-out;
+  }
+
+  /* The success check: the ring draws, then the tick. */
+  @keyframes auth-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .auth-check-ring {
+    stroke-dasharray: 152;
+    stroke-dashoffset: 152;
+    animation: auth-draw 560ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  }
+  .auth-check-tick {
+    stroke-dasharray: 36;
+    stroke-dashoffset: 36;
+    animation: auth-draw 320ms cubic-bezier(0.65, 0, 0.35, 1) 420ms forwards;
+  }
+  @keyframes auth-check-bloom {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .auth-check-bloom {
+    animation: auth-check-bloom 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* A message appearing under a control (sent, error banner). */
+  [data-auth-reveal] {
+    animation: auth-reveal 260ms ease-out both;
+  }
+  @keyframes auth-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* The segmented control's thumb sliding between options. */
+  [data-segment-thumb] {
+    transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* The middle-name field opening. */
+  [data-auth-expand] {
+    animation: auth-expand 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes auth-expand {
+    from {
+      opacity: 0;
+      transform: translateY(-0.375rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

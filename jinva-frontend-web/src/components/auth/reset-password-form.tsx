@@ -1,128 +1,89 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { toast } from "sonner"
-import { Eye, EyeOff, CheckCircle2 } from "lucide-react"
-import { AUTH_INPUT_CLASS, FormAnnouncer, FormField } from "@/components/forms/form-field"
+import { FormAnnouncer, FormField } from "@/components/forms/form-field"
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
+import { AUTH_COPY } from "@/lib/auth-v2-errors"
 import { AuthSplitLayout } from "./auth-split-layout"
 import {
-  PASSWORD_MESSAGES,
-  validateNewPassword,
-  validatePasswordConfirmation,
-} from "./signup-fields"
-import {
-  NEW_PASSWORD_INPUT_PROPS,
-  PasswordChecklist,
-  PasswordMatch,
-  SuggestPasswordButton,
-} from "./password-checklist"
+  AUTH_LINK_CLASS,
+  AUTH_PRIMARY_BUTTON_CLASS,
+  AuthHeading,
+  AuthNotice,
+  PasswordInput,
+  SubmitButton,
+  SuccessCheck,
+} from "./auth-ui"
+import { PASSWORD_MESSAGES, validateNewPassword } from "./signup-fields"
+import { NEW_PASSWORD_INPUT_PROPS, PasswordChecklist, SuggestPasswordButton } from "./password-checklist"
 
 /*
- * google-signup-prefill V1–V8 (design-spec §1, §6.3): the same new-password
- * rules and copy as /signup, inline under each field. A missing or bad reset
- * token is not about a field, so it stays a toast.
+ * /reset-password?token= — the link-based reset, kept for links that were
+ * already emailed before auth v2 (new requests use a code at
+ * /forgot-password). Auth v2 look and one password field with the live
+ * checklist; the old endpoint still wants `confirmNewPassword`, so the same
+ * value is sent twice.
  */
-type Field = "password" | "confirmPassword"
-
-const FIELDS: readonly Field[] = ["password", "confirmPassword"]
-
-const LABELS: Record<Field, string> = {
-  password: "New password",
-  confirmPassword: "Confirm password",
-}
 
 export function ResetPasswordForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
-  const [formData, setFormData] = useState({
-    password: "",
-    confirmPassword: "",
-  })
+  const [password, setPassword] = useState("")
+  const [linkError, setLinkError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const formErrorRef = useRef<HTMLDivElement>(null)
 
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
 
-  const validateField = (field: Field, mode: ValidationMode): string | null => {
-    const submit = mode === "submit"
-    return field === "password"
-      ? validateNewPassword(formData.password, submit)
-      : validatePasswordConfirmation(formData.confirmPassword, formData.password, submit)
-  }
-
-  const v = useFormValidation<Field>({ fields: FIELDS, values: formData, validate: validateField, labels: LABELS })
-
-  const handleSuggestPassword = (password: string) => {
-    setFormData({ password, confirmPassword: password })
-    setShowPassword(true)
-    setShowConfirmPassword(true)
-  }
+  const v = useFormValidation<"password">({
+    fields: ["password"],
+    values: { password },
+    validate: (_f, mode: ValidationMode) => validateNewPassword(password, mode === "submit"),
+    labels: { password: "New password" },
+  })
 
   useEffect(() => {
-    if (!token) {
-      toast.error("Invalid or missing reset token")
-
-    }
-  }, [token])
+    if (formError) formErrorRef.current?.focus()
+  }, [formError])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!v.validateAll()) return
-
-    if (!token) {
-      toast.error("Invalid or missing reset token")
-      return
-    }
-
+    setFormError(null)
+    if (!v.validateAll() || !token) return
     setIsLoading(true)
-
     try {
-      // Backend contract (S6): token travels as a ?token= query param, and the
-      // body must include both newPassword and confirmNewPassword.
+      // S6: the token travels as ?token=, and the body carries both fields.
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/auth/reset-password?token=${encodeURIComponent(token)}`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            newPassword: formData.password,
-            confirmNewPassword: formData.confirmPassword,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ newPassword: password, confirmNewPassword: password }),
         },
       )
-
-      const data = await response.json()
-
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        // V5: a 400 about the passwords lands on its field in the form's own
-        // words (V6). "Invalid or expired token" is not a field error: toast.
         const message = Array.isArray(data?.message) ? data.message.join(" ") : String(data?.message ?? "")
-        if (response.status === 400 && /do not match/i.test(message)) {
-          v.setServerError("confirmPassword", PASSWORD_MESSAGES.mismatch)
-          return
-        }
         if (response.status === 400 && /password/i.test(message) && !/token/i.test(message)) {
           v.setServerError("password", PASSWORD_MESSAGES.rule)
           return
         }
-        throw new Error(message || "Failed to reset password")
+        if (/token|expired|invalid/i.test(message)) {
+          setLinkError("This link has expired or was already used.")
+          return
+        }
+        setFormError(message || "We couldn't change your password. Try again.")
+        return
       }
-
+      setPassword("")
       setIsSuccess(true)
-      toast.success("Your password has been reset successfully.")
-
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to reset password")
+    } catch {
+      setFormError(AUTH_COPY.network)
     } finally {
       setIsLoading(false)
     }
@@ -131,26 +92,38 @@ export function ResetPasswordForm() {
   if (isSuccess) {
     return (
       <AuthSplitLayout>
-        <div className="space-y-8 text-center bg-background rounded-lg p-8 shadow-sm">
-          <div className="flex justify-center">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-              <CheckCircle2 className="w-8 h-8 text-primary" />
-            </div>
-          </div>
+        <div className="space-y-6" data-auth-step="none" role="status" aria-live="polite">
+          <SuccessCheck />
+          <AuthHeading title="Password changed" description={<p>Log in with your new password.</p>} />
+          <Link href="/login" className={`${AUTH_PRIMARY_BUTTON_CLASS} inline-flex items-center justify-center`}>
+            Go to log in
+          </Link>
+        </div>
+      </AuthSplitLayout>
+    )
+  }
 
-          <div className="space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">Password Reset!</h1>
-            <p className="text-muted-foreground leading-relaxed">
-              Your password has been successfully reset. You can now sign in with your new password.
-            </p>
-          </div>
-
-          <Button
-            onClick={() => (window.location.href = "/login")}
-            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
-          >
-            Continue to Sign In
-          </Button>
+  if (!token || linkError) {
+    return (
+      <AuthSplitLayout>
+        <div className="space-y-6" data-auth-step="none">
+          <AuthHeading
+            title="This reset link doesn't work"
+            description={
+              <p>
+                {linkError ?? "The link is missing part of its address."} Ask for a 6-digit code instead; it only takes
+                your email.
+              </p>
+            }
+          />
+          <Link href="/forgot-password" className={`${AUTH_PRIMARY_BUTTON_CLASS} inline-flex items-center justify-center`}>
+            Get a code
+          </Link>
+          <p className="text-center text-sm">
+            <Link href="/login" className={AUTH_LINK_CLASS}>
+              Back to log in
+            </Link>
+          </p>
         </div>
       </AuthSplitLayout>
     )
@@ -158,106 +131,50 @@ export function ResetPasswordForm() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8 bg-background rounded-lg p-8 shadow-sm">
-        {/* Header */}
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">Reset Password</h1>
-          <p className="text-muted-foreground leading-relaxed">Enter your new password below to reset your account.</p>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-6">
+      <div className="space-y-8" data-auth-step="none">
+        <AuthHeading title="Choose a new password" description={<p>You&apos;ll use it to log in from now on.</p>} />
+        <form onSubmit={handleSubmit} noValidate aria-busy={isLoading} className="space-y-5">
           <FormAnnouncer message={v.announcement} />
-
           <div className="space-y-3">
             <FormField id="password" label="New password" error={v.errors.password} describedBy="password-rules">
               {(control) => (
-                <div className="relative">
-                  <Input
-                    {...control}
-                    {...NEW_PASSWORD_INPUT_PROPS}
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    enterKeyHint="next"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    onBlur={() => v.handleBlur("password")}
-                    className={`${AUTH_INPUT_CLASS} h-12 sm:h-12 pr-11`}
-                    required
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
+                <PasswordInput
+                  control={control}
+                  value={password}
+                  onChange={setPassword}
+                  onBlur={() => v.handleBlur("password")}
+                  autoComplete="new-password"
+                  enterKeyHint="done"
+                  disabled={isLoading}
+                  visible={showPassword}
+                  onVisibleChange={setShowPassword}
+                  extraProps={NEW_PASSWORD_INPUT_PROPS}
+                />
               )}
             </FormField>
-            <PasswordChecklist id="password-rules" password={formData.password} />
-            <SuggestPasswordButton onSuggest={handleSuggestPassword} disabled={isLoading} />
-          </div>
-
-          <div className="space-y-2">
-            <FormField
-              id="confirmPassword"
-              label="Confirm password"
-              error={v.errors.confirmPassword}
-              describedBy="confirmPassword-match"
-            >
-              {(control) => (
-                <div className="relative">
-                  <Input
-                    {...control}
-                    {...NEW_PASSWORD_INPUT_PROPS}
-                    type={showConfirmPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    enterKeyHint="done"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    onBlur={() => v.handleBlur("confirmPassword")}
-                    className={`${AUTH_INPUT_CLASS} h-12 sm:h-12 pr-11`}
-                    required
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-              )}
-            </FormField>
-            <PasswordMatch
-              id="confirmPassword-match"
-              password={formData.password}
-              confirmation={formData.confirmPassword}
+            <PasswordChecklist id="password-rules" password={password} />
+            <SuggestPasswordButton
+              onSuggest={(suggested) => {
+                setPassword(suggested)
+                setShowPassword(true)
+              }}
+              disabled={isLoading}
             />
           </div>
-
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-base"
-            disabled={isLoading || !token}
-          >
-            {isLoading ? "Resetting..." : "Reset Password"}
-          </Button>
+          {formError ? (
+            <AuthNotice tone="error" role="alert" noticeRef={formErrorRef}>
+              {formError}
+            </AuthNotice>
+          ) : null}
+          <SubmitButton busy={isLoading} busyLabel="Saving your password…">
+            Save new password
+          </SubmitButton>
         </form>
-
-        <div className="text-center">
-          <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Back to Sign In
+        <p className="text-center text-sm">
+          <Link href="/login" className={AUTH_LINK_CLASS}>
+            Back to log in
           </Link>
-        </div>
+        </p>
       </div>
     </AuthSplitLayout>
   )

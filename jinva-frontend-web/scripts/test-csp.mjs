@@ -98,8 +98,21 @@ ok("dev local API origin", dev.get("connect-src").includes("http://localhost:800
   ok("policy has no newline or quote injection", !C.buildCsp({ apiUrl: "https://a.example/\n;script-src *", dev: false }).includes("\n"))
 }
 
-// ── Frames: only blob: (admin KYC PDF preview, kyc-media.tsx) ──────────────
-ok("frame-src is exactly blob:", prod.get("frame-src").join(" ") === "blob:", JSON.stringify(prod.get("frame-src")))
+// ── Frames: blob: (admin KYC PDF preview, kyc-media.tsx) and Turnstile ─────
+ok(
+  "frame-src is exactly blob: and Turnstile",
+  prod.get("frame-src").join(" ") === `blob: ${C.TURNSTILE_ORIGIN}`,
+  JSON.stringify(prod.get("frame-src")),
+)
+
+// ── Cloudflare Turnstile (auth v2): its script and challenge iframe only ────
+ok("Turnstile origin constant", C.TURNSTILE_ORIGIN === "https://challenges.cloudflare.com")
+ok("Turnstile in prod script-src", prod.get("script-src").includes(C.TURNSTILE_ORIGIN))
+ok("Turnstile in dev script-src", dev.get("script-src").includes(C.TURNSTILE_ORIGIN))
+ok("Turnstile in dev frame-src", dev.get("frame-src").includes(C.TURNSTILE_ORIGIN))
+ok("Turnstile not in connect-src", !prod.get("connect-src").includes(C.TURNSTILE_ORIGIN))
+ok("Turnstile not in img-src", !prod.get("img-src").includes(C.TURNSTILE_ORIGIN))
+ok("no other cloudflare host", !prodAll.some((s) => /cloudflare/.test(s) && s !== C.TURNSTILE_ORIGIN))
 ok("object-src stays 'none'", prod.get("object-src").join(" ") === "'none'")
 ok("frame-ancestors stays 'none'", prod.get("frame-ancestors").join(" ") === "'none'")
 

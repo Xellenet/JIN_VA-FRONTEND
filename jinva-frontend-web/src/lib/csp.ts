@@ -22,6 +22,12 @@
  * own scripts can mint such URLs, and Chrome's PDF viewer still renders under
  * `object-src 'none'` (checked in a browser with the policy enforced).
  *
+ * Cloudflare Turnstile (auth v2): the bot check on the auth pages loads its
+ * script from `https://challenges.cloudflare.com` and renders its challenge in
+ * an iframe from the same origin, so that one origin is in `script-src` and
+ * `frame-src`. The script is only requested on auth pages, and only when
+ * `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is set (components/auth/turnstile.tsx).
+ *
  * Reporting: when `CSP_REPORT_URI` is set (an absolute https URL, or a
  * same-origin path), violations are sent there through `report-uri` and
  * `report-to` + `Reporting-Endpoints`. Unset, nothing is reported and the
@@ -52,6 +58,8 @@ export const FCM_ORIGINS = [
   "https://fcmregistrations.googleapis.com",
   "https://fcm.googleapis.com",
 ] as const
+/** Cloudflare Turnstile's script and challenge iframe. */
+export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com"
 export const VERCEL_DEV_SCRIPT_ORIGIN = "https://va.vercel-scripts.com"
 export const SERVICE_WORKER_PATH = "/firebase-messaging-sw.js"
 
@@ -113,7 +121,7 @@ export function buildCsp({ apiUrl, mediaOrigins, dev, reportUri }: CspOptions): 
 
   const directives: [string, string[]][] = [
     ["default-src", ["'self'"]],
-    ["script-src", unique(["'self'", "'unsafe-inline'", dev ? "'unsafe-eval'" : null, dev ? VERCEL_DEV_SCRIPT_ORIGIN : null])],
+    ["script-src", unique(["'self'", "'unsafe-inline'", TURNSTILE_ORIGIN, dev ? "'unsafe-eval'" : null, dev ? VERCEL_DEV_SCRIPT_ORIGIN : null])],
     ["style-src", ["'self'", "'unsafe-inline'"]],
     ["img-src", unique(["'self'", "data:", "blob:", api, GOOGLE_AVATAR_ORIGIN, ...media])],
     ["font-src", ["'self'", "data:"]],
@@ -121,7 +129,7 @@ export function buildCsp({ apiUrl, mediaOrigins, dev, reportUri }: CspOptions): 
     ["media-src", unique(["'self'", "blob:", api, ...media])],
     ["worker-src", ["'self'"]],
     ["manifest-src", ["'self'"]],
-    ["frame-src", ["blob:"]],
+    ["frame-src", ["blob:", TURNSTILE_ORIGIN]],
     ["object-src", ["'none'"]],
     ["base-uri", ["'self'"]],
     ["form-action", ["'self'"]],

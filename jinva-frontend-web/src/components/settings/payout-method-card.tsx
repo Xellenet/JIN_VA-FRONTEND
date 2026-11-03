@@ -138,7 +138,7 @@ const FIELD_ID = {
  * under the field they belong to (not only in a toast), and the card carries
  * the stable `#payout-method` anchor that "Add payout method" links target.
  */
-export function PayoutMethodCard() {
+export function PayoutMethodCard({ onSaved }: Readonly<{ onSaved?: () => void }> = {}) {
   const [loadState, setLoadState] = useState<"loading" | "error" | "ready">("loading")
   const [saved, setSaved] = useState<SavedPayout | null>(null)
   const [editing, setEditing] = useState(false)
@@ -370,6 +370,7 @@ export function PayoutMethodCard() {
       })
       setEditing(false)
       toast.success("Payout method saved")
+      onSaved?.()
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0
       if (status === 422) {

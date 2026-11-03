@@ -9,12 +9,14 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Search, ChevronDown, Wrench, Loader2 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
+import { formatCurrency } from "@/lib/utils"
 
 interface BackendService {
   id: string
   name: string
   description?: string
-  price?: number
+  /** "150.00" from the API, or null until an admin sets a typical starting price. */
+  price?: number | string | null
 }
 
 export default function UserServicesPage() {
@@ -88,7 +90,7 @@ export default function UserServicesPage() {
                           </div>
                           {service.price != null && (
                             <Badge variant="secondary" className="bg-white text-primary">
-                              GH₵ {service.price}
+                              From {formatCurrency(service.price)}
                             </Badge>
                           )}
                         </div>

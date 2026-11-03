@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AccountIdentityCard } from "@/components/settings/account-identity-card"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -116,7 +117,7 @@ const CHANNEL_ROWS: { key: keyof ArtisanNotifPrefs; label: string; desc: string 
 ]
 
 function ArtisanSettingsContent() {
-  const { user, logout } = useAuth()
+  const { user, logout, refreshUser } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -316,6 +317,8 @@ function ArtisanSettingsContent() {
                 </div>
               </CardContent>
             </Card>
+
+            <AccountIdentityCard user={user} refreshUser={refreshUser} />
 
             <Card className="gap-0 py-0">
               <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">

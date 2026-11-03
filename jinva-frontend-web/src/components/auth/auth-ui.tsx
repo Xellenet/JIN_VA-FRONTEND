@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useRef } from "react"
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Info, Loader2, TriangleAlert } from "lucide-react"
+import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, Info, Loader2, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -11,13 +11,25 @@ import { AUTH_INPUT_CLASS, type FieldControlProps } from "@/components/forms/for
 /**
  * Auth v2: the small pieces every auth screen shares, so sign-up, login,
  * forgot password, verify email and "Complete your account" keep one rhythm:
- * a 2rem heading, 15px body, 44px controls, one primary action.
+ * a display-face heading, 15px body, 44px+ controls, one primary action.
+ *
+ * Auth redesign (approved 3 Nov 2026): taller, rounder primary buttons (48px on
+ * phones, 52px from 980px), the display face on headings, the field focus glow
+ * (`AUTH_FIELD_CLASS`, see auth-motion.css) and a filled success check.
+ *
+ * Dark theme: `--primary-foreground` on the bright `--primary` measures
+ * 3.13:1, so text on a primary fill uses `--background` there (5.89:1).
  */
 
 export const AUTH_PRIMARY_BUTTON_CLASS =
-  "h-11 w-full rounded-lg bg-primary text-base font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
+  "h-12 w-full rounded-xl bg-primary text-base font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 dark:text-background min-[980px]:h-[3.25rem]"
 export const AUTH_SECONDARY_BUTTON_CLASS =
-  "h-11 w-full rounded-lg border border-input bg-background text-base font-normal text-foreground hover:bg-accent hover:text-accent-foreground"
+  "h-11 w-full rounded-xl border border-input bg-card text-base font-semibold text-foreground hover:bg-accent hover:text-accent-foreground min-[980px]:h-12"
+/** On every auth FormField / PhoneField: the grid that carries the focus glow (auth-motion.css). */
+export const AUTH_FIELD_CLASS = "auth-field"
+/** PhoneField's own controls: the glow replaces their focus ring, and they match the auth inputs. */
+export const AUTH_PHONE_FIELD_CLASS =
+  "auth-field [&_button]:h-11 [&_button]:rounded-xl [&_button]:bg-card [&_button]:focus-visible:ring-0 [&_button]:focus-visible:border-primary [&_input]:h-11 [&_input]:rounded-xl [&_input]:bg-card [&_input]:focus-visible:ring-0 [&_input]:focus-visible:border-primary min-[980px]:[&_button]:h-12 min-[980px]:[&_input]:h-12"
 /** Text links; 44px tall on phones (inline-flex keeps them in the sentence). */
 export const AUTH_LINK_CLASS =
   "font-medium text-foreground underline decoration-foreground/30 underline-offset-4 transition-colors hover:decoration-foreground max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
@@ -27,23 +39,38 @@ export function AuthHeading({
   title,
   description,
   headingRef,
+  align = "start",
 }: {
   title: React.ReactNode
   description?: React.ReactNode
   /** Focused after a step change, so screen readers land on the new step. */
   headingRef?: React.Ref<HTMLHeadingElement>
+  /** Centred for the success moments. */
+  align?: "start" | "center"
 }) {
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-1.5 min-[980px]:space-y-2", align === "center" && "text-center")}>
       <h1
         ref={headingRef}
         tabIndex={-1}
-        className="text-[1.75rem] font-semibold leading-tight tracking-tight text-foreground outline-none sm:text-[2rem]"
+        className="auth-display text-[1.75rem] font-extrabold leading-[1.05] tracking-[-0.03em] text-foreground outline-none min-[980px]:text-[2.25rem]"
       >
         {title}
       </h1>
       {description ? <div className="text-[0.9375rem] leading-relaxed text-muted-foreground">{description}</div> : null}
     </div>
+  )
+}
+
+/** The small icon tile above a code step's heading. */
+export function AuthIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary min-[980px]:size-14 [&_svg]:size-6"
+    >
+      {children}
+    </span>
   )
 }
 
@@ -55,18 +82,33 @@ export function AuthHeading({
 export function StepIndicator({
   steps,
   current,
+  onBack,
 }: {
   steps: readonly string[]
   /** 1-based. */
   current: number
+  /** Shows the arrow "Back" button beside the step name. */
+  onBack?: () => void
 }) {
   return (
-    <div className="space-y-2.5">
-      <p className="text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">Step {current} of {steps.length}</span>
-        <span aria-hidden="true"> · </span>
-        <span>{steps[current - 1]}</span>
-      </p>
+    <div className="space-y-2">
+      <div className="flex min-h-6 items-center gap-1">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back"
+            className="-my-2.5 -ml-2.5 flex size-11 shrink-0 items-center justify-center rounded-xl text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/30"
+          >
+            <ArrowLeft className="h-[1.125rem] w-[1.125rem]" aria-hidden="true" />
+          </button>
+        ) : null}
+        <p className="text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">Step {current} of {steps.length}</span>
+          <span aria-hidden="true"> · </span>
+          <span>{steps[current - 1]}</span>
+        </p>
+      </div>
       <ol className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }} aria-label="Sign-up steps">
         {steps.map((label, i) => {
           const state = i + 1 < current ? "done" : i + 1 === current ? "current" : "upcoming"
@@ -74,9 +116,9 @@ export function StepIndicator({
             <li key={label} className="min-w-0">
               <span className="block h-1 overflow-hidden rounded-full bg-muted">
                 <span
-                  data-step-bar
+                  data-step-bar={state}
                   className="block h-full origin-left rounded-full bg-primary"
-                  style={{ transform: `scaleX(${state === "upcoming" ? 0 : 1})` }}
+                  style={{ transform: `scaleX(${state === "upcoming" ? 0 : state === "current" ? 0.55 : 1})` }}
                 />
               </span>
               <span className="sr-only">
@@ -246,17 +288,22 @@ export function AuthNotice({
   )
 }
 
-/** The success moment: a ring and tick that draw themselves (still, with reduced motion). */
+/** The success moment: a brand disc pops in and its tick draws itself (still, with reduced motion). */
 export function SuccessCheck({ className }: { className?: string }) {
   return (
-    <span className={cn("auth-check-bloom inline-flex rounded-full bg-success/10 p-2 text-success", className)}>
-      <svg viewBox="0 0 52 52" className="h-12 w-12" fill="none" aria-hidden="true">
-        <circle className="auth-check-ring" cx="26" cy="26" r="24" stroke="currentColor" strokeWidth="2.5" />
+    <span
+      className={cn(
+        "auth-check-bloom mx-auto flex size-20 items-center justify-center rounded-full bg-brand text-brand-foreground dark:ring-1 dark:ring-primary/50",
+        className,
+      )}
+    >
+      <svg viewBox="0 0 24 24" className="size-10" fill="none" aria-hidden="true">
         <path
           className="auth-check-tick"
-          d="M15 27l7.5 7.5L37.5 19"
+          pathLength={1}
+          d="M5 12l5 5 9-10"
           stroke="currentColor"
-          strokeWidth="3"
+          strokeWidth="2.6"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -306,7 +353,7 @@ export function SegmentedControl<T extends string>({
       <span
         aria-hidden="true"
         data-segment-thumb
-        className="absolute inset-y-1 left-1 rounded-lg bg-background shadow-sm ring-1 ring-border/60"
+        className="absolute inset-y-1 left-1 rounded-[0.625rem] bg-card shadow-sm ring-1 ring-border/60"
         style={{
           width: `calc((100% - 0.5rem) / ${options.length})`,
           transform: `translateX(${index * 100}%)`,
@@ -327,7 +374,7 @@ export function SegmentedControl<T extends string>({
             disabled={disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              "relative z-10 min-h-11 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/30 sm:min-h-10",
+              "relative z-10 min-h-11 rounded-[0.625rem] px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/30",
               checked ? "text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >

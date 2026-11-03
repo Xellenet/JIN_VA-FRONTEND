@@ -1,5 +1,6 @@
 import type React from "react"
 import Link from "next/link"
+import { FragmentAnchor } from "@/components/public/fragment-anchor"
 
 /**
  * One link component for the public site, which picks the right mechanism for
@@ -42,9 +43,9 @@ export function PublicLink({ href, children, ...props }: Readonly<PublicLinkProp
   // Everything else falls through to `next/link`, which is the safe default.
   if (href.startsWith("/") && !href.startsWith("//") && href.includes("#")) {
     return (
-      <a href={href} {...props}>
+      <FragmentAnchor href={href} {...props}>
         {children}
-      </a>
+      </FragmentAnchor>
     )
   }
 

@@ -147,9 +147,12 @@ export function FormAnnouncer({ message }: { message: string }) {
  * Input classes shared by every auth screen (LY1).
  * Auth v2: 44px at every width (one rhythm with the 44px buttons), a softer
  * radius, and a primary-green focus ring instead of the neutral one.
+ *
+ * Auth redesign: 48px from 980px, rounder, on `--card`; the focus ring is
+ * replaced by the glow that `auth-field` (auth-motion.css) fades in around it.
  */
 export const AUTH_INPUT_CLASS =
-  "h-11 rounded-lg bg-background border-input text-foreground text-base md:text-[0.9375rem] focus-visible:border-primary focus-visible:ring-primary/20"
+  "h-11 rounded-xl bg-card border-input text-foreground text-base md:text-[0.9375rem] focus-visible:border-primary focus-visible:ring-0 min-[980px]:h-12"
 
 /**
  * §3.9 fix 3: Radix `SelectTrigger`'s own `data-[size=default]:h-9` and `w-fit`

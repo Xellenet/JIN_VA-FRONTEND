@@ -1,0 +1,107 @@
+/*
+ * Landing page motion (src/app/(public)/page.tsx).
+ *
+ * Rules, all of them load-bearing:
+ *   • Only transform and opacity animate, and every animation is declared
+ *     inside `prefers-reduced-motion: no-preference`. Under `reduce` none of
+ *     this exists and the page is still.
+ *   • Nothing rests hidden. The loops start from a visible frame, so a paused,
+ *     unsupported or never-hydrated page shows complete content.
+ *   • `[data-paused="true"]` is set by <LoopGate> (loop-gate.tsx) when the
+ *     region is off-screen or the tab is hidden; it freezes every loop inside.
+ */
+
+/* Photo columns fade out at the top and bottom of the hero. */
+.lp-collage {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, black 12%, black 88%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, black 12%, black 88%, transparent 100%);
+}
+
+/* The trades strip fades at its two ends. */
+.lp-marquee {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, black 4%, black 96%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, black 4%, black 96%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes lp-drift-up {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(0, -50%, 0); }
+  }
+  @keyframes lp-drift-down {
+    from { transform: translate3d(0, -50%, 0); }
+    to { transform: translate3d(0, 0, 0); }
+  }
+  @keyframes lp-marquee {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-50%, 0, 0); }
+  }
+  @keyframes lp-float {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(0, -8px, 0); }
+  }
+  @keyframes lp-arrive {
+    from { opacity: 0.001; transform: translate3d(0, 10px, 0) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .lp-drift-up { animation: lp-drift-up 46s linear infinite; }
+  .lp-drift-down { animation: lp-drift-down 52s linear infinite; }
+  .lp-marquee-track { animation: lp-marquee 38s linear infinite; }
+  /* Floats only where the cards sit over the photo (desktop). */
+  .lp-float { animation: lp-float 6s ease-in-out infinite; animation-delay: var(--lp-delay, 0s); }
+  /* A new sample event arriving. Always ends fully visible. */
+  .lp-arrive { animation: lp-arrive 520ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+  .lp-drift-up,
+  .lp-drift-down,
+  .lp-marquee-track {
+    will-change: transform;
+  }
+
+  /* Hover or keyboard focus on the strip stops it. */
+  .lp-marquee:hover .lp-marquee-track,
+  .lp-marquee:focus-within .lp-marquee-track {
+    animation-play-state: paused;
+  }
+
+  [data-paused="true"] .lp-drift-up,
+  [data-paused="true"] .lp-drift-down,
+  [data-paused="true"] .lp-marquee-track,
+  [data-paused="true"] .lp-float,
+  [data-paused="true"].lp-float {
+    animation-play-state: paused;
+  }
+
+  /* Gentle zoom on the portfolio tiles and the photo doors. */
+  .lp-zoom img {
+    transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .lp-zoom:hover img,
+  .lp-zoom:focus-visible img {
+    transform: scale(1.05);
+  }
+
+  /* The job track's progress line, drawn with scaleX rather than width. */
+  .lp-track-fill {
+    transition: transform 900ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .lp-dot-check {
+    transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms ease;
+  }
+}
+
+/* Phones: the protection cards stack under the photo and do not float. */
+@media (max-width: 899.98px) {
+  .lp-float-desktop { animation: none !important; }
+}
+
+/* Reduced motion: the trades strip is a still row you can scroll yourself. */
+@media (prefers-reduced-motion: reduce) {
+  .lp-marquee {
+    overflow-x: auto;
+  }
+  .lp-marquee-track > [aria-hidden="true"] {
+    display: none;
+  }
+}

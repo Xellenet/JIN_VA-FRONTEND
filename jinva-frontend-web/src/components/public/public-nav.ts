@@ -13,15 +13,16 @@
 export interface PublicNavLink {
   label: string
   href: string
+  /** Shown in the phone menu and footer, not in the desktop header row. */
+  menuOnly?: boolean
 }
 
-/** Header nav + the mobile sheet. Also reused by the footer's Product column. */
+/** Header nav + the phone menu. Anchors are the landing page's section ids. */
 export const PUBLIC_NAV_LINKS: readonly PublicNavLink[] = [
-  { label: "Services", href: "/#services" },
-  { label: "How it works", href: "/#how-it-works" },
-  { label: "For artisans", href: "/#for-artisans" },
-  { label: "Why JinVa", href: "/#features" },
-  { label: "FAQ", href: "/#faq" },
+  { label: "See the work", href: "/#work" },
+  { label: "How a job runs", href: "/#how" },
+  { label: "For artisans", href: "/#artisans" },
+  { label: "Questions", href: "/#questions", menuOnly: true },
 ]
 
 /** Footer link columns — design-spec.md §3.12. */
@@ -29,10 +30,9 @@ export const FOOTER_COLUMNS: readonly { heading: string; links: readonly PublicN
   {
     heading: "Product",
     links: [
-      { label: "How it works", href: "/#how-it-works" },
-      { label: "Service categories", href: "/#services" },
-      { label: "For artisans", href: "/#for-artisans" },
-      { label: "Why JinVa", href: "/#features" },
+      { label: "How a job runs", href: "/#how" },
+      { label: "See the work", href: "/#work" },
+      { label: "For artisans", href: "/#artisans" },
       { label: "Log in", href: "/login" },
       { label: "Get started", href: "/signup" },
     ],
@@ -41,13 +41,13 @@ export const FOOTER_COLUMNS: readonly { heading: string; links: readonly PublicN
     heading: "Company",
     links: [
       { label: "About JinVa", href: "/about" },
-      { label: "How JinVa keeps the platform safe", href: "/#platform-governance" },
+      { label: "How JinVa keeps the platform safe", href: "/#safety" },
     ],
   },
   {
     heading: "Support",
     links: [
-      { label: "FAQ", href: "/#faq" },
+      { label: "Questions", href: "/#questions" },
       { label: "Contact", href: "/contact" },
     ],
   },

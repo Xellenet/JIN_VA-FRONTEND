@@ -1,45 +1,44 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { Menu } from "lucide-react"
+import { usePathname } from "next/navigation"
+import { Menu, X } from "lucide-react"
 import { Logo } from "@/components/logo"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import {
-  NavigationMenu,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-} from "@/components/ui/navigation-menu"
+import { cn } from "@/lib/utils"
 import { PublicLink } from "@/components/public/public-link"
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
 import { PublicThemeToggle } from "@/components/public/theme-toggle"
 import { PUBLIC_NAV_LINKS } from "@/components/public/public-nav"
 
+const MENU_ID = "public-menu"
+const DESKTOP_QUERY = "(min-width: 820px)"
+
 /**
- * Sticky header shared by `/` and every page in the `(public)` route group
- * (design-spec.md §3.2).
+ * Sticky header shared by `/` and every page in the `(public)` route group.
+ *
+ * On `/` it sits on the hero's deep brand surface ("on-brand" tone, the dark
+ * brand token in dark mode); elsewhere it is the plain page background.
+ *
+ * Below 820px the links fold into a Menu disclosure: a real `<button>` with
+ * `aria-expanded` / `aria-controls` that shows a panel under the bar. The
+ * panel closes on a link click, on Escape (focus goes back to the button), on
+ * a click outside, on route change, and when the window grows past 820px.
  *
  * Deliberately has NO session awareness — requirements.md Open Question 10 is
  * "no". `/` stays outside the middleware matcher and never consults a cookie, so
  * it renders identically with the backend down (LP2) and leaks no account state.
- * An already-signed-in visitor who clicks "Log in" is bounced to their role home
- * by the middleware's existing isAuthPage branch.
  */
 export function PublicHeader() {
+  const pathname = usePathname()
+  const onBrand = pathname === "/"
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const headerRef = useRef<HTMLElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
-  // A hairline border once the page has moved — pure decoration, so it is a
-  // passive listener and the server-rendered default is border-transparent.
+  const close = useCallback(() => setOpen(false), [])
+
+  // A hairline border once the page has moved.
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
     onScroll()
@@ -47,97 +46,158 @@ export function PublicHeader() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
+  // Route change closes the menu.
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      setOpen(false)
+      buttonRef.current?.focus()
+    }
+    const onPointer = (e: PointerEvent) => {
+      if (headerRef.current && !headerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    const mq = window.matchMedia(DESKTOP_QUERY)
+    const onWide = () => {
+      if (mq.matches) setOpen(false)
+    }
+    document.addEventListener("keydown", onKey)
+    document.addEventListener("pointerdown", onPointer)
+    mq.addEventListener("change", onWide)
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.removeEventListener("pointerdown", onPointer)
+      mq.removeEventListener("change", onWide)
+    }
+  }, [open])
+
+  const focusRing = onBrand
+    ? "outline-none focus-visible:ring-[3px] focus-visible:ring-brand-highlight/70"
+    : "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+
   return (
     <header
+      ref={headerRef}
       data-scrolled={scrolled}
-      className="sticky top-0 z-50 w-full border-b border-transparent bg-background/90 backdrop-blur-md transition-colors duration-300 data-[scrolled=true]:border-border"
+      className={cn(
+        "sticky top-0 z-50 w-full border-b transition-colors duration-300",
+        onBrand
+          ? "border-transparent bg-brand text-brand-foreground data-[scrolled=true]:border-brand-foreground/10"
+          : "border-transparent bg-background/90 backdrop-blur-md data-[scrolled=true]:border-border",
+      )}
     >
-      <div className="mx-auto flex h-16 w-full max-w-[96rem] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 w-full max-w-310 items-center gap-x-7 gap-y-3 px-4 sm:px-6 lg:px-8">
         <Link
           href="/"
           aria-label="JinVa home"
-          // 44px tall tap target on phones; the negative margin keeps the logo where it was.
-          className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:-my-1.5 max-sm:py-1.5"
+          className={cn("-my-1.5 flex min-h-11 items-center rounded-md py-1.5", focusRing)}
         >
-          <Logo />
+          <Logo tone={onBrand ? "on-brand" : "default"} />
         </Link>
 
-        <NavigationMenu viewport={false} className="hidden lg:flex">
-          <NavigationMenuList>
-            {PUBLIC_NAV_LINKS.map((link) => (
-              <NavigationMenuItem key={link.href}>
-                <NavigationMenuLink
-                  asChild
-                  className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        <nav aria-label="Main" className="hidden flex-1 min-[820px]:block">
+          <ul className="flex flex-wrap gap-x-6">
+            {PUBLIC_NAV_LINKS.filter((l) => !l.menuOnly).map((link) => (
+              <li key={link.href}>
+                <PublicLink
+                  href={link.href}
+                  className={cn(
+                    "inline-flex min-h-11 items-center rounded-md text-[0.9375rem] font-medium transition-colors",
+                    onBrand
+                      ? "text-brand-foreground/85 hover:text-brand-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                    focusRing,
+                  )}
                 >
-                  <PublicLink href={link.href}>{link.label}</PublicLink>
-                </NavigationMenuLink>
-              </NavigationMenuItem>
+                  {link.label}
+                </PublicLink>
+              </li>
             ))}
-          </NavigationMenuList>
-        </NavigationMenu>
+          </ul>
+        </nav>
 
-        <div className="flex items-center gap-1 sm:gap-2">
-          <PublicThemeToggle />
+        <div className="ml-auto flex items-center gap-1 min-[820px]:gap-2">
+          <PublicThemeToggle tone={onBrand ? "on-brand" : "default"} />
+          <Link
+            href="/login"
+            className={cn(
+              "hidden min-h-11 items-center rounded-lg px-3.5 font-medium min-[820px]:inline-flex",
+              onBrand ? "text-brand-foreground hover:bg-brand-foreground/10" : "text-foreground hover:bg-accent",
+              focusRing,
+            )}
+          >
+            Log in
+          </Link>
+          <Link
+            href="/signup"
+            className={cn(
+              "hidden min-h-11 items-center rounded-xl px-4.5 font-semibold transition-opacity hover:opacity-90 min-[820px]:inline-flex",
+              onBrand ? "bg-brand-foreground text-brand" : "bg-primary text-primary-foreground",
+              focusRing,
+            )}
+          >
+            Get started
+          </Link>
 
-          <Button variant="ghost" asChild className="hidden lg:inline-flex">
-            <Link href="/login">Log in</Link>
-          </Button>
-          <Button asChild className="hidden lg:inline-flex">
-            <Link href="/signup">Get started</Link>
-          </Button>
+          <button
+            ref={buttonRef}
+            type="button"
+            aria-expanded={open}
+            aria-controls={MENU_ID}
+            onClick={() => setOpen((o) => !o)}
+            className={cn(
+              "inline-flex size-11 cursor-pointer items-center justify-center gap-2 rounded-xl border min-[820px]:hidden",
+              onBrand
+                ? "border-brand-foreground/25 bg-brand-foreground/5 text-brand-foreground"
+                : "border-border bg-background text-foreground",
+              focusRing,
+            )}
+          >
+            {open ? <X aria-hidden="true" className="size-5" /> : <Menu aria-hidden="true" className="size-5" />}
+            <span className="sr-only">Menu</span>
+          </button>
+        </div>
+      </div>
 
-          <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Open menu" className="max-sm:size-11 lg:hidden">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="flex flex-col gap-0 p-0">
-              <SheetHeader className="border-b border-border px-4 py-4 text-left">
-                <SheetTitle asChild>
-                  <Link href="/" aria-label="JinVa home" onClick={() => setOpen(false)}>
-                    <Logo />
-                  </Link>
-                </SheetTitle>
-              </SheetHeader>
-
-              <nav className="flex flex-col px-2 py-2">
-                {PUBLIC_NAV_LINKS.map((link) => (
-                  // SheetClose closes the panel on selection — LP3 requires it
-                  <SheetClose asChild key={link.href}>
-                    <PublicLink
-                      href={link.href}
-                      className="flex h-12 items-center rounded-md px-3 text-base font-medium text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                    >
-                      {link.label}
-                    </PublicLink>
-                  </SheetClose>
-                ))}
-              </nav>
-
-              <Separator />
-
-              <div className="flex flex-col gap-3 p-4">
-                <SheetClose asChild>
-                  <Button variant="outline" asChild className="w-full">
-                    <Link href="/login">Log in</Link>
-                  </Button>
-                </SheetClose>
-                <SheetClose asChild>
-                  <Button asChild className="w-full">
-                    <Link href="/signup">Get started</Link>
-                  </Button>
-                </SheetClose>
-              </div>
-
-              <Separator />
-
-              <div className="p-2">
-                <PublicThemeToggle showLabel />
-              </div>
-            </SheetContent>
-          </Sheet>
+      <div
+        id={MENU_ID}
+        hidden={!open}
+        className="absolute inset-x-4 top-full mt-2 rounded-2xl border border-border bg-popover p-2 text-popover-foreground shadow-2xl shadow-black/30 min-[820px]:hidden"
+      >
+        <nav aria-label="Menu">
+          <ul className="flex flex-col">
+            {PUBLIC_NAV_LINKS.map((link) => (
+              <li key={link.href}>
+                <PublicLink
+                  href={link.href}
+                  onClick={close}
+                  className="flex min-h-12 items-center rounded-xl px-3.5 font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  {link.label}
+                </PublicLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <div className="mt-1 grid grid-cols-2 gap-2 border-t border-border px-1.5 pt-2 pb-1.5">
+          <Link
+            href="/login"
+            onClick={close}
+            className="flex min-h-12 items-center justify-center rounded-xl border border-border font-semibold outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            Log in
+          </Link>
+          <Link
+            href="/signup"
+            onClick={close}
+            className="flex min-h-12 items-center justify-center rounded-xl bg-brand font-semibold text-brand-foreground outline-none hover:opacity-90 focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-brand-accent"
+          >
+            Get started
+          </Link>
         </div>
       </div>
     </header>

@@ -16,7 +16,14 @@ import { Button } from "@/components/ui/button"
  * `showLabel` is for the mobile sheet, where an unlabelled icon on a touch
  * target has no affordance at all.
  */
-export function PublicThemeToggle({ showLabel = false }: { readonly showLabel?: boolean }) {
+export function PublicThemeToggle({
+  showLabel = false,
+  tone = "default",
+}: {
+  readonly showLabel?: boolean
+  /** "on-brand" for the landing page's deep-green header. */
+  readonly tone?: "default" | "on-brand"
+}) {
   const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
@@ -43,10 +50,18 @@ export function PublicThemeToggle({ showLabel = false }: { readonly showLabel?: 
       variant="ghost"
       size="icon"
       aria-label="Toggle theme"
-      className="max-sm:size-11"
+      className={
+        tone === "on-brand"
+          ? "max-sm:size-11 hover:bg-brand-foreground/10 focus-visible:ring-brand-highlight/70"
+          : "max-sm:size-11"
+      }
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
-      <Icon className="h-[1.1rem] w-[1.1rem] text-muted-foreground" />
+      <Icon
+        className={
+          tone === "on-brand" ? "h-[1.1rem] w-[1.1rem] text-brand-foreground" : "h-[1.1rem] w-[1.1rem] text-muted-foreground"
+        }
+      />
     </Button>
   )
 }

@@ -78,7 +78,12 @@ export async function middleware(request: NextRequest) {
   if (isDashboard && !role) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
-    url.searchParams.set("redirect", pathname)
+    // Keep the page's own query inside `redirect` (e.g. the landing page's
+    // `/dashboard/user/search?serviceId=…&location=…`) instead of leaving it
+    // loose on /login. The login form still passes the value through
+    // safeInternalRedirect, which only ever accepts a same-origin path.
+    url.search = ""
+    url.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(url)
   }
 

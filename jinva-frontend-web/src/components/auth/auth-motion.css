@@ -1,56 +1,299 @@
 /*
- * Auth v2 motion. Every effect answers something the person did — a step
- * changing, a role chosen, a digit typed, a code refused, a sign-in confirmed
- * — and all of it sits inside `prefers-reduced-motion: no-preference`, so with
- * reduced motion the same states simply appear. No colour lives here: the
- * colours are the Tailwind tokens on the elements themselves.
+ * Auth look and motion (auth redesign, approved 3 Nov 2026).
+ *
+ * Every colour here is a globals.css token (var(--brand), var(--primary), …),
+ * mixed with `color-mix`, so light and dark both follow the theme. Motion is
+ * transform and opacity only (plus the check's stroke drawing itself), and
+ * all of it sits inside `prefers-reduced-motion: no-preference`: with reduced
+ * motion every state is simply there, complete and still.
  */
 
+/* The landing page's display face (Bricolage Grotesque). --font-display is
+   a Tailwind theme value there (inlined into `font-display`, not emitted as a
+   custom property), so this reads it if it is ever emitted, then the next/font
+   variable it is built from, then Geist. */
+.auth-display {
+  font-family:
+    var(--font-display, var(--font-bricolage, var(--font-geist-sans))), var(--font-geist-sans), ui-sans-serif,
+    system-ui, sans-serif;
+}
+
+/* ── Brand panel ─────────────────────────────────────────────────────────── */
+
+/* The photos sit under the brand colour; dimmer in dark, where the brand is deeper. */
+.auth-photo-cols {
+  opacity: 0.9;
+}
+.dark .auth-photo-cols {
+  opacity: 0.6;
+}
+
+/* The gradients over the top and bottom hold the text; each is solid where its
+   text sits and fades out over its last 7rem, so contrast never depends on the
+   viewport height or on which photo is passing underneath. */
+.auth-scrim-top {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--brand) 95%, transparent) 0,
+    color-mix(in oklab, var(--brand) 92%, transparent) calc(100% - 7rem),
+    transparent 100%
+  );
+}
+.auth-scrim-bottom {
+  background: linear-gradient(
+    to top,
+    color-mix(in oklab, var(--brand) 96%, transparent) 0,
+    color-mix(in oklab, var(--brand) 92%, transparent) calc(100% - 7rem),
+    transparent 100%
+  );
+}
+.dark .auth-scrim-top {
+  background: linear-gradient(
+    to bottom,
+    var(--brand) 0,
+    color-mix(in oklab, var(--brand) 96%, transparent) calc(100% - 7rem),
+    transparent 100%
+  );
+}
+.dark .auth-scrim-bottom {
+  background: linear-gradient(
+    to top,
+    var(--brand) 0,
+    color-mix(in oklab, var(--brand) 96%, transparent) calc(100% - 7rem),
+    transparent 100%
+  );
+}
+
+/* Phone strip photos: stacked, one showing. */
+.auth-strip-photo {
+  opacity: 0;
+}
+.auth-strip-photo[data-state="on"] {
+  opacity: 1;
+}
+
+/* ── Fields: the focus glow ──────────────────────────────────────────────── */
+
+/*
+ * `AUTH_FIELD_CLASS` on a FormField: the wrapper becomes a three-row grid
+ * (label, control, message) and an ::after glow shares the control's cell, so
+ * the glow can fade in with opacity instead of animating a box-shadow.
+ */
+.auth-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 0.5rem;
+}
+.auth-field > * {
+  grid-column: 1;
+  margin-block: 0;
+}
+.auth-field > :nth-child(1) {
+  grid-row: 1;
+}
+.auth-field > :nth-child(2) {
+  grid-row: 2;
+}
+.auth-field > :nth-child(3) {
+  grid-row: 3;
+}
+.auth-field::after {
+  content: "";
+  grid-row: 2;
+  grid-column: 1;
+  pointer-events: none;
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 22%, transparent);
+  opacity: 0;
+}
+.auth-field:has(> :nth-child(2):focus-within)::after {
+  opacity: 1;
+}
+.auth-field:has([aria-invalid="true"])::after {
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--destructive) 22%, transparent);
+}
+@media (max-width: 979.98px) {
+  .auth-field {
+    row-gap: 0.25rem;
+  }
+}
+
+/* The chosen role card's ring, on a layer of its own so it can settle in. */
+[data-role-card]::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent),
+    0 18px 30px -24px color-mix(in oklab, var(--primary) 70%, transparent);
+  opacity: 0;
+}
+[data-role-card][aria-checked="true"]::after {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: no-preference) {
-  /* A step rising in from the direction of travel (Continue → from the right, Back → from the left). */
+  /* ── Brand panel and strip loops (paused while the tab is hidden) ───────── */
+  @keyframes auth-drift-up {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(0, -50%, 0);
+    }
+  }
+  @keyframes auth-drift-down {
+    from {
+      transform: translate3d(0, -50%, 0);
+    }
+    to {
+      transform: translate3d(0, 0, 0);
+    }
+  }
+  .auth-drift-up {
+    animation: auth-drift-up 88s linear infinite;
+    will-change: transform;
+  }
+  .auth-drift-down {
+    animation: auth-drift-down 100s linear infinite;
+    will-change: transform;
+  }
+  .auth-drift-slow {
+    animation-duration: 112s;
+  }
+  [data-paused="true"] .auth-drift-up,
+  [data-paused="true"] .auth-drift-down,
+  [data-paused="true"] .auth-strip-photo {
+    animation-play-state: paused;
+  }
+
+  /* The headline swapping when the role changes. */
+  .auth-panel-copy {
+    animation: auth-fade-up 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* The sample activity card: rises in, holds, lifts away; one per tick. */
+  @keyframes auth-activity {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, 14px, 0) scale(0.97);
+    }
+    12%,
+    86% {
+      opacity: 1;
+      transform: none;
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(0, -8px, 0);
+    }
+  }
+  .auth-activity {
+    animation: auth-activity 3600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Strip: the line slides in, the photo crossfades and slowly zooms. */
+  .auth-strip-line {
+    animation: auth-step-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .auth-strip-photo {
+    transition: opacity 1s ease;
+  }
+  @keyframes auth-kenburns {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(1.1);
+    }
+  }
+  .auth-strip-photo[data-state="on"] {
+    animation: auth-kenburns 3.6s ease-out both;
+  }
+  /* The outgoing photo keeps its zoom while it fades, so it never jumps. */
+  .auth-strip-photo[data-state="prev"] {
+    transform: scale(1.1);
+  }
+
+  /* ── Steps: slide in with their parts staggered ────────────────────────── */
   @keyframes auth-step-in {
     from {
       opacity: 0;
-      transform: translate3d(var(--auth-step-x, 0.75rem), 0.25rem, 0);
+      transform: translate3d(var(--auth-step-x, 1.125rem), 0, 0);
     }
     to {
       opacity: 1;
       transform: none;
     }
   }
-  [data-auth-step] {
-    animation: auth-step-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  [data-auth-step="back"] {
-    --auth-step-x: -0.75rem;
-  }
-  [data-auth-step="none"] {
-    animation-name: auth-fade-in;
-  }
-  @keyframes auth-fade-in {
+  @keyframes auth-fade-up {
     from {
       opacity: 0;
+      transform: translate3d(0, 0.5rem, 0);
     }
     to {
       opacity: 1;
+      transform: none;
     }
   }
-
-  /* The step indicator's bar filling to the current step. */
-  [data-step-bar] {
-    transition: transform 520ms cubic-bezier(0.65, 0, 0.35, 1);
+  [data-auth-step] > * {
+    animation: auth-step-in 550ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  [data-auth-step] > :nth-child(2) {
+    animation-delay: 60ms;
+  }
+  [data-auth-step] > :nth-child(3) {
+    animation-delay: 120ms;
+  }
+  [data-auth-step] > :nth-child(4) {
+    animation-delay: 180ms;
+  }
+  [data-auth-step] > :nth-child(n + 5) {
+    animation-delay: 240ms;
+  }
+  [data-auth-step="back"] {
+    --auth-step-x: -1.125rem;
+  }
+  [data-auth-step="none"] > * {
+    animation-name: auth-fade-up;
+  }
+  /* Nested steps (the login form swapping) only fade: the outer step staggers. */
+  [data-auth-step] [data-auth-step] > * {
+    animation-duration: 380ms;
   }
 
-  /* The chosen role card settles: a small press, then its tick pops in. */
+  /* The step indicator's current bar filling. */
+  @keyframes auth-bar-fill {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  [data-step-bar="current"] {
+    animation: auth-bar-fill 700ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+  }
+
+  /* ── Role cards: lift on hover, the ring settles in, the check pops ────── */
   [data-role-card] {
-    transition:
-      border-color 180ms ease,
-      box-shadow 220ms ease,
-      background-color 180ms ease,
-      transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  [data-role-card]:active {
+  @media (hover: hover) {
+    [data-role-card]:hover:not(:disabled) {
+      transform: translate3d(0, -2px, 0);
+    }
+  }
+  [data-role-card]:active:not(:disabled) {
     transform: scale(0.985);
+  }
+  [data-role-card]::after {
+    transform: scale(1.03);
+    transition:
+      opacity 350ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-role-card][aria-checked="true"]::after {
+    transform: none;
   }
   @keyframes auth-tick-in {
     0% {
@@ -59,22 +302,27 @@
     }
     60% {
       opacity: 1;
-      transform: scale(1.12);
+      transform: scale(1.15);
     }
     100% {
       transform: scale(1);
     }
   }
   [data-role-card][aria-checked="true"] [data-role-tick] {
-    animation: auth-tick-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: auth-tick-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* ── Fields ────────────────────────────────────────────────────────────── */
+  .auth-field::after {
+    transition: opacity 200ms ease;
   }
 
   /* A digit landing in its box. */
   @keyframes auth-digit-in {
     0% {
-      transform: scale(0.92);
+      transform: scale(0.88);
     }
-    55% {
+    60% {
       transform: scale(1.05);
     }
     100% {
@@ -82,7 +330,7 @@
     }
   }
   .auth-code-box[data-filled="true"] {
-    animation: auth-digit-in 180ms ease-out;
+    animation: auth-digit-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   /* A refused code: one short shake of the row, never repeated on its own. */
@@ -108,21 +356,16 @@
     animation: auth-shake 360ms ease-in-out;
   }
 
-  /* The success check: the ring draws, then the tick. */
+  /* ── The success check: the disc pops, then the tick draws ─────────────── */
   @keyframes auth-draw {
     to {
       stroke-dashoffset: 0;
     }
   }
-  .auth-check-ring {
-    stroke-dasharray: 152;
-    stroke-dashoffset: 152;
-    animation: auth-draw 560ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
-  }
   .auth-check-tick {
-    stroke-dasharray: 36;
-    stroke-dashoffset: 36;
-    animation: auth-draw 320ms cubic-bezier(0.65, 0, 0.35, 1) 420ms forwards;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: auth-draw 700ms cubic-bezier(0.65, 0, 0.35, 1) 180ms forwards;
   }
   @keyframes auth-check-bloom {
     from {
@@ -135,7 +378,7 @@
     }
   }
   .auth-check-bloom {
-    animation: auth-check-bloom 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: auth-check-bloom 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   /* A message appearing under a control (sent, error banner). */
@@ -153,12 +396,12 @@
     }
   }
 
-  /* The segmented control's thumb sliding between options. */
+  /* The segmented control's highlight sliding between options. */
   [data-segment-thumb] {
-    transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* The middle-name field opening. */
+  /* The middle-name field and the password rules opening. */
   [data-auth-expand] {
     animation: auth-expand 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }

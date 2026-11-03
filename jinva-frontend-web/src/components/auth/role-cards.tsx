@@ -2,7 +2,8 @@
 
 import type React from "react"
 import { useRef } from "react"
-import { Check, Hammer, House } from "lucide-react"
+import Image from "next/image"
+import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SelfSignupRole } from "@/lib/signup-flow"
 
@@ -13,16 +14,19 @@ import type { SelfSignupRole } from "@/lib/signup-flow"
  *
  * The chosen card is marked three ways — the ring, a tick, and `aria-checked`
  * read out as "selected" — so it never depends on colour.
+ *
+ * Auth redesign: each card carries one of JinVa's own photos; it lifts on
+ * hover and its ring settles in with a popping check (auth-motion.css).
  */
 
 const ROLES: readonly {
   value: SelfSignupRole
   title: string
   body: string
-  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>
+  photo: string
 }[] = [
-  { value: "CUSTOMER", title: "I need work done", body: "Post jobs, book artisans and pay safely.", icon: House },
-  { value: "ARTISAN", title: "I offer a service", body: "Get booked, get paid to MoMo or bank.", icon: Hammer },
+  { value: "CUSTOMER", title: "I need work done", body: "Post jobs, book artisans and pay safely.", photo: "/portfolio/job-kitchen-sink.jpg" },
+  { value: "ARTISAN", title: "I offer a service", body: "Get booked, get paid to MoMo or bank.", photo: "/artisan-in-orange-vest.jpg" },
 ]
 
 export function RoleCards({
@@ -76,7 +80,6 @@ export function RoleCards({
     >
       {ROLES.map((role, i) => {
         const checked = role.value === value
-        const Icon = role.icon
         const tabbable = checked || (selected === -1 && i === 0)
         return (
           <button
@@ -94,39 +97,37 @@ export function RoleCards({
             onClick={() => onChange(role.value)}
             onKeyDown={onKeyDown(i)}
             className={cn(
-              "group relative flex w-full items-start gap-4 rounded-2xl border bg-card p-4 text-left sm:p-5",
+              "group relative flex w-full items-center gap-3.5 rounded-2xl border bg-card p-3 text-left min-[980px]:p-4",
               "outline-none focus-visible:ring-[3px] focus-visible:ring-primary/30",
               "hover:border-foreground/25",
-              checked
-                ? "border-primary bg-primary/[0.05] shadow-[0_0_0_1px_var(--primary)] dark:bg-primary/[0.09]"
-                : "border-border",
+              checked ? "border-primary shadow-[0_0_0_0.5px_var(--primary)]" : "border-border",
               invalid && !checked && "border-destructive/60",
               disabled && "opacity-60",
             )}
           >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors",
-                checked ? "bg-primary text-primary-foreground" : "bg-muted text-foreground/80",
-              )}
-            >
-              <Icon className="h-5 w-5" aria-hidden />
-            </span>
-            <span className="min-w-0 flex-1 pr-8">
-              <span className="block text-base font-semibold text-foreground">{role.title}</span>
+            <Image
+              src={role.photo}
+              alt=""
+              width={112}
+              height={112}
+              sizes="56px"
+              draggable={false}
+              className="size-12 shrink-0 rounded-[0.875rem] object-cover object-[center_25%] min-[980px]:size-14"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-semibold text-foreground min-[980px]:text-[1.0625rem]">{role.title}</span>
               <span className="mt-0.5 block text-sm leading-snug text-muted-foreground">{role.body}</span>
             </span>
             <span
               aria-hidden="true"
               className={cn(
-                "absolute right-4 top-4 flex size-6 items-center justify-center rounded-full border sm:right-5 sm:top-5",
-                checked ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background",
+                "flex size-[1.375rem] shrink-0 items-center justify-center rounded-full border-[1.5px]",
+                checked ? "border-primary bg-primary text-primary-foreground dark:text-background" : "border-input bg-card",
               )}
             >
               {checked ? (
                 <span data-role-tick className="flex">
-                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                  <Check className="h-3 w-3" strokeWidth={3.4} />
                 </span>
               ) : null}
             </span>

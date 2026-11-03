@@ -17,6 +17,7 @@ const code = await import(lib("auth-code.ts"))
 const flow = await import(lib("signup-flow.ts"))
 const errors = await import(lib("auth-v2-errors.ts"))
 const csp = await import(lib("csp.ts"))
+const after = await import(lib("after-auth.ts"))
 
 let failures = 0
 let passed = 0
@@ -203,8 +204,35 @@ check("resendAvailableAt missing", errors.readResendAvailableAt({ data: {} }), n
   check("connect-src unchanged", get("connect-src").includes("https://challenges.cloudflare.com"), false)
 }
 
+// ── After sign-in: role check and the remembered target (Google round trip) ──
+{
+  const B = after.belongsToRole
+  check("client search is a client page", B("/dashboard/user/search?serviceId=144&location=Osu", "CUSTOMER"), true)
+  check("client home", B("/dashboard/user", "CUSTOMER"), true)
+  check("artisan can't be sent to a client page", B("/dashboard/user/search", "ARTISAN"), false)
+  check("client can't be sent to an artisan page", B("/dashboard/artisan/setup", "CUSTOMER"), false)
+  check("lookalike prefix refused", B("/dashboard/username", "CUSTOMER"), false)
+  check("admin area never", B("/dashboard/admin", "CUSTOMER"), false)
+  check("unknown role", B("/dashboard/user", "ADMIN"), false)
+  check("lower-case role accepted", B("/dashboard/artisan/jobs", "artisan"), true)
+
+  const store = new Map()
+  globalThis.sessionStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) }
+  after.rememberAfterAuth("/dashboard/user/search?location=Osu")
+  check("remembered once", after.takeAfterAuth(), "/dashboard/user/search?location=Osu")
+  check("cleared after use", after.takeAfterAuth(), null)
+  after.rememberAfterAuth("//evil.example.com")
+  check("protocol-relative not stored", after.takeAfterAuth(), null)
+  after.rememberAfterAuth("https://evil.example.com/x")
+  check("absolute URL not stored", after.takeAfterAuth(), null)
+  after.rememberAfterAuth("/" + "a".repeat(600))
+  check("over-long not stored", after.takeAfterAuth(), null)
+  delete globalThis.sessionStorage
+  check("no storage: nothing", after.takeAfterAuth(), null)
+}
+
 if (failures) {
   console.error(`\n${failures} auth v2 check(s) failed, ${passed} passed`)
   process.exit(1)
 }
-console.log(`auth v2 checks passed (${passed}): code input, sanitising, countdown, sign-up steps and draft, error copy, CSP`)
+console.log(`auth v2 checks passed (${passed}): code input, sanitising, countdown, sign-up steps and draft, error copy, CSP, after-sign-in redirect`)

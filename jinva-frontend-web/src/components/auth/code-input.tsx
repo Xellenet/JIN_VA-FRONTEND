@@ -203,11 +203,10 @@ export function CodeInput({
               onFocus={handleFocus(i)}
               data-filled={digits[i] ? "true" : undefined}
               className={cn(
-                "auth-code-box h-14 w-full min-w-0 rounded-xl border bg-background text-center text-2xl font-semibold tabular-nums text-foreground caret-primary shadow-xs outline-none",
-                "transition-[border-color,box-shadow,background-color] duration-150",
-                "border-input dark:bg-input/30",
-                "focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/25",
-                "data-[filled=true]:border-primary/60 data-[filled=true]:bg-primary/[0.04]",
+                "auth-code-box auth-display h-14 w-full min-w-0 rounded-[0.875rem] border bg-muted/50 text-center text-[1.625rem] font-bold tabular-nums text-foreground caret-primary outline-none min-[980px]:h-[3.625rem]",
+                "border-input",
+                "focus-visible:border-[1.5px] focus-visible:border-primary focus-visible:bg-card focus-visible:ring-4 focus-visible:ring-primary/15",
+                "data-[filled=true]:border-[1.5px] data-[filled=true]:border-primary data-[filled=true]:bg-card",
                 "aria-invalid:border-destructive aria-invalid:ring-destructive/20",
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}

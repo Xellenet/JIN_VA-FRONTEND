@@ -10,12 +10,21 @@ import { AUTH_INPUT_CLASS, FormAnnouncer, FormField, fieldErrorId } from "@/comp
 import { PhoneField } from "@/components/forms/phone-field"
 import { useFormValidation, type ValidationMode } from "@/hooks/use-form-validation"
 import { ApiError, apiFetch, apiFetchBody } from "@/lib/api"
-import { persistAuthTokens } from "@/lib/auth"
+import { persistAuthTokens, safeInternalRedirect } from "@/lib/auth"
+import { belongsToRole, takeAfterAuth } from "@/lib/after-auth"
 import { DEFAULT_PHONE_COUNTRY, PHONE_MESSAGES, phoneToE164, validatePhoneNumber, type SupportedPhoneCountry } from "@/lib/phone"
 import { homeAfterSignup, type SelfSignupRole } from "@/lib/signup-flow"
 import { clearCachedUser } from "@/contexts/auth-context"
 import { AuthSplitLayout } from "./auth-split-layout"
-import { AUTH_LINK_CLASS, AUTH_SECONDARY_BUTTON_CLASS, AuthHeading, AuthNotice, SubmitButton } from "./auth-ui"
+import {
+  AUTH_FIELD_CLASS,
+  AUTH_LINK_CLASS,
+  AUTH_PHONE_FIELD_CLASS,
+  AUTH_SECONDARY_BUTTON_CLASS,
+  AuthHeading,
+  AuthNotice,
+  SubmitButton,
+} from "./auth-ui"
 import { RoleCards } from "./role-cards"
 import { isPhoneInUse, serverFieldMessages, validateName } from "./signup-fields"
 
@@ -171,7 +180,10 @@ export function CompleteSignupForm() {
       clearCachedUser()
       // A full navigation, as after login and code sign-up: the dashboard
       // boots with the new session cookies and a fresh AuthProvider.
-      window.location.replace(homeAfterSignup(data.data?.role ?? formData.role))
+      const finalRole = data.data?.role ?? formData.role
+      const home = homeAfterSignup(finalRole)
+      const target = safeInternalRedirect(takeAfterAuth(), home)
+      window.location.replace(belongsToRole(target, finalRole) ? target : home)
     } catch (error) {
       if (isSignupExpired(error)) {
         router.replace(EXPIRED_REDIRECT)
@@ -220,7 +232,7 @@ export function CompleteSignupForm() {
 
   if (!pending) {
     return (
-      <AuthSplitLayout>
+      <AuthSplitLayout role={null}>
         <div className="space-y-6" role="status">
           <span className="inline-flex rounded-full bg-primary/10 p-3 text-primary">
             <Loader2 className="h-8 w-8 animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -234,8 +246,8 @@ export function CompleteSignupForm() {
   const displayName = [formData.firstname, formData.lastname].filter(Boolean).join(" ")
 
   return (
-    <AuthSplitLayout>
-      <div className="space-y-8" data-auth-step="none">
+    <AuthSplitLayout role={formData.role}>
+      <div className="space-y-5 min-[980px]:space-y-7" data-auth-step="none">
         <AuthHeading
           title="Complete your account"
           description={
@@ -245,7 +257,7 @@ export function CompleteSignupForm() {
           }
         />
 
-        <div className="flex items-center gap-3 rounded-xl border bg-card p-3.5">
+        <div className="flex items-center gap-3 rounded-2xl border bg-card p-3.5">
           <span
             aria-hidden="true"
             className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
@@ -261,7 +273,7 @@ export function CompleteSignupForm() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting} className="space-y-5">
+        <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting} className="space-y-4 min-[980px]:space-y-5">
           <FormAnnouncer message={v.announcement} />
 
           {askRole && (
@@ -289,7 +301,7 @@ export function CompleteSignupForm() {
 
           {askName && (
             <div className="grid grid-cols-2 gap-3">
-              <FormField id="firstname" label="First name" error={v.errors.firstname}>
+              <FormField id="firstname" label="First name" error={v.errors.firstname} className={AUTH_FIELD_CLASS}>
                 {(control) => (
                   <Input
                     {...control}
@@ -304,7 +316,7 @@ export function CompleteSignupForm() {
                   />
                 )}
               </FormField>
-              <FormField id="lastname" label="Last name" error={v.errors.lastname}>
+              <FormField id="lastname" label="Last name" error={v.errors.lastname} className={AUTH_FIELD_CLASS}>
                 {(control) => (
                   <Input
                     {...control}
@@ -331,7 +343,7 @@ export function CompleteSignupForm() {
             onAnnounce={v.announce}
             error={v.errors.phoneNumber}
             disabled={isBusy}
-            className="[&_button]:h-11 [&_button]:rounded-lg [&_input]:h-11 [&_input]:rounded-lg"
+            className={AUTH_PHONE_FIELD_CLASS}
           />
 
           {accountExists && (

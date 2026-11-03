@@ -182,6 +182,7 @@ export function VerificationTab({
     if (!fullLegalName.trim()) next.fullLegalName = "Enter your name exactly as it appears on the document."
     if (!idNumber.trim()) next.idNumber = "Enter the document number."
     if (!files.front) next.front = "Add the front of your document."
+    if (docType.hasBack && !files.back) next.back = "Add the back of your document too."
     if (!files.selfie) next.selfie = "Add a clear selfie."
     setErrors(next)
     if (Object.keys(next).length) {
@@ -380,7 +381,13 @@ export function VerificationTab({
                   >
                     <FormField id="kyc-type" label="Document type">
                       {(control) => (
-                        <Select value={documentType} onValueChange={(v) => setDocumentType(v as DocumentType)}>
+                        <Select
+                          value={documentType}
+                          onValueChange={(v) => {
+                            setDocumentType(v as DocumentType)
+                            setErrors((p) => ({ ...p, back: undefined }))
+                          }}
+                        >
                           <SelectTrigger id={control.id} className="w-full max-sm:h-11">
                             <SelectValue />
                           </SelectTrigger>
@@ -440,7 +447,7 @@ export function VerificationTab({
                     </FormField>
                     <div className="grid gap-5 md:grid-cols-2">
                       {fileSlot("front", "Front of document")}
-                      {docType.hasBack && fileSlot("back", "Back of document", true)}
+                      {docType.hasBack && fileSlot("back", "Back of document")}
                     </div>
                     {fileSlot("selfie", "Selfie")}
                     <FormField id="kyc-notes" label="Anything the reviewer should know" optional>

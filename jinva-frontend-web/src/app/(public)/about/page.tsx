@@ -88,7 +88,7 @@ export default function AboutPage() {
       </p>
       <p>
         You can read more about{" "}
-        <PublicLink href="/#platform-governance">how JinVa keeps the platform safe</PublicLink>.
+        <PublicLink href="/#safety">how JinVa keeps the platform safe</PublicLink>.
       </p>
 
       <h2>Next</h2>

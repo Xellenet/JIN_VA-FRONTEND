@@ -119,7 +119,7 @@ export function CodeEntry({
         e.preventDefault()
         void verify(code)
       }}
-      className="space-y-6"
+      className="space-y-4 min-[980px]:space-y-5"
     >
       <CodeInput
         ref={inputRef}

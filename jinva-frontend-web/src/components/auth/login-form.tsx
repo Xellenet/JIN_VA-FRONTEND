@@ -4,6 +4,7 @@ import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { rememberAfterAuth } from "@/lib/after-auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -25,6 +26,7 @@ import { AUTH_COPY, AUTH_ERROR_CODES, authErrorCopy, authErrorKind, readSession 
 import { clearCachedUser } from "@/contexts/auth-context"
 import { AuthSplitLayout } from "./auth-split-layout"
 import {
+  AUTH_FIELD_CLASS,
   AUTH_LINK_CLASS,
   AuthHeading,
   AuthNotice,
@@ -94,6 +96,9 @@ interface PendingDeletion {
 
 export function LoginForm() {
   const searchParams = useSearchParams()
+  // "Create an account" keeps where they were heading (e.g. the landing search).
+  const loginRedirect = searchParams.get("redirect")
+  const signupHref = loginRedirect ? `/signup?redirect=${encodeURIComponent(loginRedirect)}` : "/signup"
   const [mode, setMode] = useState<Mode>("password")
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -384,11 +389,12 @@ export function LoginForm() {
 
   const handleGoogleLogin = () => {
     // G1/G8: a real backend route that 302s to Google. No role from login (G9 is sign-up only).
+    rememberAfterAuth(searchParams.get("redirect"))
     globalThis.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`
   }
 
   const emailField = (
-    <FormField id="email" label="Email" error={v.errors.email}>
+    <FormField id="email" label="Email" error={v.errors.email} className={AUTH_FIELD_CLASS}>
       {(control) => (
         <Input
           {...control}
@@ -416,13 +422,13 @@ export function LoginForm() {
 
   return (
     <AuthSplitLayout>
-      <div className="space-y-8" data-auth-step="none">
+      <div className="space-y-5 min-[980px]:space-y-7" data-auth-step="none">
         <AuthHeading
           title="Welcome back"
           description={
             <p>
               Log in to JinVa. New here?{" "}
-              <Link href="/signup" className={AUTH_LINK_CLASS}>
+              <Link href={signupHref} className={AUTH_LINK_CLASS}>
                 Create an account
               </Link>
             </p>
@@ -443,7 +449,7 @@ export function LoginForm() {
           </AuthNotice>
         )}
 
-        <div className="space-y-6">
+        <div className="space-y-4 min-[980px]:space-y-6">
           <SegmentedControl
             label="How do you want to log in?"
             options={MODES}
@@ -459,12 +465,12 @@ export function LoginForm() {
               onSubmit={handlePasswordSubmit}
               noValidate
               aria-busy={isLoading}
-              className="space-y-5"
+              className="space-y-3 min-[980px]:space-y-5"
             >
               <FormAnnouncer message={v.announcement} />
               {emailField}
 
-              <FormField id="password" label="Password" error={v.errors.password}>
+              <FormField id="password" label="Password" error={v.errors.password} className={AUTH_FIELD_CLASS}>
                 {(control) => (
                   <PasswordInput
                     control={control}
@@ -532,7 +538,7 @@ export function LoginForm() {
                   {restoreWindowClosed ? (
                     <>
                       <p>{restoreWindowClosed}</p>
-                      <Link href="/signup" className="mt-1 inline-flex min-h-11 items-center font-medium underline underline-offset-4 sm:min-h-0">
+                      <Link href={signupHref} className="mt-1 inline-flex min-h-11 items-center font-medium underline underline-offset-4 sm:min-h-0">
                         Create an account
                       </Link>
                     </>
@@ -573,7 +579,7 @@ export function LoginForm() {
               onSubmit={handleSendCode}
               noValidate
               aria-busy={isLoading}
-              className="space-y-5"
+              className="space-y-3 min-[980px]:space-y-5"
             >
               <FormAnnouncer message={v.announcement} />
               {emailField}
@@ -589,7 +595,7 @@ export function LoginForm() {
           )}
 
           {mode === "code" && codeEmail && (
-            <div key="code-entry" data-auth-step="forward" className="space-y-6">
+            <div key="code-entry" data-auth-step="forward" className="space-y-4 min-[980px]:space-y-6">
               <AuthNotice tone="info" role="status" title="Check your email">
                 If an account uses <span className="font-medium">{codeEmail}</span>, a code is on its way.{" "}
                 {AUTH_COPY.codeExpiry}
@@ -614,7 +620,7 @@ export function LoginForm() {
           )}
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-3 min-[980px]:space-y-5">
           <OrDivider />
           <GoogleButton onClick={handleGoogleLogin} disabled={isLoading} />
         </div>

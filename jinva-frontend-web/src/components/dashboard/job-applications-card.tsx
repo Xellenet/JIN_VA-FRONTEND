@@ -1,11 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Inbox, Loader2, UserRound } from "lucide-react"
+import { Inbox, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,7 +16,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { apiFetch } from "@/lib/api"
-import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
+import { formatCurrency } from "@/lib/utils"
+import { ArtisanIdentity } from "@/components/dashboard/artisan-identity"
 import { threeLetterMonth } from "@/lib/spending"
 
 interface Application {
@@ -27,6 +27,8 @@ interface Application {
   status: "PENDING" | "ACCEPTED" | "REJECTED"
   createdAt: string
   artisan: { id: number; firstname?: string; lastname?: string; profilePicture?: string | null }
+  /** The applicant's public profile, so the customer can vet them first. */
+  artisanProfileId?: number | null
 }
 
 const nameOf = (a: Application) =>
@@ -94,23 +96,22 @@ export function JobApplicationsCard({
         )}
         {pending.map((a) => (
           <div key={a.id} className="space-y-2 rounded-lg border border-border p-3">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src={resolveAvatarUrl(a.artisan.profilePicture)} />
-                <AvatarFallback>
-                  <UserRound className="h-4 w-4" />
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-foreground">{nameOf(a)}</p>
-                <p className="text-xs text-muted-foreground">
+            <ArtisanIdentity
+              profileId={a.artisanProfileId}
+              name={nameOf(a)}
+              picture={a.artisan.profilePicture}
+              avatarClassName="h-9 w-9"
+              subtitle={
+                <span className="text-xs">
                   Applied {threeLetterMonth(new Date(a.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }))}
+                </span>
+              }
+              trailing={
+                <p className="shrink-0 font-semibold text-foreground">
+                  {a.quotePrice != null && Number(a.quotePrice) > 0 ? formatCurrency(Number(a.quotePrice)) : "No price"}
                 </p>
-              </div>
-              <p className="font-semibold text-foreground">
-                {a.quotePrice != null && Number(a.quotePrice) > 0 ? formatCurrency(Number(a.quotePrice)) : "No price"}
-              </p>
-            </div>
+              }
+            />
             {a.message && <p className="whitespace-pre-line text-sm text-muted-foreground">{a.message}</p>}
             <Button
               className="h-11 w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:h-8"

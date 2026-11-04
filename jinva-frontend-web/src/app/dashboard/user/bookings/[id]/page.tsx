@@ -6,7 +6,6 @@ import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
@@ -31,13 +30,14 @@ import {
   CheckCircle,
 } from "lucide-react"
 import { apiFetch } from "@/lib/api"
-import { formatClockTime, formatCurrency, resolveAvatarUrl, toClockTime } from "@/lib/utils"
+import { formatClockTime, formatCurrency, toClockTime } from "@/lib/utils"
 import { toast } from "sonner"
 import { getBookingStatusConfig } from "@/lib/status-badges"
 import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
 import { DisputeEntryPoint } from "@/components/disputes/dispute-entry-point"
 import { AttachmentGallery } from "@/components/dashboard/attachment-gallery"
 import { threeLetterMonth } from "@/lib/spending"
+import { ArtisanIdentity } from "@/components/dashboard/artisan-identity"
 
 interface BackendBooking {
   id: number
@@ -135,7 +135,7 @@ export default function BookingDetailPage() {
     return (
       <DashboardLayout>
         <div className="flex justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 aria-label="Loading booking" className="h-8 w-8 text-muted-foreground motion-safe:animate-spin" />
         </div>
       </DashboardLayout>
     )
@@ -147,7 +147,7 @@ export default function BookingDetailPage() {
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <p className="text-muted-foreground">Booking not found.</p>
           <Button variant="outline" className="mt-4" asChild>
-            <Link href="/dashboard/user/bookings">Back to Bookings</Link>
+            <Link href="/dashboard/user/bookings">Back to bookings</Link>
           </Button>
         </div>
       </DashboardLayout>
@@ -165,10 +165,10 @@ export default function BookingDetailPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <Button variant="ghost" asChild className="gap-2 text-muted-foreground hover:text-foreground">
+        <Button variant="ghost" asChild className="h-11 gap-2 text-muted-foreground hover:text-foreground sm:h-9">
           <Link href="/dashboard/user/bookings">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Bookings
+            <ArrowLeft aria-hidden className="h-4 w-4" />
+            Back to bookings
           </Link>
         </Button>
 
@@ -189,10 +189,10 @@ export default function BookingDetailPage() {
           <div className="space-y-6 lg:col-span-2">
             <Card>
               <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <Wrench className="h-4 w-4 text-primary" />
-                  Appointment Details
-                </h3>
+                <h2 className="flex items-center gap-2 font-semibold text-foreground">
+                  <Wrench aria-hidden className="h-4 w-4 text-primary" />
+                  Appointment details
+                </h2>
               </div>
               <CardContent className="p-5">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -201,20 +201,20 @@ export default function BookingDetailPage() {
                     <p className="mt-1 font-medium text-foreground">{booking.service?.name ?? "—"}</p>
                   </div>
                   <div className="rounded-lg border border-border p-4">
-                    <p className="text-xs text-muted-foreground">Agreed Price</p>
+                    <p className="text-xs text-muted-foreground">Agreed price</p>
                     <p className="mt-1 font-medium text-foreground">
                       {booking.agreedPrice != null ? formatCurrency(booking.agreedPrice) : "Not specified"}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border bg-primary/5 p-4 md:col-span-2">
-                    <p className="text-xs text-muted-foreground">Scheduled Date &amp; Time</p>
+                    <p className="text-xs text-muted-foreground">Scheduled date and time</p>
                     <div className="mt-1 flex flex-wrap items-center gap-4">
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
-                        <Calendar className="h-3.5 w-3.5 text-primary" />
+                        <Calendar aria-hidden className="h-3.5 w-3.5 text-primary" />
                         {threeLetterMonth(new Date(booking.scheduledDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short", year: "numeric" }))}
                       </span>
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
-                        <Clock className="h-3.5 w-3.5 text-primary" />
+                        <Clock aria-hidden className="h-3.5 w-3.5 text-primary" />
                         {formatClockTime(booking.startTime)} – {formatClockTime(booking.endTime)}
                       </span>
                     </div>
@@ -223,13 +223,13 @@ export default function BookingDetailPage() {
 
                 {booking.notes && (
                   <div className="mt-4 text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground">Your notes:</p>
+                    <p className="font-medium text-foreground">Your notes</p>
                     <p className="mt-1 leading-relaxed">{booking.notes}</p>
                   </div>
                 )}
                 {booking.artisanNotes && (
                   <div className="mt-4 text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground">Artisan&apos;s notes:</p>
+                    <p className="font-medium text-foreground">Artisan&apos;s notes</p>
                     <p className="mt-1 leading-relaxed">{booking.artisanNotes}</p>
                   </div>
                 )}
@@ -250,7 +250,7 @@ export default function BookingDetailPage() {
             {booking.attachmentUrls && booking.attachmentUrls.length > 0 && (
               <Card>
                 <div className="border-b border-border p-5">
-                  <h3 className="font-semibold text-foreground">Attached Photos</h3>
+                  <h2 className="font-semibold text-foreground">Attached photos</h2>
                 </div>
                 <CardContent className="p-5">
                   {/* QA MSG-18: private photos, loaded with the signed-in request. */}
@@ -270,32 +270,33 @@ export default function BookingDetailPage() {
           <div className="space-y-6">
             <Card>
               <div className="border-b border-border p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <UserRound className="h-4 w-4 text-primary" />
+                <h2 className="flex items-center gap-2 font-semibold text-foreground">
+                  <UserRound aria-hidden className="h-4 w-4 text-primary" />
                   Artisan
-                </h3>
+                </h2>
               </div>
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-14 w-14">
-                    <AvatarImage src={resolveAvatarUrl(booking.artisanProfile?.user?.profilePicture)} />
-                    <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h4 className="font-semibold text-foreground">{artisanName}</h4>
-                    {booking.artisanProfile?.businessName && (
-                      <p className="text-sm text-muted-foreground">{booking.artisanProfile.businessName}</p>
-                    )}
-                  </div>
-                </div>
+                {/* The whole avatar and name block opens the artisan's public profile. */}
+                <ArtisanIdentity
+                  profileId={booking.artisanProfile?.id}
+                  name={artisanName}
+                  picture={booking.artisanProfile?.user?.profilePicture}
+                  avatarClassName="h-14 w-14"
+                  nameClassName="font-semibold"
+                  subtitle={
+                    booking.artisanProfile?.businessName && booking.artisanProfile.businessName !== artisanName
+                      ? booking.artisanProfile.businessName
+                      : undefined
+                  }
+                />
                 {booking.artisanProfile?.user && (
                   <div className="mt-4">
-                    <Button variant="outline" className="w-full bg-transparent" size="sm" asChild>
+                    <Button variant="outline" className="h-11 w-full bg-transparent sm:h-9" asChild>
                       {/* MC2 — `&booking=` rides along so the message carries a
                           reference to this booking (feeds AD1's evidence view). */}
                       <Link href={`/dashboard/user/messages?artisan=${booking.artisanProfile.user.id}&booking=${booking.id}`}>
-                        <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                        Message Artisan
+                        <MessageSquare aria-hidden className="mr-1.5 h-3.5 w-3.5" />
+                        Message artisan
                       </Link>
                     </Button>
                   </div>
@@ -306,33 +307,33 @@ export default function BookingDetailPage() {
             <Card>
               <CardContent className="space-y-2 p-5">
                 {booking.jobId && (
-                  <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                  <Button className="h-11 w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:h-9" asChild>
                     <Link href={`/dashboard/user/jobs/${booking.jobId}`}>
-                      <Briefcase className="mr-2 h-4 w-4" />
-                      View Linked Job
+                      <Briefcase aria-hidden className="mr-2 h-4 w-4" />
+                      View linked job
                     </Link>
                   </Button>
                 )}
                 {booking.status === "CONFIRMED" && (
                   <Button
                     variant="outline"
-                    className="w-full bg-transparent"
+                    className="h-11 w-full bg-transparent sm:h-9"
                     onClick={() => setShowCompleteDialog(true)}
                   >
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Mark as Completed
+                    <CheckCircle aria-hidden className="mr-2 h-4 w-4" />
+                    Mark as completed
                   </Button>
                 )}
                 {canFlagNoShow && (
                   <Button
                     variant="outline"
-                    className="w-full border-attention/40 bg-transparent text-attention hover:bg-attention/10"
+                    className="h-11 w-full border-attention/40 bg-transparent text-attention hover:bg-attention/10 sm:h-9"
                     onClick={handleFlagNoShow}
                     disabled={isFlagging}
                   >
                     {isFlagging && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <AlertOctagon className="mr-2 h-4 w-4" />
-                    Mark Artisan as No-show
+                    <AlertOctagon aria-hidden className="mr-2 h-4 w-4" />
+                    Mark artisan as a no-show
                   </Button>
                 )}
                 {/* DP1: last in the constructive group — a report is a real
@@ -352,10 +353,10 @@ export default function BookingDetailPage() {
                 {canCancel && (
                   <Button
                     variant="destructive"
-                    className="w-full"
+                    className="h-11 w-full sm:h-9"
                     onClick={() => setShowCancelDialog(true)}
                   >
-                    Cancel Booking
+                    Cancel booking
                   </Button>
                 )}
               </CardContent>
@@ -393,20 +394,20 @@ export default function BookingDetailPage() {
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
+            <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to cancel this booking request? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isCancelling}>No, Keep Booking</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 sm:h-9" disabled={isCancelling}>No, keep it</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancel}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="h-11 bg-destructive text-white hover:bg-destructive/90 sm:h-9"
               disabled={isCancelling}
             >
               {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Yes, Cancel Booking
+              Yes, cancel booking
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

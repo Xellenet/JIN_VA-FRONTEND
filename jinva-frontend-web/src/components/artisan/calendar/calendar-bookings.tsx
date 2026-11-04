@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { AlertCircle, AlertOctagon, Briefcase, CalendarClock, Check, ChevronDown, Clock, Loader2, MapPin, MessageSquareText, StickyNote, X } from "lucide-react"
+import { AlertCircle, AlertOctagon, Briefcase, CalendarClock, Check, ChevronDown, Clock, Landmark, Loader2, MapPin, MessageSquareText, Navigation, StickyNote, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar as CalendarWidget } from "@/components/ui/calendar"
@@ -27,6 +27,8 @@ import {
   type CalendarGroup,
 } from "@/lib/artisan-overview"
 import { formatAppointment } from "@/lib/overview"
+import { directionsUrlFor, pointOf } from "@/lib/location-pin"
+import { ExactLocationMap } from "@/components/location/exact-location-map"
 import { getBookingStatusConfig } from "@/lib/status-badges"
 import { cn } from "@/lib/utils"
 import { threeLetterMonth } from "@/lib/spending"
@@ -329,6 +331,11 @@ function BookingCard({
   const statusLabel = group === "followUp" ? "Time has passed" : status.label
   const canRespond = group === "requests" && !deadline?.expired
   const canNoShow = group === "followUp" && !b.noShowByArtisanAt
+  // The API sends the exact pin once the booking is confirmed.
+  const point = pointOf(b)
+  const directions = point ? directionsUrlFor(point.latitude, point.longitude) : null
+  const [showMap, setShowMap] = useState(false)
+  const mapId = `booking-${b.id}-map`
 
   return (
     <li
@@ -360,8 +367,13 @@ function BookingCard({
 
       <dl className="mt-3 space-y-1.5 text-sm">
         <Detail icon={MapPin} label="Location">
-          {locationText(job?.location)}
+          {locationText(b.location?.trim() || job?.location)}
         </Detail>
+        {point && b.landmark && (
+          <Detail icon={Landmark} label="Landmark">
+            {b.landmark}
+          </Detail>
+        )}
         {b.notes && (
           <Detail icon={StickyNote} label="Client's note">
             {b.notes}
@@ -378,6 +390,44 @@ function BookingCard({
           </Detail>
         )}
       </dl>
+
+      {point && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+          {directions && (
+            <a
+              href={directions}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <Navigation aria-hidden className="h-4 w-4" />
+              Get directions
+              <span className="sr-only"> to {client} (opens Google Maps in a new tab)</span>
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowMap((v) => !v)}
+            aria-expanded={showMap}
+            aria-controls={mapId}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <MapPin aria-hidden className="h-4 w-4" />
+            {showMap ? "Hide map" : "Show on map"}
+          </button>
+          {showMap && (
+            <div id={mapId} className="w-full">
+              <ExactLocationMap
+                latitude={point.latitude}
+                longitude={point.longitude}
+                accuracyM={b.locationAccuracyM}
+                area={b.location ?? job?.location ?? null}
+                showDirections={false}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {deadline?.text && (
         <p className={cn("mt-3 flex items-center gap-1.5 text-sm font-medium", deadline.urgent ? "text-attention" : "text-muted-foreground")}>

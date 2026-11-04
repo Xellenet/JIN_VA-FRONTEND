@@ -28,7 +28,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { ArrowLeft, CalendarDays, CreditCard, CheckCircle, Loader2, UserRound, AlertTriangle } from "lucide-react"
+import { ArrowLeft, CalendarDays, CreditCard, CheckCircle, Loader2, MapPin, UserRound, AlertTriangle } from "lucide-react"
 import { formatCurrency, resolveAvatarUrl } from "@/lib/utils"
 import { ApiError, apiFetch } from "@/lib/api"
 import { RatingStars } from "@/components/ui/rating-stars"
@@ -37,6 +37,12 @@ import { timeOffText, type AvailabilitySummary, type PublicTimeOff } from "@/lib
 import { AvailabilityBadge } from "@/components/dashboard/availability-badge"
 import { formatDayWithWeekday } from "@/lib/artisan-jobs"
 import { threeLetterMonth } from "@/lib/spending"
+import { Input } from "@/components/ui/input"
+import { ExactLocationField } from "@/components/location/exact-location-field"
+import { pinPayload, type PinnedLocation } from "@/lib/location-pin"
+
+/** CreateBookingDto's limit for the area label. */
+const PLACE_MAX = 200
 
 interface BackendService {
   id: string
@@ -161,6 +167,9 @@ export default function BookArtisanPage() {
   const [services, setServices] = useState<BackendService[]>([])
   const [selectedService, setSelectedService] = useState("")
   const [notes, setNotes] = useState("")
+  const [place, setPlace] = useState("")
+  const [pin, setPin] = useState<PinnedLocation | null>(null)
+  const [landmark, setLandmark] = useState("")
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([])
 
   const [weeklySlots, setWeeklySlots] = useState<ApiWeeklySlot[]>([])
@@ -402,6 +411,10 @@ export default function BookArtisanPage() {
         agreedPrice: selectedServiceData?.price != null ? Number(selectedServiceData.price) : undefined,
         currency: "GHS",
         attachmentUrls: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+        // Where the work happens (optional): the area, and the exact pin and
+        // landmark, which the artisan sees only once they confirm.
+        location: place.trim() || undefined,
+        ...pinPayload(pin, landmark),
       }
       const booking = await apiFetch<BackendBooking>("/bookings", {
         method: "POST",
@@ -522,6 +535,45 @@ export default function BookArtisanPage() {
                     <Label>Photos (optional)</Label>
                     <AttachmentUploader value={attachmentUrls} onChange={setAttachmentUrls} disabled={isSubmitting} />
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mt-6 gap-0 py-0">
+                <div className="border-b border-border px-4 py-4 sm:p-5">
+                  <h2 className="flex items-center gap-2 font-semibold text-foreground">
+                    <MapPin className="h-4 w-4 text-primary" aria-hidden="true" />
+                    Where the work happens
+                  </h2>
+                </div>
+                <CardContent className="space-y-5 p-4 sm:p-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="booking-place">Town and area (optional)</Label>
+                    <Input
+                      id="booking-place"
+                      value={place}
+                      maxLength={PLACE_MAX}
+                      placeholder="e.g. Adum, Kumasi"
+                      onChange={(e) => setPlace(e.target.value)}
+                      aria-describedby="booking-place-hint"
+                      className="h-11 sm:h-9"
+                    />
+                    <p id="booking-place-hint" className="text-xs text-muted-foreground">
+                      Leave it empty if you&apos;ll go to the artisan. The artisan sees the area when you send the request.
+                    </p>
+                  </div>
+                  <ExactLocationField
+                    id="booking-location"
+                    pin={pin}
+                    onPinChange={(next) => {
+                      setPin(next)
+                      const area = next?.area ?? next?.label
+                      if (next && area && !place.trim()) setPlace(area.slice(0, PLACE_MAX))
+                    }}
+                    landmark={landmark}
+                    onLandmarkChange={setLandmark}
+                    address={place}
+                    disabled={isSubmitting}
+                  />
                 </CardContent>
               </Card>
 

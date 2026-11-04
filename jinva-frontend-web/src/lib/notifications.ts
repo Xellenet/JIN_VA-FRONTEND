@@ -295,8 +295,19 @@ export function formatFullDateTime(iso: string | null | undefined): string {
  * endpoints.
  */
 export function readNotificationList(r: BackendNotification[] | { items?: BackendNotification[] }): BackendNotification[] {
-  if (Array.isArray(r)) return r
-  return r?.items ?? []
+  const list = Array.isArray(r) ? r : (r?.items ?? [])
+  return list.filter(isFeedNotification)
+}
+
+/**
+ * Chat messages belong in Messages, which has its own unread badge, not in
+ * the notifications feed. The backend no longer creates these rows and leaves
+ * them out of the list and the unread count; this also hides the rows older
+ * builds created, wherever the list is read (page and bell menu).
+ */
+export function isFeedNotification(n: Pick<BackendNotification, "type"> | null | undefined): boolean {
+  if (!n || typeof n !== "object") return false
+  return mapNotificationType(n.type) !== "message"
 }
 
 /**

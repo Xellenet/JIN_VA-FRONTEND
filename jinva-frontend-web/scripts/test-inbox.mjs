@@ -247,6 +247,77 @@ check("FU-6.3 midnight", N.formatFullDateTime("2026-11-01T00:00:00.000Z"), "Sun 
 check("FU-6.3 invalid", N.formatFullDateTime("not a date"), "")
 check("FU-6.3 missing", N.formatFullDateTime(undefined), "")
 
+// ── Chat messages stay out of the notifications feed ───────────────────────
+{
+  const row = (id, type) => ({ id, type, title: "t", body: "b", isRead: false, payload: null, createdAt: "2026-10-30T14:14:00.000Z" })
+  const mixed = [row("1", "BOOKING_CONFIRMED"), row("2", "MESSAGE_RECEIVED"), row("3", "message_received"), row("4", "DISPUTE_RESOLVED")]
+  check("Feed: bare array drops message rows", N.readNotificationList(mixed).map((n) => n.id), ["1", "4"])
+  check("Feed: { items } envelope drops message rows", N.readNotificationList({ items: mixed }).map((n) => n.id), ["1", "4"])
+  check("Feed: an unknown *MESSAGE* type is a message too", N.isFeedNotification(row("5", "NEW_MESSAGE")), false)
+  check("Feed: a payment row stays", N.isFeedNotification(row("6", "PAYMENT_RECEIPT")), true)
+  check("Feed: hostile entries are dropped, not thrown on", N.readNotificationList([null, 7, row("8", "JOB_STARTED")]).map((n) => n.id), ["8"])
+  check("Feed: an empty envelope is empty", N.readNotificationList({}), [])
+}
+
+// ── Replies: previews, quotes, swipe maths ─────────────────────────────────
+{
+  check("Reply preview: text", M.replyPreviewOf({ content: "Can you come on Thursday?", attachmentUrl: null, attachmentType: null }), "Can you come on Thursday?")
+  check("Reply preview: collapsed to one line", M.replyPreviewOf({ content: "Line one\n\n  line two", attachmentUrl: null, attachmentType: null }), "Line one line two")
+  check("Reply preview: cut at 120 with an ellipsis", M.replyPreviewOf({ content: "a".repeat(130), attachmentUrl: null, attachmentType: null }), "a".repeat(120) + "…")
+  check("Reply preview: exactly 120 is not cut", M.replyPreviewOf({ content: "b".repeat(120), attachmentUrl: null, attachmentType: null }), "b".repeat(120))
+  check("Reply preview: photo only", M.replyPreviewOf({ content: null, attachmentUrl: "/uploads/messages/x.png", attachmentType: "image/png" }), "Photo")
+  check("Reply preview: photo with no type", M.replyPreviewOf({ content: "  ", attachmentUrl: "/uploads/messages/x.jpg", attachmentType: null }), "Photo")
+  check("Reply preview: other attachment", M.replyPreviewOf({ content: null, attachmentUrl: "/uploads/messages/x.pdf", attachmentType: "application/pdf" }), "Attachment")
+  check("Reply preview: nothing", M.replyPreviewOf(null), "Attachment")
+
+  const live = { id: 40, senderId: 7, senderName: "Kwame Badu", preview: "Thursday at nine", deleted: false }
+  check("readReplyTo: a live quote", M.readReplyTo(live), live)
+  check("readReplyTo: null", M.readReplyTo(null), null)
+  check("readReplyTo: a string", M.readReplyTo("40"), null)
+  check("readReplyTo: deleted wipes the rest", M.readReplyTo({ ...live, deleted: true }), { id: null, senderId: null, senderName: null, preview: null, deleted: true })
+  check("readReplyTo: a bad id reads as deleted", M.readReplyTo({ ...live, id: -3 }).deleted, true)
+  check("readReplyTo: preview collapsed", M.readReplyTo({ ...live, preview: "a\nb" }).preview, "a b")
+
+  check("Quote name: someone else", M.replySenderLabel(live, 99), "Kwame Badu")
+  check("Quote name: me", M.replySenderLabel(live, 7), "You")
+  check("Quote name: departed sender", M.replySenderLabel({ ...live, senderName: null }, 99), "Deleted User")
+  check("Announcement", M.replyAnnouncement("Kwame Badu", "Thursday at nine"), "Replying to Kwame Badu: Thursday at nine")
+  check("Announcement: deleted", M.replyAnnouncement("x", null, true), "Replying to a deleted message")
+
+  const original = { id: 40, content: "Thursday at nine", attachmentUrl: null, attachmentType: null, sender: { id: 7, firstname: "Kwame", lastname: "Badu", profilePicture: null } }
+  check("Optimistic quote", M.optimisticReplyTo(original), live)
+  check("Optimistic quote: departed sender", M.optimisticReplyTo({ ...original, sender: null }).senderName, "Deleted User")
+  check("canReplyTo: confirmed", M.canReplyTo({ id: 40 }), true)
+  check("canReplyTo: still sending", M.canReplyTo({ id: -1730000000000 }), false)
+  check("canReplyTo: nothing", M.canReplyTo(null), false)
+
+  check("Swipe: left does nothing", M.swipeReplyOffset(-40), { offset: 0, triggered: false })
+  check("Swipe: NaN does nothing", M.swipeReplyOffset(Number.NaN), { offset: 0, triggered: false })
+  check("Swipe: follows 1:1 up to the knee", M.swipeReplyOffset(20), { offset: 20, triggered: false })
+  check("Swipe: damped past the knee", M.swipeReplyOffset(60), { offset: 44, triggered: false })
+  check("Swipe: triggers at the threshold", M.swipeReplyOffset(84), { offset: 56, triggered: true })
+  check("Swipe: never past the max", M.swipeReplyOffset(400).offset, M.SWIPE_REPLY_MAX)
+  check("Swipe intent: tiny move", M.swipeIntent(3, 2), "undecided")
+  check("Swipe intent: right", M.swipeIntent(20, 4), "swipe")
+  check("Swipe intent: diagonal is a scroll", M.swipeIntent(20, 18), "scroll")
+  check("Swipe intent: left is a scroll", M.swipeIntent(-20, 0), "scroll")
+  check("Swipe intent: down is a scroll", M.swipeIntent(2, 30), "scroll")
+}
+
+// ── The other person's profile from the chat header ────────────────────────
+{
+  const artisan = { id: 26, firstname: "Kwame", lastname: "Badu", profilePicture: null, role: "ARTISAN", artisanProfileId: 14 }
+  check("Profile link: customer viewing an artisan", M.contactProfileHref(artisan, "user"), "/dashboard/user/artisan/14")
+  check("Profile link: artisan viewing a client", M.contactProfileHref({ ...artisan, role: "CUSTOMER", artisanProfileId: null }, "artisan"), null)
+  check("Profile link: artisan viewer never links", M.contactProfileHref(artisan, "artisan"), null)
+  check("Profile link: admin viewer", M.contactProfileHref(artisan, "admin"), null)
+  check("Profile link: admin contact", M.contactProfileHref({ ...artisan, role: "ADMIN" }, "user"), null)
+  check("Profile link: no profile id (older backend)", M.contactProfileHref({ ...artisan, artisanProfileId: undefined }, "user"), null)
+  check("Profile link: departed contact", M.contactProfileHref({ profilePicture: null, firstname: "Deleted", lastname: "User", artisanProfileId: null }, "user"), null)
+  check("Profile link: hostile id", M.contactProfileHref({ ...artisan, artisanProfileId: "14/../../admin" }, "user"), null)
+  check("Profile link: fractional id", M.contactProfileHref({ ...artisan, artisanProfileId: 1.5 }, "user"), null)
+}
+
 // ── FR-6.11: message excerpts ──────────────────────────────────────────────
 check("FR-6.11 cut message", N.isMessageExcerpt("MESSAGE_RECEIVED", "a".repeat(100) + "…"), true)
 check("FR-6.11 short message", N.isMessageExcerpt("MESSAGE_RECEIVED", "Thanks"), false)

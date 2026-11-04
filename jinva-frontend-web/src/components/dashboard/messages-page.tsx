@@ -28,16 +28,23 @@ import { apiFetch, apiFetchWithMeta, ApiError } from "@/lib/api"
 import { toast } from "sonner"
 import { MessageImage } from "@/components/messages/message-image"
 import {
+  canReplyTo,
   contactName,
+  contactProfileHref,
   conversationTimestamp,
   formatMessageTime as fmt,
   lastMessagePreview,
+  optimisticReplyTo,
+  readReplyTo,
+  replyPreviewOf,
+  replySenderLabel,
   validateAttachment,
   ATTACHMENT_ACCEPTED_TYPES,
   type BackendConversation,
   type BackendDM,
   type SendMessagePayload,
 } from "@/lib/messages"
+import { ReplyableBubble, ReplyBar, ReplyQuote } from "@/components/dashboard/inbox/message-reply"
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -168,6 +175,16 @@ interface MessageContext {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+/**
+ * Tapping a quote whose original is above the loaded pages loads older pages
+ * until it appears, at most this many (50 messages each). Past that the
+ * original is reported as not loaded rather than fetching an entire history.
+ */
+const JUMP_MAX_PAGES = 10
+
+/** How long the jumped-to original stays highlighted. */
+const JUMP_HIGHLIGHT_MS = 1600
+
 /** The API's limit on a message (SendMessageDto). */
 const MESSAGE_MAX_LENGTH = 2000
 const MESSAGE_COUNTER_FROM = 1800
@@ -219,6 +236,13 @@ export function MessagesPage({
   const newestPageRef = useRef(1)
   /** Distance from the bottom to restore after an older page is prepended. */
   const restoreScrollRef = useRef<number | null>(null)
+  /** The message the composer is replying to, shown in the reply bar. */
+  const [replyTarget, setReplyTarget] = useState<BackendDM | null>(null)
+  /** The original a quote just jumped to, highlighted briefly. */
+  const [highlightedId, setHighlightedId] = useState<number | null>(null)
+  /** An original that was just loaded by a jump, revealed once it renders. */
+  const pendingJumpRef = useRef<number | null>(null)
+  const highlightTimer = useRef<number | null>(null)
 
   const selectedId = selected?.id ?? null
   const isPending = selectedId === PENDING_CONVERSATION_ID
@@ -358,6 +382,9 @@ export function MessagesPage({
     setMessages([])
     setThreadError(false)
     setAttachment(null)
+    setReplyTarget(null)
+    setHighlightedId(null)
+    pendingJumpRef.current = null
     setOldestLoadedPage(1)
     newestPageRef.current = 1
     restoreScrollRef.current = null
@@ -449,6 +476,32 @@ export function MessagesPage({
     const timers = [120, 500, 1200].map((ms) => window.setTimeout(apply, ms))
     return () => timers.forEach((t) => window.clearTimeout(t))
   }, [messages])
+
+  // ── Replies: reveal a quoted original ─────────────────────────────────────
+
+  const revealMessage = useCallback((id: number): boolean => {
+    const el = typeof document !== "undefined" ? document.getElementById(`message-${id}`) : null
+    if (!el) return false
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" })
+    setHighlightedId(id)
+    if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current)
+    highlightTimer.current = window.setTimeout(() => setHighlightedId(null), JUMP_HIGHLIGHT_MS)
+    return true
+  }, [])
+
+  useEffect(() => {
+    const id = pendingJumpRef.current
+    if (id === null) return
+    if (revealMessage(id)) pendingJumpRef.current = null
+  }, [messages, revealMessage])
+
+  useEffect(
+    () => () => {
+      if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current)
+    },
+    [],
+  )
 
   // ── Poll the open thread ──────────────────────────────────────────────────
 
@@ -578,6 +631,54 @@ export function MessagesPage({
     }
   }
 
+  /**
+   * A quote was tapped: scroll to its original and highlight it. An original
+   * above the loaded pages is fetched page by page (up to JUMP_MAX_PAGES);
+   * if it is still not there, say so instead of loading the whole history.
+   */
+  const jumpToMessage = async (id: number) => {
+    if (messages.some((m) => m.id === id)) {
+      revealMessage(id)
+      return
+    }
+    if (selectedId === null || selectedId === PENDING_CONVERSATION_ID || isLoadingOlder) return
+    let page = oldestLoadedPage
+    let found = false
+    let tries = 0
+    setIsLoadingOlder(true)
+    try {
+      while (!found && page > 1 && tries < JUMP_MAX_PAGES) {
+        page -= 1
+        tries += 1
+        const { items } = await fetchThreadPage(selectedId, page)
+        setMessages((prev) => mergeThread(prev, items))
+        setOldestLoadedPage(page)
+        found = items.some((m) => m.id === id)
+      }
+    } catch {
+      toast.error("Couldn't load older messages.")
+      return
+    } finally {
+      setIsLoadingOlder(false)
+    }
+    if (found) pendingJumpRef.current = id
+    else toast.info("Original message isn't loaded.")
+  }
+
+  // ── Replies: compose ──────────────────────────────────────────────────────
+
+  const startReply = (msg: BackendDM) => {
+    if (!canReplyTo(msg) || !canReplyToSelected) return
+    setReplyTarget(msg)
+    // After the bar renders, so the caret lands in the composer below it.
+    window.requestAnimationFrame(() => replyBoxRef.current?.focus())
+  }
+
+  const cancelReply = () => {
+    setReplyTarget(null)
+    replyBoxRef.current?.focus()
+  }
+
   // ── MC4 — attachment picking / upload ─────────────────────────────────────
 
   const uploadAttachment = async (file: File, previewUrl: string) => {
@@ -644,8 +745,10 @@ export function MessagesPage({
     }
 
     const outgoing = attachment
+    const replyingTo = replyTarget && canReplyTo(replyTarget) ? replyTarget : null
     setNewMessage("")
     setAttachment(null)
+    setReplyTarget(null)
     setIsSending(true)
 
     const tempId = -Date.now()
@@ -661,6 +764,7 @@ export function MessagesPage({
       bookingId: null,
       isRead: false,
       createdAt: new Date().toISOString(),
+      replyTo: replyingTo ? optimisticReplyTo(replyingTo) : null,
       sender: {
         id: Number(user.id),
         firstname: user.name.split(" ")[0],
@@ -673,6 +777,7 @@ export function MessagesPage({
     const payload: SendMessagePayload = { recipientId: selected.contact.id }
     if (content) payload.content = content
     if (outgoing?.url) payload.attachmentUrl = outgoing.url
+    if (replyingTo) payload.replyToMessageId = replyingTo.id
     if (contextApplies && jobId) payload.jobId = Number(jobId)
     else if (contextApplies && bookingId) payload.bookingId = Number(bookingId)
 
@@ -742,6 +847,7 @@ export function MessagesPage({
       setMessages((prev) => prev.filter((m) => m.id !== tempId))
       setNewMessage(content)
       if (outgoing) setAttachment(outgoing)
+      if (replyingTo) setReplyTarget(replyingTo)
 
       const status = err instanceof ApiError ? err.status : 0
       const message = err instanceof Error ? err.message : "Failed to send message."
@@ -905,12 +1011,34 @@ export function MessagesPage({
           <div className="hidden w-px bg-border md:block" />
 
           {/* ── Chat panel ────────────────────────────────────────────────── */}
-          <div className={cn("flex flex-1 flex-col", !selected ? "hidden md:flex" : "flex")}>
+          {/* min-w-0: a quote's one-line preview must truncate, not widen the panel past the screen. */}
+          <div className={cn("flex min-w-0 flex-1 flex-col", !selected ? "hidden md:flex" : "flex")}>
             {selected ? (
               <>
                 {/* Chat header */}
                 {(() => {
                   const name = contactName(selected.contact)
+                  // Only a customer looking at an artisan has a profile to
+                  // open; clients have no profile page, admins get none.
+                  const profileHref = contactProfileHref(selected.contact, user.role)
+                  const identity = (
+                    <>
+                      <Avatar className="h-10 w-10 flex-shrink-0">
+                        <AvatarImage src={resolveAvatarUrl(selected.contact.profilePicture)} alt="" />
+                        <AvatarFallback><UserRound aria-hidden className="h-4 w-4" /></AvatarFallback>
+                      </Avatar>
+                      <h2
+                        dir="auto"
+                        className={cn(
+                          "min-w-0 truncate text-sm font-semibold text-foreground [unicode-bidi:isolate]",
+                          profileHref && "group-hover:underline group-hover:underline-offset-4",
+                        )}
+                      >
+                        {name}
+                        {profileHref && <span className="sr-only">, view profile</span>}
+                      </h2>
+                    </>
+                  )
                   return (
                     <div className="flex items-center gap-3 border-b border-border px-4 py-3">
                       {/* M3: 44px on phones and a name for screen readers. */}
@@ -923,18 +1051,23 @@ export function MessagesPage({
                       >
                         <ArrowLeft className="h-5 w-5 text-primary" aria-hidden="true" />
                       </Button>
-                      <Avatar className="h-10 w-10 flex-shrink-0">
-                        <AvatarImage src={resolveAvatarUrl(selected.contact.profilePicture)} alt={name} />
-                        <AvatarFallback><UserRound className="h-4 w-4" /></AvatarFallback>
-                      </Avatar>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-sm font-semibold text-foreground">{name}</h3>
+                        {profileHref ? (
+                          <Link
+                            href={profileHref}
+                            className="group -m-1 flex min-h-11 w-fit max-w-full items-center gap-3 rounded-lg p-1 outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none"
+                          >
+                            {identity}
+                          </Link>
+                        ) : (
+                          <div className="flex min-w-0 items-center gap-3">{identity}</div>
+                        )}
                         {/* MC2 — job/booking context chip; absent for a
                             conversation opened generically (design-spec.md §6.3). */}
                         {contextApplies && context && (
                           <Badge
                             variant="outline"
-                            className="mt-1 max-w-full border-primary/20 bg-primary/5 text-[10px] font-medium text-primary"
+                            className="ml-[3.25rem] mt-1 max-w-[calc(100%-3.25rem)] border-primary/20 bg-primary/5 text-[10px] font-medium text-primary"
                             asChild={!!context.href}
                           >
                             {context.href ? (
@@ -952,7 +1085,7 @@ export function MessagesPage({
                 })()}
 
                 {/* Message thread */}
-                <div ref={threadRef} className="flex-1 overflow-y-auto bg-muted/20 px-4 py-4">
+                <div ref={threadRef} className="flex-1 overflow-x-hidden overflow-y-auto bg-muted/20 px-4 py-4">
                   {isLoadingMsgs ? (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1016,9 +1149,12 @@ export function MessagesPage({
                         // hasn't confirmed yet.
                         const isSendingBubble = msg.id < 0
 
+                        const quote = readReplyTo(msg.replyTo)
+
                         return (
                           <div
                             key={msg.id}
+                            id={msg.id > 0 ? `message-${msg.id}` : undefined}
                             className={cn(
                               "flex items-end gap-2",
                               isOwn ? "flex-row-reverse" : "flex-row",
@@ -1037,67 +1173,84 @@ export function MessagesPage({
                               )}
                             </div>
 
-                            <div
-                              className={cn(
-                                "max-w-[70%] px-3.5 py-2",
-                                isOwn
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-card text-foreground border border-border",
-                                isOwn
-                                  ? cn(
-                                      "rounded-2xl",
-                                      isFirst && isLast && "rounded-br-md",
-                                      isFirst && !isLast && "rounded-br-md",
-                                      !isFirst && isLast && "rounded-tr-md rounded-br-md",
-                                      !isFirst && !isLast && "rounded-r-md",
-                                    )
-                                  : cn(
-                                      "rounded-2xl",
-                                      isFirst && isLast && "rounded-bl-md",
-                                      isFirst && !isLast && "rounded-bl-md",
-                                      !isFirst && isLast && "rounded-tl-md rounded-bl-md",
-                                      !isFirst && !isLast && "rounded-l-md",
-                                    ),
-                              )}
+                            <ReplyableBubble
+                              isOwn={isOwn}
+                              canReply={canReplyTo(msg) && canReplyToSelected}
+                              onReply={() => startReply(msg)}
+                              copyText={msg.content}
+                              highlighted={highlightedId === msg.id}
                             >
-                              {/* MC4 — an image message, with or without a caption. */}
-                              {msg.attachmentUrl && (
-                                <MessageImage
-                                  url={msg.attachmentUrl}
-                                  previewSrc={msg.localPreviewUrl}
-                                  className="mb-1 max-w-[240px]"
-                                  // Re-scroll once it has height, so the newest
-                                  // image bubble isn't left half below the fold.
-                                  // Only the newest one — otherwise an older
-                                  // image finishing loading would yank the view
-                                  // away from someone reading back through the
-                                  // thread.
-                                  onLoad={idx === messages.length - 1 ? scrollToBottom : undefined}
-                                />
-                              )}
-                              {msg.content && (
-                                <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">{msg.content}</p>
-                              )}
                               <div
                                 className={cn(
-                                  "mt-1 flex items-center justify-end gap-1 text-[10px]",
-                                  isOwn ? "text-white/60" : "text-muted-foreground",
+                                  "min-w-0 px-3.5 py-2",
+                                  isOwn
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-card text-foreground border border-border",
+                                  isOwn
+                                    ? cn(
+                                        "rounded-2xl",
+                                        isFirst && isLast && "rounded-br-md",
+                                        isFirst && !isLast && "rounded-br-md",
+                                        !isFirst && isLast && "rounded-tr-md rounded-br-md",
+                                        !isFirst && !isLast && "rounded-r-md",
+                                      )
+                                    : cn(
+                                        "rounded-2xl",
+                                        isFirst && isLast && "rounded-bl-md",
+                                        isFirst && !isLast && "rounded-bl-md",
+                                        !isFirst && isLast && "rounded-tl-md rounded-bl-md",
+                                        !isFirst && !isLast && "rounded-l-md",
+                                      ),
                                 )}
                               >
-                                <span>{fmt(msg.createdAt)}</span>
-                                {isOwn && (
-                                  <>
-                                    {isSendingBubble && <Clock className="h-3 w-3" aria-label="Sending" />}
-                                    {!isSendingBubble && !msg.isRead && (
-                                      <Check className="h-3 w-3" aria-label="Sent" />
-                                    )}
-                                    {!isSendingBubble && msg.isRead && (
-                                      <CheckCheck className="h-3 w-3 text-white" aria-label="Read" />
-                                    )}
-                                  </>
+                                {quote && (
+                                  <ReplyQuote
+                                    replyTo={quote}
+                                    senderLabel={replySenderLabel(quote, Number(user.id))}
+                                    quotesViewer={quote.senderId === Number(user.id)}
+                                    inOwnBubble={isOwn}
+                                    onJump={(id) => void jumpToMessage(id)}
+                                  />
                                 )}
+                                {/* MC4 — an image message, with or without a caption. */}
+                                {msg.attachmentUrl && (
+                                  <MessageImage
+                                    url={msg.attachmentUrl}
+                                    previewSrc={msg.localPreviewUrl}
+                                    className="mb-1 max-w-[240px]"
+                                    // Re-scroll once it has height, so the newest
+                                    // image bubble isn't left half below the fold.
+                                    // Only the newest one — otherwise an older
+                                    // image finishing loading would yank the view
+                                    // away from someone reading back through the
+                                    // thread.
+                                    onLoad={idx === messages.length - 1 ? scrollToBottom : undefined}
+                                  />
+                                )}
+                                {msg.content && (
+                                  <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">{msg.content}</p>
+                                )}
+                                <div
+                                  className={cn(
+                                    "mt-1 flex items-center justify-end gap-1 text-[10px]",
+                                    isOwn ? "text-primary-foreground/70" : "text-muted-foreground",
+                                  )}
+                                >
+                                  <span>{fmt(msg.createdAt)}</span>
+                                  {isOwn && (
+                                    <>
+                                      {isSendingBubble && <Clock className="h-3 w-3" aria-label="Sending" />}
+                                      {!isSendingBubble && !msg.isRead && (
+                                        <Check className="h-3 w-3" aria-label="Sent" />
+                                      )}
+                                      {!isSendingBubble && msg.isRead && (
+                                        <CheckCheck className="h-3 w-3 text-primary-foreground" aria-label="Read" />
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                               </div>
-                            </div>
+                            </ReplyableBubble>
                           </div>
                         )
                       })}
@@ -1109,6 +1262,15 @@ export function MessagesPage({
                 {/* Composer */}
                 <div className="border-t border-border bg-background px-4 py-3">
                   <div className="mx-auto max-w-2xl space-y-2">
+                    {replyTarget && (
+                      <ReplyBar
+                        senderLabel={
+                          replyTarget.sender?.id === Number(user.id) ? "You" : contactName(replyTarget.sender)
+                        }
+                        preview={replyPreviewOf(replyTarget)}
+                        onCancel={cancelReply}
+                      />
+                    )}
                     {/* MC4 — pending attachment chip (design-spec.md §6.1) */}
                     {attachment && (
                       <div className="flex items-center gap-2">
@@ -1188,6 +1350,11 @@ export function MessagesPage({
                           value={newMessage}
                           onChange={(e) => setNewMessage(e.target.value)}
                           onKeyDown={(e) => {
+                            if (e.key === "Escape" && replyTarget) {
+                              e.preventDefault()
+                              cancelReply()
+                              return
+                            }
                             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                               e.preventDefault()
                               handleSend()

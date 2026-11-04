@@ -53,6 +53,13 @@ export interface ArtisanBookingRecord {
   agreedPrice?: string | number | null
   currency?: string
   jobId?: number | null
+  /** Where the work happens (area). Absent on older bookings. */
+  location?: string | null
+  /** The exact pin and landmark: sent only once the booking is confirmed. */
+  latitude?: number | string | null
+  longitude?: number | string | null
+  locationAccuracyM?: number | null
+  landmark?: string | null
   noShowByCustomerAt?: string | null
   noShowByArtisanAt?: string | null
   createdAt?: string

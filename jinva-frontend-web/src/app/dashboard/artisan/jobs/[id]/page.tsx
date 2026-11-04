@@ -45,6 +45,8 @@ import {
   type ArtisanJobStatusKey,
 } from "@/lib/artisan-jobs"
 import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
+import { pointOf } from "@/lib/location-pin"
+import { ExactLocationMap } from "@/components/location/exact-location-map"
 import { cn, formatCurrency } from "@/lib/utils"
 
 interface StatusHistoryEntry {
@@ -273,6 +275,8 @@ export default function ArtisanJobDetailPage() {
   const statusKey = artisanJobStatus(job, user?.id)
   const status = STATUS_COPY[statusKey]
   const directions = directionsUrl(job)
+  // The API sends the exact pin only to the hired artisan.
+  const exactPoint = mine ? pointOf(job) : null
   const disputeEligible = (DISPUTABLE_BOOKING_STATUSES as readonly string[]).includes(job.status)
   const showReport = mine && Boolean(job.bookingId) && (disputeEligible || hasDispute)
   const canStart = mine && job.status === "PENDING"
@@ -384,7 +388,12 @@ export default function ArtisanJobDetailPage() {
                   {job.location && (
                     <Fact icon={<MapPin aria-hidden className="h-4 w-4" />} term="Location" wide>
                       <span className="break-words">{job.location}</span>
-                      {directions && (
+                      {!mine && (
+                        <span className="mt-0.5 text-xs text-muted-foreground">
+                          The client shares the exact spot with the artisan they hire.
+                        </span>
+                      )}
+                      {directions && !exactPoint && (
                         <a
                           href={directions}
                           target="_blank"
@@ -418,6 +427,19 @@ export default function ArtisanJobDetailPage() {
                     </span>
                   </Fact>
                 </dl>
+
+                {exactPoint && (
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-foreground">Exact location</h3>
+                    <ExactLocationMap
+                      latitude={exactPoint.latitude}
+                      longitude={exactPoint.longitude}
+                      landmark={job.landmark}
+                      accuracyM={job.locationAccuracyM}
+                      area={job.location}
+                    />
+                  </div>
+                )}
 
                 {job.description && (
                   <div>

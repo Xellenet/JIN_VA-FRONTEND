@@ -28,6 +28,17 @@
  * `frame-src`. The script is only requested on auth pages, and only when
  * `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is set (components/auth/turnstile.tsx).
  *
+ * Maps (the exact-location picker and the artisan's job map): MapLibre GL
+ * draws OpenFreeMap tiles. The style JSON, vector tiles, glyphs (fonts) and
+ * sprite are all fetched with `fetch` from `https://tiles.openfreemap.org`,
+ * on the page and inside MapLibre's worker, so that origin is in
+ * `connect-src`; images (sprite sheet, raster tiles) are decoded from those
+ * responses into `blob:`/ImageBitmap, which `img-src blob:` already covers,
+ * so no `img-src` entry is needed. The worker script is bundled and served
+ * from this origin (`new URL(..., import.meta.url)` + `setWorkerUrl`), so
+ * `worker-src 'self'` covers it and no `blob:` worker is needed. Checked in
+ * a browser by listening for `securitypolicyviolation` with the map open.
+ *
  * Reporting: when `CSP_REPORT_URI` is set (an absolute https URL, or a
  * same-origin path), violations are sent there through `report-uri` and
  * `report-to` + `Reporting-Endpoints`. Unset, nothing is reported and the
@@ -58,6 +69,8 @@ export const FCM_ORIGINS = [
   "https://fcmregistrations.googleapis.com",
   "https://fcm.googleapis.com",
 ] as const
+/** OpenFreeMap: the map style, tiles, glyphs and sprite (fetched, see above). */
+export const MAP_TILES_ORIGIN = "https://tiles.openfreemap.org"
 /** Cloudflare Turnstile's script and challenge iframe. */
 export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com"
 export const VERCEL_DEV_SCRIPT_ORIGIN = "https://va.vercel-scripts.com"
@@ -125,7 +138,7 @@ export function buildCsp({ apiUrl, mediaOrigins, dev, reportUri }: CspOptions): 
     ["style-src", ["'self'", "'unsafe-inline'"]],
     ["img-src", unique(["'self'", "data:", "blob:", api, GOOGLE_AVATAR_ORIGIN, ...media])],
     ["font-src", ["'self'", "data:"]],
-    ["connect-src", unique(["'self'", api, ...FCM_ORIGINS, dev ? VERCEL_DEV_SCRIPT_ORIGIN : null, dev ? "ws:" : null, dev ? "wss:" : null])],
+    ["connect-src", unique(["'self'", api, ...FCM_ORIGINS, MAP_TILES_ORIGIN, dev ? VERCEL_DEV_SCRIPT_ORIGIN : null, dev ? "ws:" : null, dev ? "wss:" : null])],
     ["media-src", unique(["'self'", "blob:", api, ...media])],
     ["worker-src", ["'self'"]],
     ["manifest-src", ["'self'"]],

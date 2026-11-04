@@ -29,7 +29,6 @@ import {
   ArrowLeft,
   Calendar,
   Clock,
-  MapPin,
   Wallet,
   CheckCircle,
   Loader2,
@@ -40,6 +39,8 @@ import { apiFetch } from "@/lib/api"
 import { toast } from "sonner"
 import { cn, formatCurrency } from "@/lib/utils"
 import { threeLetterMonth } from "@/lib/spending"
+import { pinPayload, pinSummary, type PinnedLocation } from "@/lib/location-pin"
+import { ExactLocationField } from "@/components/location/exact-location-field"
 
 interface BackendService {
   id: number | string
@@ -150,7 +151,8 @@ export default function PostJobPage() {
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([])
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [pin, setPin] = useState<PinnedLocation | null>(null)
+  const [landmark, setLandmark] = useState("")
   const [createdJobId, setCreatedJobId] = useState<string | null>(null)
   const [touched, setTouched] = useState<Partial<Record<keyof FieldErrors, boolean>>>({})
   const [submitAttempted, setSubmitAttempted] = useState(false)
@@ -171,38 +173,17 @@ export default function PostJobPage() {
 
   useEffect(() => { loadServices() }, [loadServices])
 
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("Your browser can't share your location. Please type the address.")
-      return
+  /**
+   * A confirmed pin fills an empty address with its area ("Adum, Kumasi"),
+   * which artisans may see before hiring; the street and pin stay private.
+   */
+  const handlePinChange = (next: PinnedLocation | null) => {
+    setPin(next)
+    const area = next?.area ?? next?.label
+    if (next && area && !address.trim()) {
+      setAddress(area.slice(0, ADDRESS_MAX))
+      setTouched((t) => ({ ...t, address: true }))
     }
-    setIsGettingLocation(true)
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        // QA JOB-04: looked up through JinVa, which passes on only a rounded
-        // point. The browser used to send the exact coordinates straight to a
-        // third-party geocoder.
-        try {
-          const res = await apiFetch<{ label: string | null; available: boolean }>(
-            `/locations/reverse?lat=${coords.latitude}&lon=${coords.longitude}`,
-          )
-          if (res.label) {
-            setAddress(res.label.slice(0, ADDRESS_MAX))
-          } else {
-            toast.info("We couldn't find an address for your location. Please type it in.")
-          }
-        } catch {
-          toast.info("We couldn't find an address for your location. Please type it in.")
-        }
-        setTouched((t) => ({ ...t, address: true }))
-        setIsGettingLocation(false)
-      },
-      () => {
-        toast.error("We couldn't get your location. Allow location access and try again, or type the address.")
-        setIsGettingLocation(false)
-      },
-      { timeout: 10000 },
-    )
   }
 
   const selectedServiceData = services.find((s) => String(s.id) === selectedService)
@@ -237,6 +218,8 @@ export default function PostJobPage() {
     setBudgetMin("")
     setBudgetMax("")
     setAttachmentUrls([])
+    setPin(null)
+    setLandmark("")
     setTouched({})
     setSubmitAttempted(false)
   }
@@ -275,6 +258,8 @@ export default function PostJobPage() {
         // posting expires instead of staying open for a date that's passed.
         ...(date ? { deadline: `${date}T23:59:59.000Z` } : {}),
         ...(attachmentUrls.length ? { attachmentUrls } : {}),
+        // The exact pin and landmark (both optional), private to the hired artisan.
+        ...pinPayload(pin, landmark),
       }
       const job = await apiFetch<{ id: string | number }>("/jobs", {
         method: "POST",
@@ -487,38 +472,34 @@ export default function PostJobPage() {
                   <Label htmlFor="address">
                     Service address<span aria-hidden className="ml-0.5 text-destructive">*</span>
                   </Label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={handleGetLocation}
-                      disabled={isGettingLocation}
-                      aria-label="Use my current location"
-                      title="Use my current location"
-                      className="absolute left-0 top-0 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                    >
-                      {isGettingLocation ? (
-                        <Loader2 aria-hidden className="h-4 w-4 motion-safe:animate-spin" />
-                      ) : (
-                        <MapPin aria-hidden className="h-4 w-4" />
-                      )}
-                    </button>
-                    <Textarea
-                      id="address"
-                      className={cn("pl-11", showError("address") && "border-destructive")}
-                      placeholder="Where the work should be done, or tap the pin to use your location"
-                      rows={2}
-                      value={address}
-                      maxLength={ADDRESS_MAX}
-                      aria-required
-                      onChange={(e) => setAddress(e.target.value)}
-                      onBlur={() => mark("address")}
-                      {...fieldA11y("address", "address")}
-                    />
-                  </div>
+                  <Textarea
+                    id="address"
+                    className={cn(showError("address") && "border-destructive")}
+                    placeholder="Town and area, e.g. Adum, Kumasi"
+                    rows={2}
+                    value={address}
+                    maxLength={ADDRESS_MAX}
+                    aria-required
+                    onChange={(e) => setAddress(e.target.value)}
+                    onBlur={() => mark("address")}
+                    {...fieldA11y("address", "address")}
+                  />
                   <p id="address-hint" className={cn("text-xs", showError("address") ? "text-destructive" : "text-muted-foreground")}>
-                    {showError("address") ? errors.address : "Tap the pin to fill in your current location."}
+                    {showError("address")
+                      ? errors.address
+                      : "Artisans see this before you hire. Pin the exact spot below for the one you hire."}
                   </p>
                 </div>
+
+                <ExactLocationField
+                  id="job-location"
+                  pin={pin}
+                  onPinChange={handlePinChange}
+                  landmark={landmark}
+                  onLandmarkChange={setLandmark}
+                  address={address}
+                  disabled={isSubmitting}
+                />
               </CardContent>
             </Card>
 
@@ -642,6 +623,7 @@ export default function PostJobPage() {
                   <p className="mt-0.5 line-clamp-2 break-words text-sm font-medium text-foreground">
                     {address.trim() || <span className="text-muted-foreground">—</span>}
                   </p>
+                  {pin && <p className="mt-0.5 text-xs text-muted-foreground">{pinSummary(pin)}</p>}
                 </div>
                 <div className="px-4 py-3">
                   <p className="text-xs text-muted-foreground">Budget range</p>

@@ -28,7 +28,6 @@ import { toast } from "sonner"
 import { DashboardLayout } from "@/components/dashboard/layout"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
@@ -44,7 +43,7 @@ import { apiFetch } from "@/lib/api"
 import { getJobPaymentState } from "@/lib/payment-methods-api"
 import { duplicateRefundNote, visibleDuplicateRefunds, type DuplicateRefund } from "@/lib/payment-intent"
 import { formatDay, initialsOf } from "@/lib/artisan-jobs"
-import { cn, formatCurrency, resolveAvatarUrl } from "@/lib/utils"
+import { cn, formatCurrency } from "@/lib/utils"
 import { JobStatusTimeline, type JobStatusHistoryEntry } from "@/components/dashboard/job-status-timeline"
 import { AttachmentGallery, type JobAttachment } from "@/components/dashboard/attachment-gallery"
 import { EditJobDialog } from "@/components/dashboard/edit-job-dialog"
@@ -52,6 +51,7 @@ import { getPaymentStatusConfig, RETRYABLE_PAYOUT_STATUSES } from "@/lib/status-
 import { DISPUTABLE_BOOKING_STATUSES } from "@/lib/disputes"
 import { DisputeEntryPoint } from "@/components/disputes/dispute-entry-point"
 import { JobApplicationsCard } from "@/components/dashboard/job-applications-card"
+import { ArtisanIdentity } from "@/components/dashboard/artisan-identity"
 
 interface BackendJob {
   id: number
@@ -64,7 +64,14 @@ interface BackendJob {
   budgetMax?: number
   bookingId?: number
   customer?: { id: number; firstname: string; lastname: string }
-  acceptedArtisan?: { id: number; firstname: string; lastname: string; profilePicture?: string }
+  acceptedArtisan?: {
+    id: number
+    firstname: string
+    lastname: string
+    profilePicture?: string
+    /** Links the "Assigned artisan" card to their public profile. */
+    artisanProfileId?: number | null
+  }
   completionRequestedAt?: string
   service?: { id: number; name: string }
   statusHistory?: JobStatusHistoryEntry[]
@@ -403,17 +410,12 @@ export default function JobDetailPage() {
               <div className="space-y-4 px-5 py-5">
                 {artisan ? (
                   <>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-11 w-11 shrink-0">
-                        <AvatarImage src={resolveAvatarUrl(artisan.profilePicture)} alt="" />
-                        <AvatarFallback className="text-sm font-medium text-foreground/80">
-                          {initialsOf(artisanName) || "?"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <p dir="auto" className="min-w-0 truncate font-medium text-foreground [unicode-bidi:isolate]">
-                        {artisanName}
-                      </p>
-                    </div>
+                    <ArtisanIdentity
+                      profileId={artisan.artisanProfileId}
+                      name={artisanName}
+                      picture={artisan.profilePicture}
+                      fallback={initialsOf(artisanName) || "?"}
+                    />
                     <Button variant="outline" className="h-11 w-full bg-transparent sm:h-10" asChild>
                       {/* MC2 — `&job=` rides along so the message carries a
                           reference to this job (feeds AD1's evidence view). */}

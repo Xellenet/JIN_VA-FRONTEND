@@ -15,7 +15,6 @@
  * for. A few spellings are accepted so a link built from the API's own key
  * names (`toStart`, `awaitingClient`) still lands on the right filter.
  */
-
 export type ArtisanStage = "to_start" | "in_progress" | "waiting_on_client" | "done" | "closed"
 /** What the My Jobs list can show: one stage, open jobs to apply for, or everything. */
 export type ArtisanJobsView = ArtisanStage | "open"
@@ -127,6 +126,9 @@ export interface ArtisanJob {
   location?: string | null
   latitude?: number | string | null
   longitude?: number | string | null
+  /** Exact pin extras; sent only to the hired artisan (and the customer). */
+  locationAccuracyM?: number | null
+  landmark?: string | null
   status: string
   createdAt: string
   deadline?: string | null
@@ -256,13 +258,20 @@ export function initialsOf(name: string): string {
     .toUpperCase()
 }
 
-/** Google Maps directions to a job. Coordinates win over the typed address when both exist. */
+/**
+ * Google Maps directions to a job. The exact pin wins over the typed address
+ * (the API only sends the pin to the hired artisan).
+ */
 export function directionsUrl(job: Pick<ArtisanJob, "location" | "latitude" | "longitude">): string | null {
-  const lat = job.latitude != null ? Number(job.latitude) : NaN
-  const lng = job.longitude != null ? Number(job.longitude) : NaN
-  let destination = ""
-  if (Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)) destination = `${lat},${lng}`
-  else if (job.location?.trim()) destination = job.location.trim()
+  // Same rules as `directionsUrlFor` in location-pin.ts (kept import-free so
+  // the Node test scripts can load this module directly).
+  const lat = job.latitude != null && job.latitude !== "" ? Number(job.latitude) : NaN
+  const lng = job.longitude != null && job.longitude !== "" ? Number(job.longitude) : NaN
+  if (Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    const r = (n: number) => Math.round(n * 1e6) / 1e6
+    return `https://www.google.com/maps/dir/?api=1&destination=${r(lat)},${r(lng)}`
+  }
+  const destination = job.location?.trim()
   if (!destination) return null
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
 }

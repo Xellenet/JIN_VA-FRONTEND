@@ -39,6 +39,25 @@ export interface BackendContact {
   profilePicture: string | null
   /** `/messages` resolves this relative to the caller; absent on migrated rows. */
   role?: "CUSTOMER" | "ARTISAN" | "ADMIN"
+  /**
+   * The contact's artisan profile id, for the "view profile" link. Null for a
+   * customer (customers have no public profile) and for a departed contact;
+   * absent from older backends.
+   */
+  artisanProfileId?: number | null
+}
+
+/**
+ * The message a reply quotes (`replyTo` on a message). When the original has
+ * been deleted, `deleted` is true and everything else is null.
+ */
+export interface BackendReplyTo {
+  id: number | null
+  senderId: number | null
+  senderName: string | null
+  /** First ~120 characters of the original, or "Photo"/"Attachment". */
+  preview: string | null
+  deleted: boolean
 }
 
 /** The conversation list's nested last-message preview (api-contract.md §2). */
@@ -49,6 +68,7 @@ export interface BackendLastMessage {
   senderId: number
   createdAt: string
   isRead: boolean
+  replyTo?: BackendReplyTo | null
 }
 
 export interface BackendConversation {
@@ -76,6 +96,8 @@ export interface BackendDM {
    * down with it, which is why every call site optional-chains this.
    */
   sender: BackendContact | null
+  /** The message this one replies to; null (or absent on older backends) otherwise. */
+  replyTo?: BackendReplyTo | null
   /** Client-only: the picked file's object URL while the message is sending. */
   localPreviewUrl?: string
 }
@@ -87,6 +109,8 @@ export interface SendMessagePayload {
   attachmentUrl?: string
   jobId?: number
   bookingId?: number
+  /** The message being replied to; must be in the same conversation. */
+  replyToMessageId?: number
 }
 
 /**
@@ -271,4 +295,122 @@ export function validateAttachment(file: File): string | null {
     return "That image is larger than 5MB."
   }
   return null
+}
+
+// ── Replies ────────────────────────────────────────────────────────────────
+
+/** How much of the original a quote shows (the server cuts at the same length). */
+export const REPLY_PREVIEW_LENGTH = 120
+
+/** What a quote says once the original is gone. */
+export const REPLY_DELETED_LABEL = "Original message deleted"
+
+/**
+ * The one-line preview of a message as a quote: its text (collapsed to one
+ * line, cut at 120 characters), or "Photo"/"Attachment" when it has none.
+ * Matches what the server builds for `replyTo.preview`, so a reply composed
+ * here reads the same before and after the send is confirmed.
+ */
+export function replyPreviewOf(
+  m: Pick<BackendDM, "content" | "attachmentUrl" | "attachmentType"> | null | undefined,
+): string {
+  const text = typeof m?.content === "string" ? m.content.replace(/\s+/g, " ").trim() : ""
+  if (text) {
+    return text.length > REPLY_PREVIEW_LENGTH ? `${text.slice(0, REPLY_PREVIEW_LENGTH).trimEnd()}…` : text
+  }
+  const type = typeof m?.attachmentType === "string" ? m.attachmentType : ""
+  if (type ? type.startsWith("image/") : !!m?.attachmentUrl) return "Photo"
+  return "Attachment"
+}
+
+/** A usable `replyTo`, or null for anything that is not one. */
+export function readReplyTo(value: unknown): BackendReplyTo | null {
+  if (!value || typeof value !== "object") return null
+  const r = value as Record<string, unknown>
+  const id = typeof r.id === "number" && Number.isSafeInteger(r.id) && r.id > 0 ? r.id : null
+  const deleted = r.deleted === true || id === null
+  return {
+    id: deleted ? null : id,
+    senderId: !deleted && typeof r.senderId === "number" ? r.senderId : null,
+    senderName: !deleted && typeof r.senderName === "string" && r.senderName.trim() ? r.senderName.trim() : null,
+    preview: !deleted && typeof r.preview === "string" ? r.preview.replace(/\s+/g, " ").trim() : null,
+    deleted,
+  }
+}
+
+/**
+ * Who a quote names. The viewer's own messages read "You", as in the reply
+ * bar; a departed sender reads "Deleted User".
+ */
+export function replySenderLabel(replyTo: BackendReplyTo, viewerId: number): string {
+  if (replyTo.senderId !== null && replyTo.senderId === viewerId) return "You"
+  return replyTo.senderName || DELETED_PARTICIPANT_NAME
+}
+
+/** What a screen reader hears for a quote or the reply bar. */
+export function replyAnnouncement(name: string, preview: string | null, deleted = false): string {
+  if (deleted) return "Replying to a deleted message"
+  return `Replying to ${name}: ${preview ?? ""}`.trim()
+}
+
+/** The quote a reply carries while it is still sending (the server's copy replaces it). */
+export function optimisticReplyTo(original: BackendDM): BackendReplyTo {
+  return {
+    id: original.id,
+    senderId: original.sender?.id ?? null,
+    senderName: contactName(original.sender),
+    preview: replyPreviewOf(original),
+    deleted: false,
+  }
+}
+
+/** Whether a message can be replied to: a confirmed message, not one still sending. */
+export function canReplyTo(m: Pick<BackendDM, "id"> | null | undefined): boolean {
+  return !!m && Number.isSafeInteger(m.id) && m.id > 0
+}
+
+/**
+ * Swipe-to-reply: how far the bubble follows the finger, and whether the
+ * swipe has gone far enough to reply. Rightward only, damped past half the
+ * threshold so it feels elastic, never more than `max`.
+ */
+export const SWIPE_REPLY_THRESHOLD = 56
+export const SWIPE_REPLY_MAX = 80
+
+export function swipeReplyOffset(dx: number): { offset: number; triggered: boolean } {
+  if (!Number.isFinite(dx) || dx <= 0) return { offset: 0, triggered: false }
+  const knee = SWIPE_REPLY_THRESHOLD / 2
+  const offset = dx <= knee ? dx : knee + (dx - knee) * 0.5
+  return { offset: Math.min(SWIPE_REPLY_MAX, Math.round(offset)), triggered: offset >= SWIPE_REPLY_THRESHOLD }
+}
+
+/**
+ * Whether a pointer movement is a horizontal swipe (rather than a scroll).
+ * Undecided below `slop` pixels; a swipe needs clearly more x than y.
+ */
+export function swipeIntent(dx: number, dy: number, slop = 8): "undecided" | "swipe" | "scroll" {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return "scroll"
+  if (Math.abs(dx) < slop && Math.abs(dy) < slop) return "undecided"
+  return dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.5 ? "swipe" : "scroll"
+}
+
+// ── The other person's profile ─────────────────────────────────────────────
+
+/**
+ * Where the chat header's name and avatar lead, or null for plain text.
+ *
+ * Only a customer looking at an artisan has a page to go to: artisans have a
+ * public profile (`/dashboard/user/artisan/<artisanProfileId>`), customers do
+ * not, and there is no client profile view on the artisan side. Admin threads,
+ * departed contacts and older backends (no `artisanProfileId`) get no link.
+ */
+export function contactProfileHref(
+  contact: BackendContact | null | undefined,
+  viewerRole: string | null | undefined,
+): string | null {
+  if (viewerRole !== "user" && viewerRole !== "CUSTOMER") return null
+  if (!contact || contact.role !== "ARTISAN") return null
+  const id = contact.artisanProfileId
+  if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return null
+  return `/dashboard/user/artisan/${id}`
 }

@@ -188,20 +188,30 @@ export default function PostJobPage() {
           )
           if (res.label) {
             setAddress(res.label.slice(0, ADDRESS_MAX))
+          } else if (res.available === false) {
+            toast.info("We found you, but the address lookup isn't responding right now. Please type the address.")
           } else {
-            toast.info("We couldn't find an address for your location. Please type it in.")
+            toast.info("We found you, but there's no address for that spot. Please type it in.")
           }
         } catch {
-          toast.info("We couldn't find an address for your location. Please type it in.")
+          toast.info("We found you, but couldn't look up the address. Please type it in.")
         }
         setTouched((t) => ({ ...t, address: true }))
         setIsGettingLocation(false)
       },
-      () => {
-        toast.error("We couldn't get your location. Allow location access and try again, or type the address.")
+      (err) => {
+        // Say which of the three things went wrong, so the person can fix it.
+        const message =
+          err.code === err.PERMISSION_DENIED
+            ? "Location access is blocked for JinVa. Allow it in your browser's site settings (or open JinVa in your browser instead of inside another app), then try again."
+            : err.code === err.POSITION_UNAVAILABLE
+              ? "Your device couldn't find your location. Turn on location (GPS) and try again, or type the address."
+              : "Finding your location took too long. Try again near a window, or type the address."
+        toast.error(message)
         setIsGettingLocation(false)
       },
-      { timeout: 10000 },
+      // A recent fix is fine for an address, and phones indoors can need longer than 10 s.
+      { timeout: 20000, maximumAge: 5 * 60 * 1000, enableHighAccuracy: false },
     )
   }
 

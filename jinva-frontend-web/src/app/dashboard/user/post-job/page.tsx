@@ -171,6 +171,11 @@ export default function PostJobPage() {
 
   useEffect(() => { loadServices() }, [loadServices])
 
+  /** Browser location rougher than this (metres) is not used at all. */
+  const LOCATION_REJECT_METRES = 5000
+  /** Rougher than this is used, with a "check the address" note. */
+  const LOCATION_WARN_METRES = 1000
+
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
       toast.error("Your browser can't share your location. Please type the address.")
@@ -179,6 +184,19 @@ export default function PostJobPage() {
     setIsGettingLocation(true)
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
+        // Computers without GPS are placed by their internet connection, which
+        // in Ghana often resolves to Accra wherever the person is. The browser
+        // says how sure it is (`accuracy`, metres): too rough and we fill
+        // nothing (and send nothing to the lookup); a little rough and we ask
+        // the person to check.
+        const km = Math.round((coords.accuracy ?? 0) / 1000)
+        if (coords.accuracy > LOCATION_REJECT_METRES) {
+          toast.error(
+            `Your browser could only guess your location roughly (about ${km} km off), which can put you in the wrong town. Please type your address, or use your phone with location turned on.`,
+          )
+          setIsGettingLocation(false)
+          return
+        }
         // QA JOB-04: looked up through JinVa, which passes on only a rounded
         // point. The browser used to send the exact coordinates straight to a
         // third-party geocoder.
@@ -188,6 +206,9 @@ export default function PostJobPage() {
           )
           if (res.label) {
             setAddress(res.label.slice(0, ADDRESS_MAX))
+            if (coords.accuracy > LOCATION_WARN_METRES) {
+              toast.info(`This is approximate (about ${Math.max(km, 1)} km). Check the address before you post.`)
+            }
           } else if (res.available === false) {
             toast.info("We found you, but the address lookup isn't responding right now. Please type the address.")
           } else {
@@ -210,8 +231,8 @@ export default function PostJobPage() {
         toast.error(message)
         setIsGettingLocation(false)
       },
-      // A recent fix is fine for an address, and phones indoors can need longer than 10 s.
-      { timeout: 20000, maximumAge: 5 * 60 * 1000, enableHighAccuracy: false },
+      // Ask for GPS on phones; a recent fix is fine, and indoors can need longer than 10 s.
+      { timeout: 20000, maximumAge: 5 * 60 * 1000, enableHighAccuracy: true },
     )
   }
 

@@ -116,6 +116,19 @@ ok("no other cloudflare host", !prodAll.some((s) => /cloudflare/.test(s) && s !=
 ok("object-src stays 'none'", prod.get("object-src").join(" ") === "'none'")
 ok("frame-ancestors stays 'none'", prod.get("frame-ancestors").join(" ") === "'none'")
 
+// ── Maps (MapLibre + OpenFreeMap): exactly what the library fetches ────────
+ok("map tiles origin constant", C.MAP_TILES_ORIGIN === "https://tiles.openfreemap.org")
+ok("map tiles in prod connect-src", prod.get("connect-src").includes(C.MAP_TILES_ORIGIN))
+ok("map tiles in dev connect-src", dev.get("connect-src").includes(C.MAP_TILES_ORIGIN))
+// Sprites and raster tiles are fetched, then decoded via blob:/ImageBitmap.
+ok("map tiles not in img-src (fetched, not <img>)", !prod.get("img-src").includes(C.MAP_TILES_ORIGIN))
+ok("img-src keeps blob: for decoded map images", prod.get("img-src").includes("blob:"))
+// The worker is bundled and served from this origin.
+ok("worker-src is exactly 'self'", prod.get("worker-src").join(" ") === "'self'", JSON.stringify(prod.get("worker-src")))
+ok("map tiles nowhere else", [...prod.entries()].every(([name, src]) => name === "connect-src" || !src.includes(C.MAP_TILES_ORIGIN)))
+ok("no other openfreemap or openstreetmap host", !prodAll.some((s) => /openfreemap|openstreetmap/.test(s) && s !== C.MAP_TILES_ORIGIN))
+ok("geolocation stays allowed for this origin only", C.ALWAYS_ON_HEADERS.find((h) => h.key === "Permissions-Policy").value.includes("geolocation=(self)"))
+
 // ── Violation reporting (CSP_REPORT_URI) ────────────────────────────────────
 {
   ok("no report directives by default", !prod.has("report-uri") && !prod.has("report-to"))
